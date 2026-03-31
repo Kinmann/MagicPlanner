@@ -1,0 +1,23 @@
+{
+  "screens": [
+    {
+      "screen_id": "string (SCR-NNN)",
+      "screen_name": "string",
+      "layout_regions": [
+        {
+          "region_name": "string (Header/Main/etc)",
+          "components": [
+            {
+              "type": "string",
+              "label": "string",
+              "mapped_func_id": "string",
+              "mapped_data_fields": ["string"],
+              "state_condition": "string",
+              "description": "string"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

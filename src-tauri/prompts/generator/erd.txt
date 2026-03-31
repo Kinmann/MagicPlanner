@@ -1,0 +1,37 @@
+# ERD 작성 원칙
+
+## 1. 개요 및 위상 (Overview & Status)
+- **위상**: 본 문서는 DAG 파이프라인의 다섯 번째 노드임.
+- **의존성**: FSD의 `data_requirements`, `pre/post_condition`을 핵심 입력원으로 함.
+- **목적**: 시스템 기능 및 권한 제어에 필요한 데이터를 엔티티(Entity)와 속성(Attribute)으로 구조화함.
+
+## 2. ERD 특화 작성 통제 원칙 (Domain Principles)
+
+### A. 데이터 원자성 및 명명 규칙 (Data Atomicity & Naming)
+- FSD의 원자적 필드 명칭과 용도를 계승함.
+- **표기형식**: `table_name`, `column_name`은 모두 **영문 소문자 스네이크 케이스(snake_case)** 고수.
+
+### B. 권한 모델링 강제 (RBAC Modeling)
+- 시스템 접근 주체(User, Admin 등)가 다수인 경우 `Role`, `Permission` 엔티티 독립 설계 필수.
+- 주체별 고유 식별자(PK) 및 관계(FK/Mapping Table) 명확화.
+
+### C. 논리적 정규화 및 N:M 분해
+- **3정규형(3NF) 준수**: 데이터 중복 최소화.
+- **다대다(N:M) 금지**: 반드시 **매핑 테이블(Junction Table)**을 사용하여 1:N 관계로 분해.
+
+### D. 메타데이터 및 상태 제어
+- `created_at`: 모든 엔티티 기본 포함.
+- `updated_at`: Insert-Only 제외하고 포함.
+- `is_deleted`: 마스터 및 핵심 트랜잭션 엔티티에 Soft Delete 적용. (매핑/로그 테이블 제외)
+- **상태 전이**: 트랜잭션 발생 엔티티에 `status` 컬럼 필수 배치 (PENDING, SUCCESS, FAILED 등).
+
+### E. 참조 무결성 및 생명주기
+- PK: `id` 또는 `{table_name}_id`.
+- FK: 참조 대상 PK 명칭과 동일하게 작성. `ON DELETE` 제약 조건(CASCADE, RESTRICT 등) 명시.
+
+### F. 기본 인덱싱 규칙
+- 오버엔지니어링 방지를 위해 PK, FK, Unique 필드(email 등)에만 `index_required` 명시.
+
+## 3. 스키마 및 데이터 작성 규칙
+- **데이터 타입**: String, Integer, Boolean, DateTime, Float, JSON 등 범용 논리 타입 사용.
+- **설명**: 명사형 종결 문체 적용.

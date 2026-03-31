@@ -1,0 +1,27 @@
+# Wireframe 작성 원칙
+
+## 1. 개요 및 위상 (Overview & Status)
+- **위상**: 본 문서는 DAG 파이프라인의 여섯 번째 노드임.
+- **의존성**: FSD의 `FUNC-{NNN}`, `data_requirements`, User Flow의 시나리오, IA의 `SCR-{NNN}`을 핵심 입력원으로 함.
+- **목적**: 논리적 기능과 데이터를 시각적 UI 컴포넌트 및 레이아웃으로 변환 정의.
+
+## 2. Wireframe 특화 작성 통제 원칙 (Domain Principles)
+
+### A. 스크린 식별자 절대 동기화 (Screen ID Synchronization)
+- **식별자 매핑**: 모든 화면 명세는 IA의 `SCR-{NNN}` 식별자와 1:1 일치 필수.
+- **화면 창조 금지**: IA에 없는 새로운 팝업, 모달, 페이지 등의 임의 창조 엄격 금지.
+
+### B. UI 컴포넌트와 기능 매핑 (Component-Function Mapping)
+- **인터랙션 요소**: 버튼, 폼, 링크 등 모든 액션 요소에 FSD의 `FUNC-{NNN}` 매핑 필수.
+- **기능 누락 방지**: 해당 `SCR`에 할당된 모든 `FUNC`는 최소 하나 이상의 UI 컴포넌트와 연결되어야 함.
+
+### C. 데이터 노출 무결성 (Data Exposure Integrity)
+- **노출 항목 통제**: 표시되는 모든 데이터 필드는 FSD의 `data_requirements` 범위 내에서만 정의.
+- **임의 데이터 금지**: FSD에 없는 더미 텍스트, 통계, 부가 정보 등의 임의 배치 금지.
+
+### D. 레이아웃의 구조적 분할 (Structural Layout Segmentation)
+- 화면을 `GNB`, `LNB`, `Header`, `Main`, `Footer`, `Sidebar` 등 논리적 구역(Region)으로 분할하여 배치.
+
+## 3. 스키마 및 데이터 작성 규칙
+- **UI 상태 명세**: User Flow 분기 및 FSD `pre_condition`에 따라 상태(Default, Disabled, Error 등) 명시.
+- **원자적 컴포넌트**: 표준 UI 타입(TextInput, Dropdown, DataTable 등) 지정. 레이블링(버튼명, Placeholder 등)은 구체적 명사형 유지.

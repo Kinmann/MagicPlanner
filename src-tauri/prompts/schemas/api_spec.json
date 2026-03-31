@@ -1,0 +1,24 @@
+{
+  "endpoints": [
+    {
+      "method": "string (GET/POST/etc)",
+      "path": "string",
+      "summary": "string",
+      "description": "string",
+      "request_body": {
+        "type": "object",
+        "properties": "object"
+      },
+      "responses": [
+        {
+          "status_code": "number",
+          "description": "string",
+          "schema": {
+            "type": "object",
+            "properties": "object"
+          }
+        }
+      ]
+    }
+  ]
+}

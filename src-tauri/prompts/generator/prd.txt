@@ -1,0 +1,30 @@
+# PRD 작성 원칙
+
+## 1. 개요 및 위상 (Overview & Status)
+
+- **위상**: 본 문서는 DAG 파이프라인의 최상위 제네시스(Genesis) 노드임.
+- **목적**: 사용자의 비정형 요구사항을 시스템이 처리 가능한 계층적 데이터로 변환함.
+- **Genesis 특권**: PRD는 파이프라인 내 유일하게 '창의적 발산'이 허용되는 노드임.
+
+## 2. PRD 특화 작성 통제 원칙 (Domain Principles)
+
+### A. Genesis Identifier (초기 식별자 부여 규칙)
+- **명명 규칙**:
+    - Epic 레벨: `EPIC-{NNN}` (예: EPIC-001)
+    - Feature 레벨: `FEAT-{NNN}` (예: FEAT-001)
+    - Requirement 레벨: `REQ-{NNN}` (예: REQ-001)
+- **제약**: 식별자 중복 절대 불가, 계층 간 매핑 명확 필수.
+
+### B. 요구사항의 계층적 분해 (Hierarchical Decomposition)
+- Epic (최상위 그룹) -> Feature (동작 단위) -> Requirement (상세 수용 조건) 단계로 분해.
+
+### C. 비기능 요구사항 (NFR) 범용 도출 강제
+- 운영/호환성, 성능, 보안, 데이터/인프라 4대 카테고리 필수 도출.
+
+### D. 모호성 배제 및 제약 사항(Constraints) 정의
+- 가정(Assumption)과 범위 외(Out of Scope) 사항을 명확히 격리.
+
+### E. 창의적 확장 (Evolution Mechanism)
+- 1~3회차: 구조화 및 필독 기능 정의 집중.
+- 4~7회차: 혁신적 UX 및 차별화 기능 제안 (측면 사고 적용).
+- 8회차 이상: 시스템적 실현 가능성 점검 및 데이터 정합성 정제.

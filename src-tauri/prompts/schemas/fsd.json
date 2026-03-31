@@ -1,0 +1,16 @@
+{
+  "project_id": "string",
+  "features": [
+    {
+      "func_id": "string (FUNC-NNN)",
+      "module": "string",
+      "summary": "string",
+      "description": "string",
+      "pre_condition": "string",
+      "post_condition": "string",
+      "flow": ["string"],
+      "exception_flow": ["string"],
+      "data_requirements": ["string"]
+    }
+  ]
+}

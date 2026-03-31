@@ -1,0 +1,44 @@
+// Magic Planner Design System Variables
+
+// 1. Colors
+$bg-dark: #0a0a0b;
+$bg-panel: #121213;
+$bg-card: #141415;
+$bg-elevated: #1a1a1b;
+
+$text-primary: #ffffff;
+$text-secondary: #94a3b8; // slate-400
+$text-muted: #64748b; // slate-500
+$text-dim: #475569; // slate-600
+
+$indigo-600: #4f46e5;
+$indigo-500: #6366f1;
+$indigo-400: #818cf8;
+
+$emerald-600: #059669;
+$emerald-500: #10b981;
+$emerald-400: #34d399;
+
+$red-500: #ef4444;
+$red-400: #f87171;
+
+$orange-500: #f97316;
+
+// 2. Gradients
+$gradient-indigo: linear-gradient(135deg, $indigo-600 0%, $indigo-400 100%);
+$gradient-dark: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 100%);
+
+// 3. Spacing & Radius
+$radius-xl: 1.5rem;   // 24px
+$radius-lg: 1rem;     // 16px
+$radius-md: 0.75rem;  // 12px
+$radius-sm: 0.5rem;   // 8px
+
+// 4. Effects
+$shadow-indigo: 0 10px 15px -3px rgba(79, 70, 229, 0.2);
+$glass-border: 1px solid rgba(255, 255, 255, 0.05);
+$glass-blur: blur(12px);
+
+// 5. Typography
+$font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+$font-sans: 'Inter', -apple-system, system-ui, sans-serif;

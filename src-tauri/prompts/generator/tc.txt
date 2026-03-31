@@ -1,0 +1,29 @@
+# TC 작성 원칙
+
+## 1. 개요 및 위상 (Overview & Status)
+- **위상**: 본 문서는 DAG 파이프라인의 여덟 번째 노드이자 최종 검증 명세서임.
+- **의존성**: PRD의 `REQ-{NNN}`, FSD의 `FUNC-{NNN}`, API 명세서의 입출력 규격 및 상태 코드를 핵심 입력원으로 함.
+- **목적**: 구현 시스템이 설계 명세와 100% 일치하게 동작하는지 검증하기 위한 원자적 테스트 절차 정의.
+
+## 2. TC 특화 작성 통제 원칙 (Domain Principles)
+
+### A. 커버리지 균형 및 예외 테스팅 (Coverage Balance & Exception Testing)
+- **부정 케이스 강제**: Happy Path 편향 배제.
+- **경계값 분석(BVA)**: 데이터 제약(Length, Nullable 등) 기반의 Negative/Edge Case 도출 필수.
+
+### B. 단일 검증 원칙 (Single Verification Principle)
+- **검증의 원자성**: 하나의 `tc_id`는 오직 하나의 `expected_result`만 검증. 복합 결과 예측 TC 병합 금지.
+
+### C. 재현의 독립성 및 기계적 지시 (Reproduction Independence)
+- **사전 지식 배제**: 제3자나 자동화 도구가 오차 없이 실행 가능하도록 작성.
+- **구체적 명세**: "적절한 값" 대신 "test@example.com 입력" 등 명확하고 기계적인 지시어 사용.
+
+### D. 추적성 및 의존성 매핑 (Traceability & Dependency Mapping)
+- **식별자 교차 검증**: 모든 TC에 `REQ-{NNN}` 및 `FUNC-{NNN}` 매핑 필수. 고아(Orphan) TC 생성 금지.
+
+## 3. 스키마 및 데이터 작성 규칙
+- **예상 결과의 공학적 명세**:
+    - API 응답 코드 (예: HTTP 200 OK)
+    - DB 상태 전이 (예: 레코드 1건 Insert 확인)
+    - 명시적 에러 메시지 서술
+- **Setup/Teardown**: 테스트 전후 데이터 오염 방지를 위한 사전 조건(`pre_conditions`) 명시.

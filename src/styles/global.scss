@@ -1,0 +1,72 @@
+@import './variables';
+
+// 1. Reset
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: $font-sans;
+}
+
+body {
+  background-color: $bg-dark;
+  color: $text-primary;
+  overflow: hidden;
+  height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  height: 100%;
+}
+
+// 2. Base Components
+button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s ease;
+  
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+}
+
+input {
+  border: none;
+  outline: none;
+}
+
+// 3. Global Helpers
+.glass-effect {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: $glass-blur;
+  border: $glass-border;
+}
+
+.gradient-text {
+  background: $gradient-indigo;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 2s infinite ease-in-out;
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 1s linear infinite;
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

@@ -1,0 +1,27 @@
+{
+  "tables": [
+    {
+      "table_name": "string",
+      "columns": [
+        {
+          "name": "string",
+          "type": "string",
+          "is_pk": "boolean",
+          "is_fk": "boolean",
+          "ref_table": "string",
+          "is_unique": "boolean",
+          "is_nullable": "boolean",
+          "description": "string"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "source_table": "string",
+      "target_table": "string",
+      "type": "string (One-to-One/One-to-Many)",
+      "description": "string"
+    }
+  ]
+}

@@ -1,0 +1,135 @@
+@import '../../styles/variables';
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  
+  .backdrop {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+  }
+}
+
+.modal-content {
+  position: relative;
+  width: 100%;
+  max-width: 42rem; // 2xl
+  overflow: hidden;
+  background-color: $bg-panel;
+  border: $glass-border;
+  border-radius: $radius-xl;
+  padding: 2rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  
+  .modal-header {
+    margin-bottom: 2rem;
+    
+    h2 { font-size: 1.5rem; font-weight: 700; color: white; margin-bottom: 0.5rem; }
+    p { color: $text-secondary; font-size: 0.875rem; }
+  }
+}
+
+.project-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  
+  .form-group {
+    label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: $text-secondary;
+      margin-bottom: 0.5rem;
+    }
+    
+    input, textarea {
+      width: 100%;
+      background-color: rgba(255, 255, 255, 0.03);
+      border: $glass-border;
+      border-radius: $radius-md;
+      padding: 0.75rem 1rem;
+      color: white;
+      font-size: 0.875rem;
+      outline: none;
+      transition: border-color 0.2s;
+      
+      &:focus { border-color: rgba($indigo-500, 0.5); }
+      &::placeholder { color: $text-dim; }
+    }
+    
+    textarea { height: 10rem; resize: none; }
+  }
+  
+  .mode-selector {
+    display: flex;
+    gap: 1rem;
+    
+    .mode-btn {
+      flex: 1;
+      padding: 0.75rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      border-radius: $radius-md;
+      border: $glass-border;
+      background-color: rgba(255, 255, 255, 0.03);
+      color: $text-muted;
+      transition: all 0.2s ease;
+      
+      &.active {
+        background-color: rgba($indigo-500, 0.1);
+        border-color: $indigo-500;
+        color: white;
+        box-shadow: 0 0 15px rgba($indigo-500, 0.2);
+      }
+      
+      &:hover:not(.active) { background-color: rgba(255, 255, 255, 0.05); }
+    }
+  }
+  
+  .counter-box {
+    margin-top: 0.5rem;
+    display: flex;
+    justify-content: flex-end;
+    
+    .counter {
+      font-size: 0.75rem;
+      &.warning { color: $orange-500; }
+      &.success { color: $emerald-400; }
+    }
+  }
+}
+
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  padding-top: 1rem;
+  
+  .btn-cancel {
+    flex: 1;
+    padding: 0.75rem;
+    background-color: rgba(255, 255, 255, 0.05);
+    color: white;
+    font-weight: 600;
+    border-radius: $radius-md;
+    &:hover { background-color: rgba(255, 255, 255, 0.1); }
+  }
+  
+  .btn-submit {
+    flex: 2;
+    padding: 0.75rem;
+    background-color: $indigo-600;
+    color: white;
+    font-weight: 700;
+    border-radius: $radius-md;
+    box-shadow: $shadow-indigo;
+    &:hover:not(:disabled) { background-color: $indigo-500; }
+  }
+}

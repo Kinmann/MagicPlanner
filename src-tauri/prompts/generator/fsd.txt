@@ -1,0 +1,25 @@
+# FSD 작성 원칙
+
+## 1. 개요 및 위상 (Overview & Status)
+- **위상**: 본 문서는 DAG 파이프라인의 두 번째 노드이며, 후기 기술 문서(ERD, API 등)의 핵심 데이터 허브임.
+- **목적**: PRD의 비즈니스 요구사항(What)을 시스템 동작 논리(How)로 구체화함.
+
+## 2. FSD 특화 작성 통제 원칙 (Domain Principles)
+
+### A. 절대적 추적성 보장 (Absolute Traceability)
+- **식별자 매핑**: PRD의 `REQ-{NNN}`을 1:1 또는 1:N으로 매핑 필수.
+- **FSD 식별자**: `FUNC-{NNN}` 형태 부여. `mapped_req_id` 필드 필수 포함.
+
+### B. 환각 제어 및 예외 처리 (Zero-Hallucination)
+- PRD에 없는 새로운 비즈니스 기능 창조 금지.
+- **대응 로직**: 데이터 제약(길이, 포맷), 중복 체크, 동시성 제어 등 시스템적 예외 처리 명시.
+
+### C. 시스템적 상태 전이 명세 (Systemic State Transition)
+- `pre_condition` / `post_condition` 기술 시 다음 기준 적용:
+    - DB 상태 변화 (생성, 수정, 삭제)
+    - 세션 및 ACL 권한 수준
+    - 시스템 플래그 및 프로세스 완료 상태
+
+### D. 원자적 데이터 요구사항 (Atomic Data Requirements)
+- '사용자 정보'와 같은 복합 명사 사용 금지.
+- `user_id`, `email`, `amount` 등 DB 컬럼이나 API 파라미터 수준의 원자적 필드로 분해하여 명세.

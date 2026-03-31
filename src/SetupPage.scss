@@ -1,0 +1,177 @@
+@import './styles/variables';
+
+.setup-container {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: $bg-dark;
+  padding: 1.5rem;
+}
+
+.setup-card {
+  max-width: 28rem;
+  width: 100%;
+  background-color: $bg-panel;
+  border: $glass-border;
+  border-radius: $radius-xl;
+  padding: 2.5rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  
+  .icon-wrapper {
+    width: 4rem;
+    height: 4rem;
+    background-color: rgba($indigo-500, 0.1);
+    border-radius: $radius-lg;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+    color: $indigo-500;
+  }
+  
+  h1 {
+    font-size: 1.875rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.025em;
+  }
+  
+  p {
+    color: $text-secondary;
+    font-size: 0.875rem;
+    margin-bottom: 2rem;
+  }
+}
+
+.setup-form {
+  .input-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: $text-muted;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+    margin-left: 0.25rem;
+  }
+  
+  .input-wrapper {
+    position: relative;
+    margin-bottom: 1.5rem;
+    
+    .input-icon {
+      position: absolute;
+      left: 1rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: $text-dim;
+    }
+    
+    input {
+      width: 100%;
+      background-color: rgba(255, 255, 255, 0.03);
+      border: $glass-border;
+      border-radius: $radius-lg;
+      padding: 0.875rem 1rem 0.875rem 3rem;
+      color: white;
+      font-size: 0.875rem;
+      transition: all 0.2s ease;
+      
+      &:focus {
+        background-color: rgba(255, 255, 255, 0.05);
+        border-color: $indigo-500;
+        box-shadow: 0 0 0 4px rgba($indigo-500, 0.1);
+      }
+      
+      &::placeholder {
+        color: $text-dim;
+      }
+    }
+  }
+}
+
+.error-message {
+  padding: 0.75rem 1rem;
+  background-color: rgba($red-500, 0.1);
+  border: 1px solid rgba($red-500, 0.2);
+  border-radius: $radius-md;
+  color: $red-400;
+  font-size: 0.75rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.submit-button {
+  width: 100%;
+  padding: 1rem;
+  background: $gradient-indigo;
+  color: white;
+  font-weight: 700;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-indigo;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+  
+  &:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 20px 25px -5px rgba(79, 70, 229, 0.3);
+  }
+  
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+  
+  .spinner {
+    animation: spin 1s linear infinite;
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.info-box {
+  margin-top: 2rem;
+  padding: 1rem;
+  background-color: rgba(255, 255, 255, 0.02);
+  border-radius: $radius-lg;
+  border: 1px dashed rgba(255, 255, 255, 0.05);
+  
+  h3 {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: $text-muted;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  ul {
+    list-style: none;
+    
+    li {
+      font-size: 0.7rem;
+      color: $text-dim;
+      margin-bottom: 0.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      
+      &::before {
+        content: '';
+        width: 3px;
+        height: 3px;
+        background-color: $text-dim;
+        border-radius: 50%;
+      }
+    }
+  }
+}

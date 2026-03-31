@@ -1,0 +1,28 @@
+@import './styles/variables';
+
+.app-container {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background-color: $bg-dark;
+}
+
+.loading-screen {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: $bg-dark;
+  
+  .loading-text {
+    font-size: 1.25rem;
+    font-weight: 500;
+    color: $indigo-400;
+    font-family: $font-mono;
+    letter-spacing: 0.1em;
+  }
+}
+
+.page-wrapper {
+  height: 100%;
+}

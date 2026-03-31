@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PRD (Product Requirements Document)",
+  "type": "object",
+  "properties": {
+    "project_name": { "type": "string" },
+    "overview": {
+      "type": "object",
+      "properties": {
+        "problem_statement": { "type": "string" },
+        "solution_vision": { "type": "string" },
+        "target_audience": { "type": "string" }
+      },
+      "required": ["problem_statement", "solution_vision", "target_audience"]
+    },
+    "goals": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 3
+    },
+    "core_features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "feature_name": { "type": "string" },
+          "description": { "type": "string" },
+          "priority": { "enum": ["P0", "P1", "P2"] }
+        },
+        "required": ["feature_name", "description", "priority"]
+      },
+      "minItems": 5
+    },
+    "user_stories": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 3
+    },
+    "constraints": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "required": ["project_name", "overview", "goals", "core_features", "user_stories"]
+}

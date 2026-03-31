@@ -1,0 +1,20 @@
+{
+  "nodes": [
+    {
+      "id": "string (SCR-NNN)",
+      "type": "string (Action/Decision/Screen)",
+      "actor": "string",
+      "label": "string",
+      "step": "string",
+      "system_response": "string",
+      "mapped_func_ids": ["string"]
+    }
+  ],
+  "edges": [
+    {
+      "from_id": "string",
+      "to_id": "string",
+      "condition": "string"
+    }
+  ]
+}

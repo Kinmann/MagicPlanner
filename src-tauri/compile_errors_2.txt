@@ -1,0 +1,53 @@
+    Checking magic-planner v0.1.0 (D:\동영상\vibeCoding\MagicPlanner\src-tauri)
+warning: variant `IN_PROGRESS` should have an upper camel case name
+  --> src\commands.rs:13:5
+   |
+13 |     IN_PROGRESS,
+   |     ^^^^^^^^^^^ help: convert the identifier to upper camel case: `InProgress`
+   |
+   = note: `#[warn(non_camel_case_types)]` (part of `#[warn(nonstandard_style)]`) on by default
+
+warning: variant `PAUSED_HITL` should have an upper camel case name
+  --> src\commands.rs:15:5
+   |
+15 |     PAUSED_HITL,
+   |     ^^^^^^^^^^^ help: convert the identifier to upper camel case: `PausedHitl`
+
+warning: variant `PAUSED_API_ERROR` should have an upper camel case name
+  --> src\commands.rs:16:5
+   |
+16 |     PAUSED_API_ERROR,
+   |     ^^^^^^^^^^^^^^^^ help: convert the identifier to upper camel case: `PausedApiError`
+
+error[E0599]: no method named `path` found for reference `&AppHandle` in the current scope
+  --> src\lib.rs:94:38
+   |
+94 |             let app_dir = app_handle.path().app_config_dir().expect("app config dir not found");
+   |                                      ^^^^ method not found in `&AppHandle`
+   |
+   = help: items from traits can only be used if the trait is in scope
+help: trait `Manager` which provides `path` is implemented but not in scope; perhaps you want to import it
+   |
+ 1 + use tauri::Manager;
+   |
+
+error[E0599]: no method named `manage` found for mutable reference `&mut tauri::App` in the current scope
+    --> src\lib.rs:104:17
+     |
+ 104 |             app.manage(pool);
+     |                 ^^^^^^
+     |
+     = help: items from traits can only be used if the trait is in scope
+help: there is a method `manager` with a similar name, but with different arguments
+    --> C:\Users\gamedex02\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-2.10.3\src\lib.rs:1066:5
+     |
+1066 |     fn manager(&self) -> &AppManager<R>;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: trait `Manager` which provides `manage` is implemented but not in scope; perhaps you want to import it
+     |
+   1 + use tauri::Manager;
+     |
+
+For more information about this error, try `rustc --explain E0599`.
+warning: `magic-planner` (lib) generated 3 warnings
+error: could not compile `magic-planner` (lib) due to 2 previous errors; 3 warnings emitted

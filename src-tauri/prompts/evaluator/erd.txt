@@ -1,0 +1,29 @@
+# ERD 평가 지표 (Domain Metrics: 70점 만점)
+
+본 지표는 파이프라인의 Phase 2 (Track B) 노드인 ERD 산출물에 배타적으로 적용되는 70점 만점의 특화 검증 기준입니다. FSD의 `data_requirements`가 SQLite 환경에 맞게 설계되었는지 검증합니다.
+
+### Metric D: 정규화 및 엔티티 설계 무결성 (Normalization & Entity Integrity)
+- **기본 점수: 20점**
+- **[감점 트리거]**
+    - **[-10점] 제1정규형(1NF) 위반:** 다중 값(배열)이나 복합 JSON을 단일 컬럼에 저장.
+    - **[-10점] 데이터 중복 및 역정규화 남용:** 조인 회피 목적으로 SSOT 원칙 위배.
+    - **[-5점/건] 식별자(PK) 결함:** PK 누락 또는 부적절한 복합키 사용.
+
+### Metric E: 관계 및 참조 무결성 (Relationship & Referential Integrity)
+- **기본 점수: 20점**
+- **[감점 트리거]**
+    - **[-10점] N:M (다대다) 관계 방치:** 교차 테이블(Junction Table) 설계 누락.
+    - **[-10점] 연쇄 참조 제약(Cascade) 누락:** `ON DELETE` 정책 미명시.
+    - **[-5점/건] 카디널리티(Cardinality) 오류:** 비즈니스 로직과 모순된 관계 설정 (예: 1:N -> 1:1).
+
+### Metric F: 물리적 데이터 타입 및 제약 조건 (Strictness of Data Types & Constraints)
+- **기본 점수: 15점**
+- **[감점 트리거]**
+    - **[-10점] 아키텍처 제약 위반:** SQLite에서 미지원하는 타입(예: ENUM) 의존 설계.
+    - **[-5점/건] 필수 제약 조건 누락:** `NOT NULL`, `UNIQUE`, `DEFAULT` 등 누락.
+
+### Metric G: FSD 데이터 요구사항 정합성 (Consistency with FSD Data Requirements)
+- **기본 점수: 15점**
+- **[감점 트리거]**
+    - **[-10점] 데이터 유실:** FSD 요구 속성이 ERD에 미존재.
+    - **[-5점/건] 환각 컬럼:** FSD에 없고 불필요한 컬럼/테이블 임의 창작. (감사 컬럼 제외)

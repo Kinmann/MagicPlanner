@@ -1,0 +1,24 @@
+{
+  "hierarchy": [
+    {
+      "depth": "number (1-3)",
+      "parent_id": "string",
+      "screen_id": "string (SCR-NNN)",
+      "title": "string",
+      "actor": "string",
+      "path": "string"
+    }
+  ],
+  "screen_elements": [
+    {
+      "screen_id": "string",
+      "elements": [
+        {
+          "type": "string",
+          "label": "string",
+          "mapped_func_id": "string"
+        }
+      ]
+    }
+  ]
+}

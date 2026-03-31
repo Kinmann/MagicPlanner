@@ -1,0 +1,181 @@
+﻿
+  +                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      + CategoryInfo          : NotSpecified: (    Checking ma...nner\src-t
+a 
+     uri):String) [], RemoteException
+>     + FullyQualifiedErrorId : NativeCommandError
+   
+  warning: variant `IN_PROGRESS` should have an upper camel case name
+    --> src\commands.rs:12:5
+     |     ^^^^^^^^^^^ help: convert the identifier to upper camel case: `P
+au
+  sedHitl`
+  
+> warning: variant `PAUSED_API_ERROR` should have an upper camel case name
+    --> src\commands.rs:15:5
+     |
+> 15 |     PAUSED_API_ERROR,
+     |     ^^^^^^^^^^^^^^^^ help: convert the identifier to upper camel cas
+e:
+>  `PausedApiError`
+  
+> error[E0624]: method `select` is private
+     --> src\commands.rs:93:10
+      |
+   93 |           .select::<DocumentNode>(
+  215 | |         &self,
+  216 | |         _query: String,
+  217 | |         _values: Vec<JsonValue>,
+> 218 | |     ) -> Result<Vec<IndexMap<String, JsonValue>>, crate::Error> {
+      | |_______________________________________________________________- p
+ri
+  vate method defined here
+  
+> error[E0282]: type annotations needed
+    --> src\commands.rs:92:17
+     |
+  92 |       let nodes = db
+  97 | |         .await
+     | |______________^ cannot infer type
+  
+> error[E0624]: method `select` is private
+     --> src\commands.rs:112:10
+      |
+  112 |           .select::<GenerationIteration>(
+  215 | |         &self,
+  216 | |         _query: String,
+  217 | |         _values: Vec<JsonValue>,
+> 218 | |     ) -> Result<Vec<IndexMap<String, JsonValue>>, crate::Error> {
+      | |_______________________________________________________________- p
+ri
+  vate method defined here
+  
+> error[E0282]: type annotations needed
+     --> src\commands.rs:111:22
+      |
+  111 |       let iterations = db
+  116 | |         .await
+      | |______________^ cannot infer type
+  
+> error[E0624]: method `select` is private
+     --> src\commands.rs:131:10
+      |
+  131 |           .select::<GenerationIteration>(
+  215 | |         &self,
+  216 | |         _query: String,
+  217 | |         _values: Vec<JsonValue>,
+> 218 | |     ) -> Result<Vec<IndexMap<String, JsonValue>>, crate::Error> {
+      | |_______________________________________________________________- p
+ri
+  vate method defined here
+  
+> error[E0282]: type annotations needed
+     --> src\commands.rs:130:21
+      |
+  130 |       let iteration = db
+  135 | |         .await
+      | |______________^ cannot infer type
+  
+> error[E0624]: method `select` is private
+     --> src\commands.rs:171:10
+      |
+  171 |           .select::<Project>("SELECT * FROM project WHERE is_delete
+d 
+  215 | |         &self,
+  216 | |         _query: String,
+  217 | |         _values: Vec<JsonValue>,
+> 218 | |     ) -> Result<Vec<IndexMap<String, JsonValue>>, crate::Error> {
+      | |_______________________________________________________________- p
+ri
+  vate method defined here
+  
+> error[E0282]: type annotations needed
+     --> src\commands.rs:170:20
+      |
+  170 |       let projects = db
+  172 | |         .await
+      | |______________^ cannot infer type
+  
+> error[E0624]: method `execute` is private
+     --> src\commands.rs:193:8
+      |
+  193 |       db.execute(
+  147 | |         &self,
+  148 | |         _query: String,
+  149 | |         _values: Vec<JsonValue>,
+> 150 | |     ) -> Result<(u64, LastInsertId), crate::Error> {
+      | |__________________________________________________- private method
+ d
+  efined here
+  
+> error[E0282]: type annotations needed
+     --> src\commands.rs:193:5
+      |
+  193 | /     db.execute(
+  196 | |             project_id.clone(),
+  ...   |
+  203 | |         ],
+> 204 | |     ).await.map_err(|e: tauri_plugin_sql::Error| e.to_string())?;
+      | |___________^ cannot infer type
+  
+> error[E0624]: method `execute` is private
+     --> src\commands.rs:216:12
+      |
+  216 |           db.execute(
+  147 | |         &self,
+  148 | |         _query: String,
+  149 | |         _values: Vec<JsonValue>,
+> 150 | |     ) -> Result<(u64, LastInsertId), crate::Error> {
+      | |__________________________________________________- private method
+ d
+  efined here
+  
+> error[E0282]: type annotations needed
+     --> src\commands.rs:216:9
+      |
+  216 | / ...   db.execute(
+  219 | | ...           node_id,
+  ...   |
+  225 | | ...       ],
+> 226 | | ...   ).await.map_err(|e: tauri_plugin_sql::Error| e.to_string())
+?;
+      | |_____________^ cannot infer type
+  
+> error[E0624]: method `select` is private
+     --> src\commands.rs:245:10
+      |
+  245 |           .select::<DocumentNode>(
+  215 | |         &self,
+  216 | |         _query: String,
+  217 | |         _values: Vec<JsonValue>,
+> 218 | |     ) -> Result<Vec<IndexMap<String, JsonValue>>, crate::Error> {
+      | |_______________________________________________________________- p
+ri
+  vate method defined here
+  
+> error[E0282]: type annotations needed
+     --> src\commands.rs:244:16
+      |
+  244 |       let node = db
+  249 | |         .await
+      | |______________^ cannot infer type
+  
+> error[E0624]: method `select` is private
+     --> src\commands.rs:260:10
+      |
+  260 |           .select::<Project>("SELECT * FROM project WHERE project_i
+d 
+  215 | |         &self,
+  216 | |         _query: String,
+  217 | |         _values: Vec<JsonValue>,
+> 218 | |     ) -> Result<Vec<IndexMap<String, JsonValue>>, crate::Error> {
+      | |_______________________________________________________________- p
+ri
+  vate method defined here
+  
+> error[E0282]: type annotations needed
+     --> src\commands.rs:259:19
+      |
+  259 |       let project = db
+
+

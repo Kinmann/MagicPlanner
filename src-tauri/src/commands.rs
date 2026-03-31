@@ -306,14 +306,17 @@ pub async fn run_pipeline(
     let mut current_best_score = 0;
     let mut final_iteration_count = 0;
 
-    // 3. Best-of-N 루프
+    // 3. Best-of-N 루프 (Feedback Refinement 적용)
     let mut loop_error = None;
+    let mut previous_draft = String::new();
+    let mut previous_feedback: Vec<String> = Vec::new();
+
     for i in 1..=max_iters {
         final_iteration_count = i;
         println!(">>> Iteration {}/{} starting for {}", i, max_iters, node_type);
         let _ = app_handle.emit("pipeline-status", format!("{} 생성 중 (반복 {}/{})", node_type, i, max_iters));
         
-        let draft_res = generate_draft(&app_handle, &client, &api_key, &node_type, &project.raw_input_text).await;
+        let draft_res = generate_draft(&app_handle, &client, &api_key, &node_type, &project.raw_input_text, &previous_draft, &previous_feedback).await;
         let draft = match draft_res {
             Ok(d) => d,
             Err(e) => {
@@ -356,13 +359,17 @@ pub async fn run_pipeline(
 
         if eval.score > current_best_score {
             current_best_score = eval.score;
-            current_best_content = draft;
+            current_best_content = draft.clone();
         }
 
         println!(">>> Iteration {}: Score = {}, Pass = {}", i, eval.score, eval.is_pass);
-        if eval.is_pass || eval.score >= threshold {
-            println!(">>> Iteration {}: Threshold reached, finishing.", i);
-            break;
+        
+        // 조기 종료(Early Stop) 제거. Max Iterations (10회)를 전수 조사하여 최고점을 찾음.
+        // 다음 회차 피드백 반영을 위해 무조건 현재 회차 데이터를 캐싱
+        previous_draft = draft;
+        previous_feedback = eval.critical_errors.clone();
+        if !eval.feedback.is_empty() {
+            previous_feedback.push(format!("총평: {}", eval.feedback));
         }
     }
 
@@ -547,6 +554,8 @@ async fn generate_draft(
     api_key: &str,
     node_type: &str,
     input_text: &str,
+    previous_draft: &str,
+    previous_feedback: &Vec<String>,
 ) -> Result<String, PipelineError> {
     let node_normalized = node_type.to_lowercase().replace(" ", "_");
     let resource_dir = app_handle.path().resource_dir().map_err(|e: tauri::Error| PipelineError::Internal(e.to_string()))?;
@@ -567,10 +576,19 @@ async fn generate_draft(
     let combined_sys_prompt = format!("{}\n\n[DOMAIN SPECIFIC RULE]\n{}", common_prompt, domain_prompt);
     println!(">>> System Prompt Loaded! Length: {} chars, Schema Length: {} chars", combined_sys_prompt.len(), schema.len());
     
-    let user_prompt = format!(
+    let mut user_prompt = format!(
         "다음 사용자의 아이디어를 바탕으로 기획서를 작성하십시오.\n\n[사용자 아이디어]\n{}\n\n[출력 형식 스키마]\n{}",
         input_text, schema
     );
+
+    if !previous_draft.is_empty() && !previous_feedback.is_empty() {
+        let feedback_text = previous_feedback.iter().map(|f| format!("- {}", f)).collect::<Vec<_>>().join("\n");
+        user_prompt = format!(
+            "{}\n\n[이전 회차 결과물]\n{}\n\n[이전 회차 피드백 (반드시 보완 및 반영할 것)]\n{}\n\n위 피드백에서 지적된 문제점들을 완벽하게 개선하여 새로운 기획서 초안을 작성하십시오.",
+            user_prompt, previous_draft, feedback_text
+        );
+        println!(">>> Appending Previous Feedback to Generator Prompt");
+    }
 
     call_gemini(client, api_key, &combined_sys_prompt, &user_prompt).await
 }

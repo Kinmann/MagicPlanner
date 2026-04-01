@@ -1,6 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { DocumentNode } from '../../types/project';
-import { Play, CheckCircle2, Circle, Loader2, AlertCircle, PauseCircle, RefreshCw } from 'lucide-react';
 import './PipelineCard.scss';
 
 interface PipelineCardProps {
@@ -8,112 +7,229 @@ interface PipelineCardProps {
   onRun: (nodeType: string) => void;
   onView: (node: DocumentNode) => void;
   onHITLAction: (nodeId: string, action: 'APPROVE' | 'RETRY') => void;
+  onUpdateMaxIterations: (nodeId: string, maxIterations: number) => void;
+  onDimensionsChange?: (nodeType: string, dimensions: { width: number, height: number }) => void;
 }
 
-const PipelineCard: React.FC<PipelineCardProps> = ({ node, onRun, onView, onHITLAction }) => {
+const PipelineCard: React.FC<PipelineCardProps> = ({ 
+  node, 
+  onRun, 
+  onView, 
+  onHITLAction, 
+  onUpdateMaxIterations,
+  onDimensionsChange 
+}) => {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [isEditingMax, setIsEditingMax] = useState(false);
+  const [tempMax, setTempMax] = useState(node.max_iterations);
+
+  React.useLayoutEffect(() => {
+    if (!containerRef.current || !onDimensionsChange) return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        onDimensionsChange(node.target_node_type, { width, height });
+      }
+    });
+
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [onDimensionsChange, node.target_node_type]);
+
+  const handleUpdateMax = () => {
+    onUpdateMaxIterations(node.node_id, tempMax);
+    setIsEditingMax(false);
+  };
+
+  const getNodeConfig = (type: string) => {
+    const configs: Record<string, { icon: string, agent: string }> = {
+      'PRD': { icon: 'description', agent: 'SpecWriter-v4' },
+      'FSD': { icon: 'settings_suggest', agent: 'System-Architect-v2' },
+      'IA': { icon: 'schema', agent: 'Architect-Prime' },
+      'User Flow': { icon: 'account_tree', agent: 'FlowDesigner-AI' },
+      'ERD': { icon: 'database', agent: 'DB-Architect' },
+      'Wireframe': { icon: 'grid_view', agent: 'UI-Gen-Pro' },
+      'API_Spec': { icon: 'api', agent: 'Backend-Pilot' },
+      'TC': { icon: 'task_alt', agent: 'QA-Validator' }
+    };
+    return configs[type] || { icon: 'help_outline', agent: 'AI-Agent' };
+  };
+
   const getStatusConfig = (state: DocumentNode['node_state']) => {
     switch (state) {
       case 'PENDING':
-        return { variant: 'pending', icon: <Circle size={14} />, label: '대기 중' };
+        return { variant: 'is-pending', label: 'PENDING', active: false };
       case 'READY':
-        return { variant: 'ready', icon: <Play size={14} />, label: '시작 가능' };
+        return { variant: 'is-ready', label: 'READY', active: false };
       case 'IN_PROGRESS':
-        return { variant: 'in-progress', icon: <Loader2 size={14} className="spinning" />, label: '생성 중' };
+        return { variant: 'node-active', label: 'IN PROGRESS', active: true };
       case 'COMPLETED':
-        return { variant: 'completed', icon: <CheckCircle2 size={14} />, label: '완료됨' };
+        return { variant: 'is-completed', label: 'COMPLETED', active: false };
       case 'PAUSED_HITL':
-        return { variant: 'hitl', icon: <PauseCircle size={14} />, label: '품질 미달(HITL)' };
+        return { variant: 'is-warning', label: 'WAITING', active: false };
       case 'PAUSED_API_ERROR':
-        return { variant: 'error', icon: <AlertCircle size={14} />, label: 'API 에러' };
+        return { variant: 'is-error', label: 'ERROR', active: false };
       default:
-        return { variant: 'pending', icon: <Circle size={14} />, label: '-' };
+        return { variant: 'is-pending', label: 'PENDING', active: false };
     }
   };
 
-  const config = getStatusConfig(node.node_state);
+  const nodeConfig = getNodeConfig(node.target_node_type);
+  const statusConfig = getStatusConfig(node.node_state);
 
   return (
-    <div className={`pipeline-card ${config.variant}`}>
-      <div className="card-header">
-        <h3>{node.target_node_type}</h3>
-        <span className="status">
-          {config.icon}
-          {config.label}
-        </span>
-      </div>
-
-      <div className="metrics-section">
-        <div className="metric-label">
-          <span>최종 점수</span>
-          <span className={`value ${node.current_best_score >= 85 ? 'high' : ''}`}>
-            {node.current_best_score} / 100
+    <div 
+      className={`pipeline-node ${statusConfig.variant}`}
+      onClick={() => onView(node)}
+      style={{ cursor: 'pointer' }}
+      ref={containerRef}
+    >
+      {/* Ports */}
+      <div className="port port-in"></div>
+      <div className="port port-out"></div>
+      
+      {/* Header */}
+      <div className="pipeline-node__header">
+        <div className="header-label-group">
+          <div className="node-icon">
+            <span className="material-symbols-outlined">{nodeConfig.icon}</span>
+          </div>
+          <span className="node-label">
+            {node.target_node_type} Node
           </span>
         </div>
-        <div className="progress-bar">
-          <div 
-            className={`fill ${node.current_best_score >= 85 ? 'success' : ''}`}
-            style={{ width: `${node.current_best_score}%` }}
-          />
-        </div>
-        <div className="sub-metric">
-          <span>반복 횟수</span>
-          <span>{node.current_iteration} / {node.max_iterations}</span>
+        <div className="status-indicator">
+          {statusConfig.active && <span className="pulse-dot"></span>}
+          <span className="status-text">
+            {statusConfig.label}
+          </span>
         </div>
       </div>
 
-      <div className="card-actions">
+      {/* Body */}
+      <div className="pipeline-node__body">
+        <div className="node-main-row">
+          {/* Iteration Progress moved to where title was */}
+          <div className="node-iteration-info">
+            <div className="agent-info">
+              <span className="label">AGENT:</span>
+              <span className="value">{nodeConfig.agent}</span>
+            </div>
+            <div className="iteration-header">
+              <span className="label">ITERATION PROGRESS</span>
+              <div className="counter-container">
+                {isEditingMax ? (
+                  <input 
+                    type="number" 
+                    className="max-input inline"
+                    value={tempMax} 
+                    onChange={(e) => setTempMax(parseInt(e.target.value) || 1)}
+                    onBlur={handleUpdateMax}
+                    onKeyDown={(e) => e.key === 'Enter' && handleUpdateMax()}
+                    onClick={(e) => e.stopPropagation()}
+                    autoFocus
+                  />
+                ) : (
+                  <>
+                    <span className="value">{node.current_iteration} / {node.max_iterations}</span>
+                    {(node.node_state === 'PENDING' || node.node_state === 'READY') && (
+                      <button 
+                        className="edit-btn" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsEditingMax(true);
+                        }}
+                      >
+                        <span className="material-symbols-outlined">edit</span>
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="progress-track">
+              <div 
+                className="progress-fill" 
+                style={{ width: `${(node.current_iteration / node.max_iterations) * 100}%` }}
+              ></div>
+            </div>
+          </div>
+
+          <div className="score-panel">
+            <span className="label">SCORE</span>
+            <span className="value">{node.current_best_score}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="pipeline-node__actions">
         {node.node_state === 'READY' && (
-          <button
-            onClick={() => onRun(node.target_node_type)}
-            className="btn primary"
+          <button 
+            className="btn btn-primary" 
+            onClick={(e) => {
+              e.stopPropagation();
+              onRun(node.target_node_type);
+            }}
           >
-            <Play size={12} fill="currentColor" />
-            실행
+            <span className="material-symbols-outlined">play_arrow</span> Execute Node
           </button>
         )}
         
         {node.node_state === 'PAUSED_HITL' && (
-          <div className="grid-2">
-            <button
-              onClick={() => onHITLAction(node.node_id, 'RETRY')}
-              className="btn primary"
+          <div className="flex gap-2 w-full">
+            <button 
+              className="btn btn-secondary" 
+              onClick={(e) => {
+                e.stopPropagation();
+                onHITLAction(node.node_id, 'RETRY');
+              }}
             >
-              <RefreshCw size={12} />
-              재시도
+              Retry
             </button>
-            <button
-              onClick={() => onHITLAction(node.node_id, 'APPROVE')}
-              className="btn success"
+            <button 
+              className="btn btn-primary font-black" 
+              onClick={(e) => {
+                e.stopPropagation();
+                onHITLAction(node.node_id, 'APPROVE');
+              }}
             >
-              <CheckCircle2 size={12} />
-              강제 승인
+              Pass
             </button>
           </div>
         )}
 
         {(node.node_state === 'PAUSED_API_ERROR' || node.node_state === 'IN_PROGRESS') && (
-          <button
-            onClick={() => onRun(node.target_node_type)}
-            className="btn danger"
+          <button 
+            className="btn btn-error" 
+            onClick={(e) => {
+              e.stopPropagation();
+              onRun(node.target_node_type);
+            }}
           >
-            <RefreshCw size={12} />
-            {node.node_state === 'IN_PROGRESS' ? '강제 재시도' : '다시 시도'}
+            <span className="material-symbols-outlined">refresh</span> 
+            {node.node_state === 'IN_PROGRESS' ? 'Force Reboot' : 'Retry Cycle'}
           </button>
         )}
 
         {node.node_state === 'COMPLETED' && (
-          <button
-            onClick={() => onView(node)}
-            className="btn ghost"
+          <button 
+            className="btn btn-ghost" 
+            onClick={(e) => {
+              e.stopPropagation();
+              onView(node);
+            }}
           >
-            내용 보기
+            <span className="material-symbols-outlined">visibility</span> Inspect Output
           </button>
         )}
       </div>
       
       {node.api_error_message && (
-        <div className="api-error-box">
-          {node.api_error_message}
+        <div className="error-box">
+          <span className="material-symbols-outlined">report</span>
+          <p>{node.api_error_message}</p>
         </div>
       )}
     </div>

@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
 import CreateProjectModal from '../components/Project/CreateProjectModal';
+
+import Spinner from '../components/common/Spinner';
 import './Dashboard.scss';
 
 interface Project {
@@ -10,13 +12,15 @@ interface Project {
   pipeline_execution_mode: string;
   raw_input_text: string;
   created_at: string;
+  current_node_type: string | null;
 }
 
 interface DashboardProps {
   onSelectProject: (projectId: string) => void;
+  onOpenSettings: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ onSelectProject }) => {
+const Dashboard: React.FC<DashboardProps> = ({ onSelectProject, onOpenSettings }) => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -41,87 +45,207 @@ const Dashboard: React.FC<DashboardProps> = ({ onSelectProject }) => {
     onSelectProject(projectId);
   };
 
+
+  const getCategoryIcon = (name: string) => {
+    const n = name.toLowerCase();
+    if (n.includes('health')) return 'clinical_notes';
+    if (n.includes('shop') || n.includes('e-comm') || n.includes('retail')) return 'shopping_bag';
+    if (n.includes('dev') || n.includes('auto') || n.includes('util')) return 'terminal';
+    return 'format_list_bulleted';
+  };
+
+  const getAccentClass = (idx: number) => {
+    if (idx % 3 === 0) return '';
+    if (idx % 3 === 1) return 'project-card__accent-bar--secondary';
+    return 'project-card__accent-bar--tertiary';
+  };
+
   return (
-    <div className="dashboard-container">
-      <div className="dashboard-inner">
-        <header className="dashboard-header">
-          <div>
-            <h1>대시보드</h1>
-            <p>현재 보관된 모든 기획 프로젝트를 한눈에 관리하세요.</p>
+    <div className="dashboard-layout">
+      {/* 1. Left Side Navigation (Narrow) */}
+      <aside className="dashboard-sidebar">
+        <div className="sidebar-inner">
+          <div className="logo-container">
+            <span className="material-symbols-outlined text-on-primary">auto_awesome</span>
           </div>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="create-btn"
-          >
-            <div className="btn-content">
-              <span className="plus">+</span> 새로운 프로젝트 시작
+          <nav className="nav-items">
+            <button 
+              className="nav-button active"
+              title="Dashboard"
+            >
+              <span className="material-symbols-outlined">grid_view</span>
+            </button>
+            <button 
+              className="nav-button"
+              title="Monitoring"
+              disabled
+              style={{ opacity: 0.3, cursor: 'not-allowed' }}
+            >
+              <span className="material-symbols-outlined">analytics</span>
+            </button>
+          </nav>
+          
+          <div className="sidebar-footer">
+             <button className="nav-button" title="Settings" onClick={onOpenSettings}>
+                <span className="material-symbols-outlined">settings</span>
+             </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* 2. Main Dashboard (Header + Content) */}
+      <main className="dashboard-main">
+        {/* Header Section (Toolbar) */}
+        <header className="dashboard-toolbar">
+          <div className="toolbar-left">
+            <span className="toolbar-label">MAGIC PLANNER</span>
+            <div className="divider"></div>
+            <div className="toolbar-info">
+              <span className="title">Project Dashboard</span>
+              <span className="status-badge">
+                {projects.length} Projects
+              </span>
             </div>
-          </button>
+          </div>
+          
+          <div className="toolbar-right">
+            <button 
+              className="create-btn"
+              onClick={() => setIsModalOpen(true)}
+            >
+              <span className="material-symbols-outlined">add</span>
+              New Project
+            </button>
+          </div>
         </header>
 
-        {isLoading ? (
-          <div className="loader-container">
-            <div className="spinner" />
-          </div>
-        ) : projects.length === 0 ? (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="empty-state"
-          >
-            <div className="icon">📂</div>
-            <h3>아직 생성된 프로젝트가 없습니다</h3>
-            <p>새로운 첫 번째 기획 프로젝트를 만들어보세요!</p>
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="setup-btn"
-            >
-              새 프로젝트 생성하기
-            </button>
-          </motion.div>
-        ) : (
-          <div className="project-grid">
-            {projects.map((project, idx) => (
-              <motion.div
-                key={project.project_id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.1 }}
-                whileHover={{ y: -5 }}
-                onClick={() => onSelectProject(project.project_id)}
-                className="project-card"
-              >
-                <div className="card-header">
-                  <div className={`mode-badge ${project.pipeline_execution_mode === 'AUTO' ? 'auto' : 'manual'}`}>
-                    {project.pipeline_execution_mode} MODE
-                  </div>
-                  <span className="date">
-                    {new Date(project.created_at).toLocaleDateString()}
-                  </span>
-                </div>
-                <h3>{project.project_name}</h3>
-                <p>{project.raw_input_text}</p>
-                <div className="card-footer">
-                  <div className="dots">
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
-                       <div key={i} className="dot" />
-                    ))}
-                  </div>
-                  <span className="open-link">
-                    워크스페이스 열기 →
-                  </span>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        )}
+        {/* Content Area */}
+        <div className="dashboard-content canvas-grid custom-scrollbar">
+          <div className="dashboard-inner pb-12 px-6 max-w-7xl mx-auto min-h-screen">
+            {/* Header Section */}
+            <section className="dashboard-header flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
+              <div className="dashboard-header__content">
+                <h1 className="text-4xl font-extrabold tracking-tight text-on-surface mb-2">Workspace</h1>
+                <p className="text-on-surface-variant max-w-xl">Architect your software vision with orchestrated intelligence and precise planning pipelines.</p>
+              </div>
+            </section>
 
-        <CreateProjectModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          onSuccess={handleCreateSuccess}
-        />
-      </div>
+            {isLoading ? (
+              <div className="loader-container flex justify-center items-center py-32">
+                <Spinner size="xl" />
+              </div>
+            ) : projects.length === 0 ? (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="empty-state group relative bg-surface-container-high p-12 rounded-xl transition-all duration-300 flex flex-col items-center gap-6"
+              >
+                <div className="empty-state__icon text-6xl opacity-30">folder_open</div>
+                <div className="text-center">
+                  <h3 className="text-2xl font-bold text-on-surface mb-2">No projects orchestrated yet</h3>
+                  <p className="text-on-surface-variant">Start your architectural journey by creating a new AI planning project.</p>
+                </div>
+                <button 
+                  className="btn-hero flex items-center gap-2 px-6 py-3 rounded-lg text-on-primary font-bold"
+                  onClick={() => setIsModalOpen(true)}
+                >
+                  <span className="material-symbols-outlined">add</span>
+                  <span>Initialize First Project</span>
+                </button>
+              </motion.div>
+            ) : (
+              <div className="project-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {projects.map((project, idx) => (
+                  <motion.div
+                    key={project.project_id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.05 }}
+                    onClick={() => onSelectProject(project.project_id)}
+                    className="project-card group relative bg-surface-container-high p-6 rounded-xl hover:bg-surface-bright transition-all duration-300 flex flex-col gap-4 overflow-hidden"
+                  >
+                    <div className={`project-card__accent-bar transition-all duration-300 ${getAccentClass(idx)}`}></div>
+                    
+                    <div className="project-card__header flex justify-between items-start">
+                      <div className="project-card__info flex flex-col">
+                        <span className="project-card__category text-xs font-bold tracking-widest uppercase mb-1">{project.pipeline_execution_mode} MODE</span>
+                        <h3 className="project-card__title text-xl font-bold text-on-surface">{project.project_name}</h3>
+                      </div>
+                      <span className="material-symbols-outlined project-card__icon text-on-surface-variant group-hover:text-primary transition-colors">
+                        {getCategoryIcon(project.project_name)}
+                      </span>
+                    </div>
+
+                    <div className="project-card__meta flex items-center gap-2 text-sm text-on-surface-variant">
+                      <span className="material-symbols-outlined text-sm">calendar_today</span>
+                      <span>Created {new Date(project.created_at).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}</span>
+                    </div>
+
+                    <div className="project-card__footer mt-4 flex items-center justify-between pt-4 border-t border-outline-variant/10">
+                      <div className="project-card__tech flex -space-x-2">
+                        {project.current_node_type ? project.current_node_type.split(',').slice(0, 2).map((node, i) => {
+                          const label = node.trim().substring(0, 2);
+                          const formatted = label.charAt(0).toUpperCase() + (label.charAt(1) || '').toLowerCase();
+                          return (
+                            <div key={i} className="tech-circle w-8 h-8 rounded-full bg-surface-container-lowest border border-outline-variant/30 flex items-center justify-center text-[10px] font-bold text-primary">
+                              {formatted}
+                            </div>
+                          );
+                        }) : (
+                          <div className="tech-circle w-8 h-8 rounded-full bg-surface-container-lowest border border-outline-variant/30 flex items-center justify-center text-[10px] font-bold text-completed">
+                            Dn
+                          </div>
+                        )}
+                      </div>
+                      <button className="project-card__launch text-primary text-sm font-semibold flex items-center gap-2 group-hover:translate-x-1 transition-transform">
+                        View Pipeline
+                        <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                      </button>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+
+            {/* System Status Bar */}
+            <section className="system-status">
+              <div className="system-status__container">
+                <div className="system-status__item border-l-2 border-primary/20">
+                  <span className="status-label">AI CORE</span>
+                  <div className="status-value flex items-center gap-2">
+                    <div className="status-dot w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_#d2bbff]"></div>
+                    <span className="text-sm font-medium">Operational</span>
+                  </div>
+                </div>
+                <div className="system-status__item border-l-2 border-primary/20">
+                  <span className="status-label">QUEUE</span>
+                  <div className="status-value flex items-center gap-2">
+                    <span className="text-sm font-medium">0 active tasks</span>
+                  </div>
+                </div>
+                <div className="system-status__item border-l-2 border-primary/20">
+                  <span className="status-label">RESOURCES</span>
+                  <div className="status-value flex items-center gap-2">
+                    <span className="text-sm font-medium">12.4GB / 32GB</span>
+                  </div>
+                </div>
+                <div className="system-status__item border-l-2 border-primary/20">
+                  <span className="status-label">VERSION</span>
+                  <div className="status-value flex items-center gap-2">
+                    <span className="text-sm font-medium">v2.5.0-stable</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </main>
+
+      <CreateProjectModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={handleCreateSuccess}
+      />
     </div>
   );
 };

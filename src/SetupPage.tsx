@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { load, Store } from "@tauri-apps/plugin-store";
-import { Key, CheckCircle2, AlertCircle, Loader2, Info, Save } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
+import Input from "./components/common/Input";
+import Button from "./components/common/Button";
 import "./SetupPage.scss";
 
 interface SetupPageProps {
   onComplete: () => void;
+  onBack?: () => void;
 }
 
-export default function SetupPage({ onComplete }: SetupPageProps) {
+export default function SetupPage({ onComplete, onBack }: SetupPageProps) {
   const [apiKey, setApiKey] = useState("");
   const [isValidating, setIsValidating] = useState(false);
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
@@ -35,9 +37,7 @@ export default function SetupPage({ onComplete }: SetupPageProps) {
     try {
       const isValid = await invoke<boolean>("validate_api_key", { apiKey });
       if (isValid && store) {
-        // 백엔드 DB에도 저장
         await invoke("save_api_key", { apiKey });
-        
         await store.set("gemini_api_key", { value: apiKey });
         await store.save();
         setStatus("success");
@@ -58,82 +58,51 @@ export default function SetupPage({ onComplete }: SetupPageProps) {
         animate={{ opacity: 1, y: 0 }}
         className="setup-card"
       >
-        <div className="icon-wrapper">
-          <Key size={32} />
+        <div className="setup-header">
+          {onBack && (
+            <button onClick={onBack} className="back-btn material-symbols-outlined" title="Back">
+              arrow_back
+            </button>
+          )}
+          <div className="icon-wrapper">
+            <span className="material-symbols-outlined">key</span>
+          </div>
         </div>
         
-        <h1>Magic Planner 시작하기</h1>
-        <p>AI 엔진을 구동하기 위해 Google Gemini API 키가 필요합니다.</p>
+        <h1>{onBack ? "Gemini API Configuration" : "Initialize Engine"}</h1>
+        <p>{onBack ? "Upgrade or reconfigure your orchestration engine's credentials." : "To power the AI orchestration pipelines, a valid Google Gemini API key is required."}</p>
 
         <form onSubmit={handleValidate} className="setup-form">
-          <label className="input-label">Gemini API Key</label>
-          <div className="input-wrapper">
-            <div className="input-icon">
-              <Key size={18} />
-            </div>
-            <input 
-              type="password" 
-              placeholder="AIzaSy..."
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              disabled={isValidating}
-              autoComplete="off"
-            />
-          </div>
+          <Input 
+            type="password" 
+            placeholder="AIzaSy... (Gemini API Key)"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            disabled={isValidating}
+            icon="vpn_key"
+            error={status === "error" ? errorMsg : undefined}
+            helperText={status === "success" ? "Key validated successfully." : undefined}
+          />
 
-          <AnimatePresence>
-            {status === "error" && (
-              <motion.div 
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="error-message"
-              >
-                <AlertCircle size={16} className="shrink-0" />
-                <span>{errorMsg}</span>
-              </motion.div>
-            )}
-
-            {status === "success" && (
-              <motion.div 
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                className="error-message" 
-                style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', borderColor: 'rgba(16, 185, 129, 0.2)', color: '#34d399' }}
-              >
-                <CheckCircle2 size={16} className="shrink-0" />
-                <span>API 키가 확인되었습니다.</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <button 
+          <Button 
             type="submit" 
-            disabled={isValidating || !apiKey.trim()}
-            className="submit-button"
+            variant="primary" 
+            size="lg"
+            isLoading={isValidating}
+            disabled={!apiKey.trim()}
           >
-            {isValidating ? (
-              <>
-                <Loader2 size={18} className="spinner" />
-                <span>검증 중...</span>
-              </>
-            ) : (
-              <>
-                <Save size={18} />
-                <span>설정 저장 및 시작</span>
-              </>
-            )}
-          </button>
+            {status === "success" ? "Authorized" : "Save & Initialize Pipeline"}
+          </Button>
         </form>
 
         <div className="info-box">
           <h3>
-            <Info size={14} />
-            발급 안내
+            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>info</span>
+            Quick Guide
           </h3>
           <ul>
-            <li>Google AI Studio에서 발급 가능합니다.</li>
-            <li>`gemini-2.5-flash` 모델 권한이 필요합니다.</li>
+            <li>Acquire from Google AI Studio.</li>
+            <li>`gemini-1.5-flash` or higher required.</li>
           </ul>
         </div>
       </motion.div>

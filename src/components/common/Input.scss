@@ -1,0 +1,78 @@
+@import "../../styles/variables";
+@import "../../styles/mixins";
+
+.input-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+
+  &__label {
+    @include label-uppercase;
+    color: $on-surface-variant;
+    cursor: pointer;
+  }
+
+  &__wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    background: $surface-container-lowest;
+    border-radius: $radius-xl;
+    transition: all 0.3s ease;
+    border: 1px solid rgba($outline-variant, 0.2);
+
+    &:focus-within {
+      border-color: rgba($primary, 0.5);
+      @include neon-shadow($primary, 0.1);
+    }
+  }
+
+  &__icon {
+    position: absolute;
+    left: 1rem;
+    color: $outline;
+    font-size: 1.25rem;
+    transition: color 0.3s ease;
+
+    .input-field:focus-within & {
+      color: $primary;
+    }
+  }
+
+  &__control {
+    width: 100%;
+    padding: 1rem;
+    font-size: 0.875rem;
+    background: transparent;
+    color: $on-surface;
+    border-radius: $radius-xl;
+
+    &::placeholder {
+      color: rgba($outline, 0.4);
+    }
+
+    .input-field.has-icon & {
+      padding-left: 3rem;
+    }
+  }
+
+  &__helper-text {
+    font-size: 0.75rem;
+    color: $on-surface-variant;
+    margin-top: 0.25rem;
+  }
+
+  // Error state
+  &.is-error {
+    .input-field__wrapper {
+      border-color: rgba($error, 0.5);
+      &:focus-within {
+        @include neon-shadow($error, 0.15);
+      }
+    }
+    .input-field__icon, .input-field__helper-text {
+      color: $error;
+    }
+  }
+}

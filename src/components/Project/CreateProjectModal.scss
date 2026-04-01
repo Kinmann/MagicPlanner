@@ -1,135 +1,181 @@
-@import '../../styles/variables';
+@import "../../styles/variables";
+@import "../../styles/mixins";
 
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  
-  .backdrop {
-    position: absolute;
-    inset: 0;
-    background-color: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(4px);
-  }
-}
-
-.modal-content {
-  position: relative;
-  width: 100%;
-  max-width: 42rem; // 2xl
-  overflow: hidden;
-  background-color: $bg-panel;
-  border: $glass-border;
-  border-radius: $radius-xl;
-  padding: 2rem;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  
-  .modal-header {
-    margin-bottom: 2rem;
-    
-    h2 { font-size: 1.5rem; font-weight: 700; color: white; margin-bottom: 0.5rem; }
-    p { color: $text-secondary; font-size: 0.875rem; }
-  }
-}
-
-.project-form {
+.create-project-form {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
-  
-  .form-group {
-    label {
-      display: block;
-      font-size: 0.875rem;
-      font-weight: 600;
-      color: $text-secondary;
-      margin-bottom: 0.5rem;
-    }
-    
-    input, textarea {
-      width: 100%;
-      background-color: rgba(255, 255, 255, 0.03);
-      border: $glass-border;
-      border-radius: $radius-md;
-      padding: 0.75rem 1rem;
-      color: white;
-      font-size: 0.875rem;
-      outline: none;
-      transition: border-color 0.2s;
-      
-      &:focus { border-color: rgba($indigo-500, 0.5); }
-      &::placeholder { color: $text-dim; }
-    }
-    
-    textarea { height: 10rem; resize: none; }
-  }
-  
-  .mode-selector {
+  gap: 2rem;
+
+  .form-section {
     display: flex;
-    gap: 1rem;
-    
-    .mode-btn {
-      flex: 1;
-      padding: 0.75rem;
-      font-size: 0.875rem;
-      font-weight: 600;
-      border-radius: $radius-md;
-      border: $glass-border;
-      background-color: rgba(255, 255, 255, 0.03);
-      color: $text-muted;
-      transition: all 0.2s ease;
-      
-      &.active {
-        background-color: rgba($indigo-500, 0.1);
-        border-color: $indigo-500;
-        color: white;
-        box-shadow: 0 0 15px rgba($indigo-500, 0.2);
-      }
-      
-      &:hover:not(.active) { background-color: rgba(255, 255, 255, 0.05); }
-    }
-  }
-  
-  .counter-box {
-    margin-top: 0.5rem;
-    display: flex;
-    justify-content: flex-end;
-    
-    .counter {
-      font-size: 0.75rem;
-      &.warning { color: $orange-500; }
-      &.success { color: $emerald-400; }
+    flex-direction: column;
+    gap: 0.75rem;
+
+    &__label {
+      @include label-uppercase;
+      color: $on-surface-variant;
     }
   }
 }
 
-.form-actions {
-  display: flex;
+.mode-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 1rem;
-  padding-top: 1rem;
-  
-  .btn-cancel {
-    flex: 1;
-    padding: 0.75rem;
-    background-color: rgba(255, 255, 255, 0.05);
-    color: white;
-    font-weight: 600;
-    border-radius: $radius-md;
-    &:hover { background-color: rgba(255, 255, 255, 0.1); }
+}
+
+.mode-option {
+  position: relative;
+  cursor: pointer;
+
+  input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
   }
+
+  &__card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: $surface-container-low;
+    border: 1px solid rgba($outline-variant, 0.2);
+    border-radius: $radius-xl;
+    transition: all 0.2s ease;
+
+    .radio-circle {
+      width: 1.25rem;
+      height: 1.25rem;
+      border-radius: 50%;
+      border: 2px solid rgba($outline, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+
+      .radio-inner {
+        width: 0.625rem;
+        height: 0.625rem;
+        border-radius: 50%;
+        background: $primary;
+        transform: scale(0);
+        transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      }
+    }
+
+    .mode-info {
+      display: flex;
+      flex-direction: column;
+      
+      .mode-name {
+        font-size: 0.875rem;
+        font-weight: 700;
+        color: $on-surface;
+        transition: color 0.2s ease;
+      }
+      
+      .mode-desc {
+        font-size: 0.625rem;
+        color: $on-surface-variant;
+        margin-top: 0.125rem;
+      }
+    }
+  }
+
+  input:checked + &__card {
+    background: $surface-container-highest;
+    border-color: $primary;
+
+    .radio-circle {
+      border-color: $primary;
+      .radio-inner {
+        transform: scale(1);
+      }
+    }
+
+    .mode-name {
+      color: $primary;
+    }
+  }
+
+  &:hover input:not(:checked) + &__card {
+    background: rgba($surface-bright, 0.5);
+    border-color: rgba($primary, 0.3);
+  }
+}
+
+.concept-textarea {
+  position: relative;
   
-  .btn-submit {
-    flex: 2;
-    padding: 0.75rem;
-    background-color: $indigo-600;
-    color: white;
-    font-weight: 700;
-    border-radius: $radius-md;
-    box-shadow: $shadow-indigo;
-    &:hover:not(:disabled) { background-color: $indigo-500; }
+  textarea {
+    width: 100%;
+    min-height: 200px;
+    background: $surface-container-lowest;
+    color: $on-surface;
+    border: 1px solid rgba($outline-variant, 0.15);
+    border-radius: $radius-xl;
+    padding: 1.5rem;
+    font-size: 1.125rem;
+    line-height: 1.6;
+    resize: none;
+    transition: all 0.3s ease;
+
+    &::placeholder {
+      color: rgba($outline, 0.4);
+    }
+
+    &:focus {
+      border-color: rgba($primary, 0.5);
+      @include neon-shadow($primary, 0.1);
+    }
+  }
+
+  .counter-badge {
+    position: absolute;
+    bottom: 1rem;
+    right: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.75rem;
+    background: $surface-container;
+    border-radius: 100px;
+    border: 1px solid rgba($outline-variant, 0.2);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+
+    .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      
+      &--warning { background: $error; animation: pulse 2s infinite; }
+      &--success { background: $status-completed; }
+    }
+
+    .text {
+      font-family: $font-mono;
+      font-size: 10px;
+      font-weight: 700;
+      color: $on-surface-variant;
+    }
+  }
+}
+
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: rgba($error, 0.1);
+  border: 1px solid rgba($error, 0.2);
+  border-radius: $radius-xl;
+  color: $error;
+  font-size: 0.875rem;
+  font-weight: 600;
+
+  .material-symbols-outlined {
+    font-size: 1.25rem;
   }
 }

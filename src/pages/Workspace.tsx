@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -6,84 +6,162 @@ import { Store } from '@tauri-apps/plugin-store';
 import { save } from '@tauri-apps/plugin-dialog';
 import { DocumentNode } from '../types/project';
 import PipelineBoard from '../components/Project/PipelineBoard';
-import { LayoutDashboard, FileText, ChevronLeft, RefreshCw, AlertCircle, ExternalLink, Download } from 'lucide-react';
+import Button from '../components/common/Button';
+import Spinner from '../components/common/Spinner';
+import CriticalErrorModal from '../components/Project/CriticalErrorModal';
+import HitlWarningModal from '../components/Project/HitlWarningModal';
 import { convertToMarkdown } from '../utils/markdownConverter';
 import "./Workspace.scss";
 
 interface WorkspaceProps {
   projectId: string;
   onBack: () => void;
+  onOpenSettings: () => void;
 }
 
-const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack }) => {
+const renderJson = (val: any, indent = 0): React.ReactNode => {
+  if (val === null) return <span className="token-boolean">null</span>;
+  if (typeof val === 'boolean') return <span className="token-boolean">{String(val)}</span>;
+  if (typeof val === 'number') return <span className="token-number">{val}</span>;
+  if (typeof val === 'string') return <span className="token-string">"{val}"</span>;
+  
+  if (Array.isArray(val)) {
+    if (val.length === 0) return <span className="token-bracket">[]</span>;
+    return (
+      <>
+        <span className="token-bracket">[</span>
+        {val.map((item, i) => (
+          <div key={i}>
+            <span className="indent" style={{ marginLeft: `${(indent + 1) * 2}ch` }}></span>
+            {renderJson(item, indent + 1)}
+            {i < val.length - 1 && ","}
+          </div>
+        ))}
+        <div style={{ marginLeft: `${indent * 2}ch` }}>
+          <span className="token-bracket">]</span>
+        </div>
+      </>
+    );
+  }
+  
+  if (typeof val === 'object') {
+    const keys = Object.keys(val);
+    if (keys.length === 0) return <span className="token-bracket">{"{}"}</span>;
+    return (
+      <>
+        <span className="token-bracket">{"{"}</span>
+        {keys.map((key, i) => (
+          <div key={key}>
+            <span className="indent" style={{ marginLeft: `${(indent + 1) * 2}ch` }}></span>
+            <span className="token-key">"{key}"</span>: {renderJson(val[key], indent + 1)}
+            {i < keys.length - 1 && ","}
+          </div>
+        ))}
+        <div style={{ marginLeft: `${indent * 2}ch` }}>
+          <span className="token-bracket">{"}"}</span>
+        </div>
+      </>
+    );
+  }
+  
+  return String(val);
+};
+
+const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings }) => {
   const [nodes, setNodes] = useState<DocumentNode[]>([]);
-  const [selectedNode, setSelectedNode] = useState<DocumentNode | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [nodeContent, setNodeContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'BOARD' | 'CONTENT'>('BOARD');
   const [showApiErrorModal, setShowApiErrorModal] = useState(false);
+  const [showHitlModal, setShowHitlModal] = useState(false);
+  const [hitlNode, setHitlNode] = useState<DocumentNode | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [iterations, setIterations] = useState<any[]>([]);
+  const [selectedIteration, setSelectedIteration] = useState<any | null>(null);
+  const sliderRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [dragConstraints, setDragConstraints] = useState({ left: 0, right: 0 });
 
-  // 1. 노드 상태 데이터 초기 로드 및 폴링
+  const maxScore = useMemo(() => {
+    if (iterations.length === 0) return 0;
+    return Math.max(...iterations.map(it => it.calculated_score || 0));
+  }, [iterations]);
+
+  const updateDragConstraints = useCallback(() => {
+    if (sliderRef.current && wrapperRef.current) {
+      const containerWidth = sliderRef.current.offsetWidth;
+      const contentWidth = wrapperRef.current.scrollWidth;
+      
+      setDragConstraints({ 
+        left: Math.min(0, containerWidth - contentWidth), 
+        right: 0 
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    // Initial and iterations change update
+    const timer = setTimeout(updateDragConstraints, 300);
+    
+    window.addEventListener('resize', updateDragConstraints);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', updateDragConstraints);
+    };
+  }, [iterations, viewMode, selectedNodeId, updateDragConstraints]);
+
+
+  const selectedNode = useMemo(() => {
+    return nodes.find(n => n.node_id === selectedNodeId) || null;
+  }, [nodes, selectedNodeId]);
+
   const fetchNodes = useCallback(async () => {
     try {
       const result = await invoke<DocumentNode[]>('get_project_nodes', { projectId });
       setNodes(result);
       
-      // API 에러 체크 (하나라도 있으면 모달 노출)
       const hasApiError = result.some(n => n.node_state === 'PAUSED_API_ERROR');
-      if (hasApiError) {
-        setShowApiErrorModal(true);
-      }
+      if (hasApiError) setShowApiErrorModal(true);
 
-      // 만약 현재 보고 있는 노드가 있다면 업데이트
-      if (selectedNode) {
-        const updated = result.find(n => n.node_id === selectedNode.node_id);
-        if (updated) setSelectedNode(updated);
+      const hitlNodeFound = result.find(n => n.node_state === 'PAUSED_HITL');
+      if (hitlNodeFound) {
+        setHitlNode(hitlNodeFound);
+        setShowHitlModal(true);
       }
-    } catch (err: any) {
-      console.error("Failed to fetch nodes:", err);
+    } catch (err) {
+      console.error(err);
     }
-  }, [projectId, selectedNode]);
+  }, [projectId]);
 
   useEffect(() => {
     fetchNodes();
-    const interval = setInterval(fetchNodes, 3000); // 3초마다 상태 갱신
-    
-    // Tauri 이벤트 수신 (실시간 파이프라인 상태)
-    const unlistenPromise = listen<string>('pipeline-status', (event) => {
+    const interval = setInterval(fetchNodes, 3000);
+    const unlistenStatusPromise = listen<string>('pipeline-status', (event) => {
       setStatusMessage(event.payload);
-      // 5초 후 메시지 자동 초기화
       setTimeout(() => setStatusMessage(null), 5000);
+    });
+    
+    const unlistenNodesPromise = listen<void>('nodes-updated', () => {
+      fetchNodes();
     });
 
     return () => {
       clearInterval(interval);
-      unlistenPromise.then(u => u());
+      unlistenStatusPromise.then(u => u());
+      unlistenNodesPromise.then(u => u());
     };
   }, [fetchNodes]);
 
-  // 2. 파이프라인 실행 (개별 노드)
   const handleRunNode = async (nodeType: string) => {
     setLoading(true);
     setError(null);
-
     try {
       const store = await Store.load('settings.json');
       const apiKeyValue = await store.get<{ value: string }>('gemini_api_key');
-      
-      if (!apiKeyValue?.value) {
-        throw new Error("API 키가 설정되지 않았습니다. 설정 페이지로 돌아가주세요.");
-      }
-
-      await invoke<string>('run_pipeline', {
-        projectId,
-        nodeType,
-        apiKey: apiKeyValue.value
-      });
-      
-      // 실행 성공 시 즉시 갱신
+      if (!apiKeyValue?.value) throw new Error("API 키가 설정되지 않았습니다.");
+      await invoke('run_pipeline', { projectId, nodeType, apiKey: apiKeyValue.value });
       fetchNodes();
     } catch (err: any) {
       setError(err.toString());
@@ -92,9 +170,9 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack }) => {
     }
   };
 
-  // 3. HITL 액션 처리
   const handleHITLAction = async (nodeId: string, action: 'APPROVE' | 'RETRY') => {
     setLoading(true);
+    setShowHitlModal(false);
     try {
       await invoke('handle_hitl_action', { nodeId, action });
       fetchNodes();
@@ -105,236 +183,363 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack }) => {
     }
   };
 
-  // 4. 노드 결과 보기
-  const handleViewNode = async (node: DocumentNode) => {
-    setSelectedNode(node);
-    setViewMode('CONTENT');
-    setNodeContent(null); // 로딩 표시용
-
+  const handleUpdateMaxIterations = async (nodeId: string, maxIterations: number) => {
     try {
-      const iteration = await invoke<any>('get_latest_iteration', { nodeId: node.node_id });
-      if (iteration) {
-        setNodeContent(iteration.generated_draft_json);
+      await invoke('update_node_max_iterations', { nodeId, maxIterations });
+      fetchNodes();
+    } catch (err: any) {
+      setError(err.toString());
+    }
+  };
+
+  const handleViewNode = async (node: DocumentNode) => {
+    setSelectedNodeId(node.node_id);
+    setViewMode('CONTENT');
+    setNodeContent(null);
+    setIterations([]);
+    setSelectedIteration(null);
+    try {
+      const iters = await invoke<any[]>('get_node_iterations', { nodeId: node.node_id });
+      setIterations(iters);
+      if (iters && iters.length > 0) {
+        const best = [...iters].sort((a, b) => (b.calculated_score || 0) - (a.calculated_score || 0))[0];
+        handleSelectIteration(best);
       } else {
         setNodeContent("생성된 내용이 없습니다.");
       }
     } catch (err: any) {
-      setNodeContent("데이터를 불러오는 중 오류가 발생했습니다: " + err.toString());
+      setNodeContent("오류 발생: " + err.toString());
     }
   };
 
-  // 5. 마크다운 다운로드
+  const handleSelectIteration = (iteration: any) => {
+    setSelectedIteration(iteration);
+    setNodeContent(iteration.generated_draft_json);
+  };
+
   const handleDownload = async () => {
     if (!selectedNode || !nodeContent) return;
-
     try {
       const markdown = convertToMarkdown(selectedNode, nodeContent);
-      const defaultPath = `${selectedNode.target_node_type}_spec.md`;
-      
       const filePath = await save({
-        defaultPath,
+        defaultPath: `${selectedNode.target_node_type}_spec.md`,
         filters: [{ name: 'Markdown', extensions: ['md'] }]
       });
-
       if (filePath) {
         await invoke('save_file', { path: filePath, contents: markdown });
-        alert('파일이 성공적으로 저장되었습니다.');
       }
     } catch (err: any) {
-      alert('파일 저장 중 오류가 발생했습니다: ' + err.toString());
+      setError(err.toString());
     }
   };
 
   return (
     <div className="workspace-layout">
-      {/* LNB (Side Navigation) */}
+      {/* 1. Left Side Navigation (Narrow) */}
       <aside className="workspace-sidebar">
-        <div className="sidebar-header">
-          <div className="logo-section">
-            <button 
-              onClick={onBack}
-              className="back-button"
-            >
-              <ChevronLeft size={20} />
-            </button>
-            <h2>Magic Planner</h2>
+        <div className="sidebar-inner">
+          <div className="logo-container" onClick={onBack}>
+            <span className="material-symbols-outlined text-on-primary">auto_awesome</span>
           </div>
-
-          <nav className="sidebar-nav">
+          <nav className="nav-items">
             <button 
-              onClick={() => setViewMode('BOARD')}
-              className={`nav-button ${viewMode === 'BOARD' ? 'active' : ''}`}
+              className="nav-button"
+              title="Dashboard"
+              onClick={onBack}
             >
-              <LayoutDashboard size={18} />
-              파이프라인 보드
+              <span className="material-symbols-outlined">grid_view</span>
             </button>
-            <div className="nav-label">Documents</div>
-            {nodes.map((node) => (
-              <button
-                key={node.node_id}
-                onClick={() => handleViewNode(node)}
-                disabled={node.node_state !== 'COMPLETED' && node.node_state !== 'PAUSED_HITL'}
-                className={`doc-button ${selectedNode?.node_id === node.node_id && viewMode === 'CONTENT' ? 'selected' : ''}`}
-              >
-                <div className="doc-info">
-                  <FileText size={16} />
-                  {node.target_node_type}
-                </div>
-                {(node.node_state === 'IN_PROGRESS' || node.node_state === 'PAUSED_HITL') && (
-                  <RefreshCw size={12} className={`status-icon spinning ${node.node_state === 'PAUSED_HITL' ? 'hitl' : 'progress'}`} />
-                )}
-              </button>
-            ))}
+            <button 
+              className={`nav-button ${viewMode === 'BOARD' ? 'active' : ''}`}
+              title="Monitoring"
+              onClick={() => setViewMode('BOARD')}
+            >
+              <span className="material-symbols-outlined">analytics</span>
+            </button>
           </nav>
-        </div>
-
-        <div style={{ marginTop: 'auto', padding: '1.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
-           <div style={{ borderRadius: '0.75rem', backgroundColor: 'rgba(255,255,255,0.02)', padding: '1rem', border: '1px solid rgba(255,255,255,0.05)' }}>
-              <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', marginBottom: '0.25rem' }}>Project ID</p>
-              <p style={{ fontSize: '12px', fontFamily: 'monospace', color: 'rgba(255,255,255,0.6)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{projectId}</p>
-           </div>
+          
+          <div className="sidebar-footer">
+             <button className="nav-button" title="Settings" onClick={onOpenSettings}>
+                <span className="material-symbols-outlined">settings</span>
+             </button>
+          </div>
         </div>
       </aside>
-
-      {/* Main Content Area */}
+      
+      {/* 2. Main Workspace (Header + Canvas) */}
       <main className="workspace-main">
+        {/* Top Toolbar */}
+        <header className="workspace-toolbar">
+          <div className="toolbar-left">
+            <span className="toolbar-label">MAGIC PLANNER</span>
+            <div className="divider"></div>
+            <div className="toolbar-info">
+              {viewMode === 'BOARD' ? (
+                <>
+                  <span className="title">Pipeline Canvas</span>
+                  <span className="status-badge">
+                    {loading ? 'Running' : 'Ready'}
+                  </span>
+                </>
+              ) : (
+                <div className="breadcrumb">
+                  <button 
+                    className="breadcrumb-link"
+                    onClick={() => setViewMode('BOARD')}
+                  >
+                    Pipeline Canvas
+                  </button>
+                  <span className="material-symbols-outlined breadcrumb-sep">chevron_right</span>
+                  <span className="breadcrumb-current">{selectedNode?.target_node_type}</span>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          <div className="toolbar-right">
+            {viewMode === 'CONTENT' && selectedNode && (
+              <button 
+                className="export-button"
+                onClick={handleDownload}
+              >
+                <span className="material-symbols-outlined">download</span>
+                Export Specs
+              </button>
+            )}
+          </div>
+        </header>
+
+        {/* Content Area */}
+        <div className="workspace-content canvas-grid custom-scrollbar">
+        {error && (
+          <div className="error-banner m-4">
+            <span className="material-symbols-outlined">warning</span>
+            <span>{error}</span>
+            <Button variant="ghost" size="sm" onClick={() => setError(null)}>X</Button>
+          </div>
+        )}
         <AnimatePresence mode="wait">
           {viewMode === 'BOARD' ? (
             <motion.div 
               key="board"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.02 }}
-              className="board-container"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="h-full w-full"
             >
-              <header className="content-header">
-                <h1>프로젝트 파이프라인</h1>
-                <p>기획 문서 생성 및 품질 검증 프로세스 상태를 모니터링합니다.</p>
-              </header>
-
-              {error && (
-                <div style={{ marginBottom: '2rem', padding: '1rem', borderRadius: '0.75rem', backgroundColor: 'rgba(220, 38, 38, 0.1)', border: '1px solid rgba(220, 38, 38, 0.2)', color: '#f87171', fontSize: '0.875rem', display: 'flex', gap: '0.75rem' }}>
-                  <span style={{ fontWeight: 800 }}>Error:</span>
-                  {error}
-                </div>
-              )}
-
               <PipelineBoard 
                 nodes={nodes} 
                 onRunNode={handleRunNode} 
                 onViewNode={handleViewNode}
                 onHITLAction={handleHITLAction}
+                onUpdateMaxIterations={handleUpdateMaxIterations}
               />
+
+              {/* Progress Overlay (Bottom Center) */}
+              <div className="global-progress-bar">
+                <div className="progress-card">
+                  <div className="progress-info">
+                    <span className="label">Global Progress</span>
+                    <span className="value">
+                      {Math.round((nodes.filter(n => n.node_state === 'COMPLETED').length / (nodes.length || 1)) * 100)}%
+                    </span>
+                  </div>
+                  <div className="track">
+                    <div 
+                      className="bar" 
+                      style={{ width: `${(nodes.filter(n => n.node_state === 'COMPLETED').length / (nodes.length || 1)) * 100}%` }}
+                    ></div>
+                  </div>
+                  <div className="avatars">
+                    <div className="avatar">
+                      <span className="material-symbols-outlined">smart_toy</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </motion.div>
           ) : (
             <motion.div 
-              key="content"
+              key={`content-${selectedNodeId}`}
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               className="document-view"
             >
-              <header>
-                <div>
-                  <div className="breadcrumb">
-                    <span className="tag">DOCUMENT</span>
-                    <span className="separator">/</span>
-                    <span className="sub">{selectedNode?.target_node_type}</span>
-                  </div>
-                  <h1>{selectedNode?.target_node_type} 명세서</h1>
+              <div className="document-view-container">
+                {/* 1. Revision History Bar */}
+                <div className="revision-history-bar scrollbar-hide" ref={sliderRef}>
+                  <motion.div 
+                    ref={wrapperRef}
+                    className="revision-tabs-wrapper"
+                    drag="x"
+                    dragConstraints={dragConstraints}
+                    dragElastic={0.1}
+                    onDragStart={updateDragConstraints} // Refresh on start just in case
+                  >
+                    {iterations.map((it) => {
+                      const isBest = it.calculated_score === maxScore && maxScore > 0;
+                      return (
+                        <button
+                          key={it.iteration_id}
+                          onClick={() => handleSelectIteration(it)}
+                          className={`revision-tab ${
+                            selectedIteration?.iteration_id === it.iteration_id ? 'active' : ''
+                          } ${isBest ? 'best' : ''}`}
+                        >
+                          <span className="rev-num">Rev #{it.iteration_number}</span>
+                          <div className="rev-score">
+                            <span>{it.calculated_score} PTS</span>
+                            {selectedIteration?.iteration_id === it.iteration_id && <span className="pulse-dot"></span>}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </motion.div>
                 </div>
-                <div className="header-actions">
-                   <button 
-                    onClick={handleDownload}
-                    className="download-btn"
-                   >
-                     <Download size={16} />
-                     다운로드 (.md)
-                   </button>
-                   <div className="score-badge">
-                      <p className="label">최고 점수</p>
-                      <p className="value">{selectedNode?.current_best_score}</p>
-                   </div>
-                </div>
-              </header>
 
-              <div className="document-card">
-                <pre>
-                  {nodeContent || "데이터를 불러오는 중입니다..."}
-                </pre>
+                <div className="document-body">
+                  {/* 2. Pass Score Gauge */}
+                  <div className="pass-score-gauge">
+                    <span className="gauge-label">Pass Score</span>
+                    <span className="gauge-value">{selectedIteration?.calculated_score || 0}</span>
+                    <div className="gauge-dots">
+                      <div className="dot"></div>
+                      <div className="dot"></div>
+                      <div className="dot"></div>
+                    </div>
+                  </div>
+
+                  {/* 3. Code Window */}
+                  <div className="code-window">
+                    <div className="window-header">
+                      <div className="dot red"></div>
+                      <div className="dot amber"></div>
+                      <div className="dot emerald"></div>
+                      <span className="filename">
+                        {selectedNode?.target_node_type.toLowerCase().replace(' ', '_')}_spec_v{selectedIteration?.iteration_number || 1}.json
+                      </span>
+                    </div>
+
+                    <div className="code-content">
+                      {nodeContent ? (
+                        <pre>
+                          {(() => {
+                            try {
+                              const json = typeof nodeContent === 'string' ? JSON.parse(nodeContent) : nodeContent;
+                              return renderJson(json);
+                            } catch (e) {
+                              return nodeContent;
+                            }
+                          })()}
+                        </pre>
+                      ) : (
+                        <div className="opacity-30 italic">생성된 내용이 없습니다.</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
+        </div>
+      </main>
 
-        {/* Global API Error Modal */}
-        <AnimatePresence>
-          {showApiErrorModal && (
-            <div className="modal-overlay">
-              <motion.div 
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="api-error-modal"
-              >
-                <div className="error-icon">
-                  <AlertCircle size={32} />
-                </div>
-                <h2>API 장애 발생</h2>
-                <p>
-                  Gemini API 호출 중 오류가 발생했습니다. API 키가 만료되었거나 할당량이 초과되었을 수 있습니다. 설정 페이지에서 API 키를 재설정해 주세요.
-                </p>
-                <div className="modal-actions">
-                  <button 
-                    onClick={() => {
-                      setShowApiErrorModal(false);
-                      const errorNode = nodes.find(n => n.node_state === 'PAUSED_API_ERROR');
-                      if (errorNode) handleRunNode(errorNode.target_node_type);
-                    }}
-                    className="btn primary"
-                  >
-                    지금 재시도
-                    <RefreshCw size={18} />
-                  </button>
-                  <button 
-                    onClick={onBack}
-                    className="btn secondary"
-                  >
-                    설정 페이지로 이동
-                    <ExternalLink size={18} />
-                  </button>
-                  <button 
-                    onClick={() => {
-                      setShowApiErrorModal(false);
-                      fetchNodes();
-                    }}
-                    className="btn secondary"
-                  >
-                    일단 닫기
-                  </button>
-                </div>
-              </motion.div>
+      {/* 3. Right Sidebar (Activity Log) */}
+      <aside className="workspace-log-sidebar">
+        <header className="sidebar-header">
+          <h3 className="title">Live Activity</h3>
+          <p className="subtitle">Streaming parallel agent logs</p>
+        </header>
+
+        <div className="log-container custom-scrollbar">
+          {statusMessage ? (
+            <div className="log-item">
+              <div className="log-meta">
+                <span className="time">NOW</span>
+                <span className="source">[Orchestrator]</span>
+              </div>
+              <p className="message">{statusMessage}</p>
             </div>
+          ) : (
+             <div className="log-placeholder">Waiting for pipeline events...</div>
           )}
-        </AnimatePresence>
+          
+          {/* Example completed logs for flavor */}
+          {nodes.filter(n => n.node_state === 'COMPLETED').map(n => (
+            <div key={`log-${n.node_id}`} className="log-item log-item--success">
+              <div className="log-meta">
+                <span className="time">DONE</span>
+                <span className="source">[{n.target_node_type}]</span>
+              </div>
+              <p className="message">Synthesis complete. Score: {n.current_best_score}</p>
+            </div>
+          ))}
+        </div>
+        
+        {/* Stats Mini Panel */}
+        <div className="stats-panel">
+          <div className="stats-grid">
+            <div className="stat-box">
+              <span className="label">System Load</span>
+              <div className="value-row">
+                <span className="value">{loading ? 85 : 12}</span>
+                <span className="unit">%</span>
+              </div>
+            </div>
+            <div className="stat-box">
+              <span className="label">Inference</span>
+              <div className="value-row">
+                <span className="value">1.2</span>
+                <span className="unit">k/s</span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="resource-flux-bar">
+             {[...Array(24)].map((_, i) => (
+                <div key={i} className="flux-line" />
+             ))}
+          </div>
+        </div>
+      </aside>
+
+        {/* Specialized Modals */}
+        <CriticalErrorModal
+          isOpen={showApiErrorModal}
+          onClose={() => setShowApiErrorModal(false)}
+          errorMessage={nodes.find(n => n.node_state === 'PAUSED_API_ERROR')?.api_error_message}
+          onRetry={() => {
+            setShowApiErrorModal(false);
+            const errorNode = nodes.find(n => n.node_state === 'PAUSED_API_ERROR');
+            if (errorNode) handleRunNode(errorNode.target_node_type);
+          }}
+          onSettings={onOpenSettings}
+        />
+
+        <HitlWarningModal
+          isOpen={showHitlModal}
+          onClose={() => setShowHitlModal(false)}
+          onRetry={() => hitlNode && handleHITLAction(hitlNode.node_id, 'RETRY')}
+          onApprove={() => hitlNode && handleHITLAction(hitlNode.node_id, 'APPROVE')}
+          nodeType={hitlNode?.target_node_type || ''}
+          currentScore={hitlNode?.current_best_score || 0}
+        />
 
         {loading && (
-          <div className="engine-status" style={{ height: 'auto', flexDirection: 'column', alignItems: 'flex-end' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <RefreshCw size={12} className="spinner" />
-              엔진 구동 중...
+          <div className="engine-status">
+            <div className="status-row">
+              <Spinner size="sm" />
+              Engine Orchestrating...
             </div>
             {statusMessage && (
-               <motion.div 
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginTop: '0.5rem', backgroundColor: 'rgba(0,0,0,0.5)', padding: '0.25rem 0.5rem', borderRadius: '4px' }}
-               >
+               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="status-message">
                  {statusMessage}
                </motion.div>
             )}
           </div>
         )}
-      </main>
     </div>
   );
 };

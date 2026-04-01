@@ -10,6 +10,7 @@ function App() {
   const [isSetup, setIsSetup] = useState<boolean | null>(null);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     async function checkAuth() {
@@ -43,17 +44,30 @@ function App() {
   return (
     <div className="app-container">
       <AnimatePresence mode="wait">
-        {!isSetup ? (
+        {(!isSetup || showSettings) ? (
           <motion.div key="setup" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="page-wrapper">
-            <SetupPage onComplete={() => setIsSetup(true)} />
+            <SetupPage 
+              onComplete={() => {
+                setIsSetup(true);
+                setShowSettings(false);
+              }} 
+              onBack={isSetup ? () => setShowSettings(false) : undefined}
+            />
           </motion.div>
         ) : !currentProjectId ? (
           <motion.div key="dashboard" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="page-wrapper">
-            <Dashboard onSelectProject={setCurrentProjectId} />
+            <Dashboard 
+              onSelectProject={setCurrentProjectId} 
+              onOpenSettings={() => setShowSettings(true)}
+            />
           </motion.div>
         ) : (
           <motion.div key="workspace" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.02 }} className="page-wrapper">
-            <Workspace projectId={currentProjectId} onBack={() => setCurrentProjectId(null)} />
+            <Workspace 
+              projectId={currentProjectId} 
+              onBack={() => setCurrentProjectId(null)} 
+              onOpenSettings={() => setShowSettings(true)}
+            />
           </motion.div>
         )}
       </AnimatePresence>

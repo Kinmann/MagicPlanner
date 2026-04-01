@@ -43,6 +43,8 @@ pub struct Project {
     pub raw_input_text: String,
     pub created_at: String,
     pub updated_at: String,
+    #[sqlx(default)]
+    pub current_node_type: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
@@ -88,7 +90,7 @@ pub async fn get_project_nodes(
     project_id: String,
 ) -> Result<Vec<DocumentNode>, String> {
     let nodes = sqlx::query_as::<_, DocumentNode>(
-        "SELECT * FROM document_node WHERE project_id = ? AND is_deleted = 0"
+        "SELECT * FROM document_node WHERE project_id = ? AND is_deleted = 0 ORDER BY created_at ASC"
     )
     .bind(project_id)
     .fetch_all(&*pool)
@@ -182,7 +184,26 @@ pub async fn save_api_key(
 #[tauri::command]
 pub async fn list_projects(pool: tauri::State<'_, SqlitePool>) -> Result<Vec<Project>, String> {
     let projects = sqlx::query_as::<_, Project>(
-        "SELECT project_id, session_id, project_name, pipeline_execution_mode, raw_input_text, created_at, updated_at FROM project WHERE is_deleted = 0 ORDER BY created_at DESC"
+        "SELECT 
+            p.project_id, 
+            p.session_id, 
+            p.project_name, 
+            p.pipeline_execution_mode, 
+            p.raw_input_text, 
+            p.created_at, 
+            p.updated_at,
+            (SELECT GROUP_CONCAT(target_node_type) 
+             FROM (
+                SELECT target_node_type 
+                FROM document_node 
+                WHERE project_id = p.project_id 
+                  AND node_state IN ('READY', 'IN_PROGRESS', 'PAUSED_HITL', 'PAUSED_API_ERROR') 
+                ORDER BY created_at ASC 
+                LIMIT 2
+             )) as current_node_type
+         FROM project p 
+         WHERE p.is_deleted = 0 
+         ORDER BY p.created_at DESC"
     )
     .fetch_all(&*pool)
     .await
@@ -357,6 +378,19 @@ pub async fn run_pipeline(
         .await
         .map_err(|e| e.to_string())?;
 
+        // 루프 내에서 실시간 진행률 DB 업데이트 및 이벤트 발송
+        sqlx::query(
+            "UPDATE document_node SET current_iteration = ?, updated_at = ? WHERE node_id = ?"
+        )
+        .bind(i)
+        .bind(Utc::now().to_rfc3339())
+        .bind(&node.node_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        let _ = app_handle.emit("nodes-updated", ());
+
         if eval.score > current_best_score {
             current_best_score = eval.score;
             current_best_content = draft.clone();
@@ -430,6 +464,25 @@ pub async fn run_pipeline(
 }
 
 #[tauri::command]
+pub async fn update_node_max_iterations(
+    pool: tauri::State<'_, SqlitePool>,
+    node_id: String,
+    max_iterations: i32,
+) -> Result<(), String> {
+    sqlx::query(
+        "UPDATE document_node SET max_iterations = ?, updated_at = ? WHERE node_id = ?"
+    )
+    .bind(max_iterations)
+    .bind(Utc::now().to_rfc3339())
+    .bind(node_id)
+    .execute(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn handle_hitl_action(
     pool: tauri::State<'_, SqlitePool>,
     node_id: String,
@@ -478,14 +531,14 @@ pub async fn handle_hitl_action(
 async fn trigger_next_nodes(app_handle: tauri::AppHandle, project_id: &str, completed_node_type: &str) -> Result<(), String> {
     let pool = app_handle.state::<SqlitePool>();
 
-    // 의존성 맵 정의
+    // Phase 1-4 명세 기반 의존성 맵 정의 (트리거 후보들)
     let next_map = vec![
         ("PRD", vec!["FSD"]),
-        ("FSD", vec!["User Flow", "ERD", "API_Spec", "TC"]),
+        ("FSD", vec!["User Flow", "ERD", "Wireframe", "API_Spec", "TC"]),
         ("User Flow", vec!["IA", "Wireframe"]),
         ("IA", vec!["Wireframe"]),
         ("ERD", vec!["API_Spec"]),
-        // ("API_Spec", vec!["TC"]), // TC는 PRD, FSD, API 모두 완료되어야 함 (아래에서 별도 체크)
+        ("API_Spec", vec!["TC"]),
     ];
 
     let mut nodes_to_check = Vec::new();

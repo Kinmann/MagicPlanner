@@ -1,0 +1,64 @@
+@import "variables";
+
+// 1. Glassmorphism
+@mixin glass-panel($opacity: 0.8, $blur: 20px) {
+  background: rgba($surface-container, $opacity);
+  backdrop-filter: blur($blur);
+  border: 1px solid rgba($outline-variant, 0.15);
+}
+
+// 2. Gradients & Shadows
+@mixin primary-gradient {
+  background: $primary-gradient;
+}
+
+@mixin neon-shadow($color: $primary, $opacity: 0.3) {
+  box-shadow: 0 0 20px rgba($color, $opacity);
+}
+
+// 3. Typography Styles
+@mixin headline-large {
+  font-family: $font-headline;
+  font-size: 2.5rem; // 40px
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+@mixin headline-medium {
+  font-family: $font-headline;
+  font-size: 1.5rem; // 24px
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+@mixin label-uppercase {
+  font-family: $font-label;
+  font-size: 0.625rem; // 10px
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+// 4. Custom Scrollbar
+@mixin custom-scrollbar($width: 4px) {
+  &::-webkit-scrollbar {
+    width: $width;
+  }
+  &::-webkit-scrollbar-track {
+    background: $surface-container-lowest;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: $surface-container-highest;
+    border-radius: 10px;
+  }
+}
+
+// 5. Interactive
+@mixin active-scale($scale: 0.95) {
+  transition: transform 0.15s ease;
+  &:active {
+    transform: scale($scale);
+  }
+}

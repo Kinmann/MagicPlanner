@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
+import BaseModal from '../common/BaseModal';
+import Input from '../common/Input';
+import Button from '../common/Button';
 import './CreateProjectModal.scss';
 
 interface CreateProjectModalProps {
@@ -41,106 +43,113 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose
     }
   };
 
+  const footer = (
+    <>
+      <Button variant="ghost" onClick={onClose} type="button">
+        Cancel
+      </Button>
+      <Button 
+        variant="primary" 
+        type="submit" 
+        isLoading={isLoading}
+        form="create-project-form"
+      >
+        Create
+      </Button>
+    </>
+  );
+
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <div className="modal-overlay">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="backdrop"
+    <BaseModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Create New Project"
+      subtitle="Initialization Phase"
+      footer={footer}
+      size="md"
+    >
+      <form id="create-project-form" onSubmit={handleSubmit} className="create-project-form">
+        {/* Project Name */}
+        <section className="form-section">
+          <Input 
+            id="project-name"
+            label="Project Name"
+            placeholder="e.g., AI Healthcare App"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            autoFocus
           />
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="modal-content"
-          >
-            <div className="modal-header">
-              <h2>🚀 새로운 기획 시작하기</h2>
-              <p>당신의 아이디어를 구체적인 기획서로 변환합니다.</p>
+        </section>
+
+        {/* Execution Mode */}
+        <section className="form-section">
+          <span className="form-section__label">Pipeline Execution Mode</span>
+          <div className="mode-grid">
+            <label className="mode-option">
+              <input 
+                type="radio" 
+                name="execution-mode" 
+                value="AUTO" 
+                checked={mode === 'AUTO'} 
+                onChange={() => setMode('AUTO')}
+              />
+              <div className="mode-option__card">
+                <div className="radio-circle">
+                  <div className="radio-inner"></div>
+                </div>
+                <div className="mode-info">
+                  <span className="mode-name">AUTO</span>
+                  <span className="mode-desc">Continuous Logic flow</span>
+                </div>
+              </div>
+            </label>
+            <label className="mode-option">
+              <input 
+                type="radio" 
+                name="execution-mode" 
+                value="MANUAL" 
+                checked={mode === 'MANUAL'} 
+                onChange={() => setMode('MANUAL')}
+              />
+              <div className="mode-option__card">
+                <div className="radio-circle">
+                  <div className="radio-inner"></div>
+                </div>
+                <div className="mode-info">
+                  <span className="mode-name">MANUAL</span>
+                  <span className="mode-desc">Step-by-step review</span>
+                </div>
+              </div>
+            </label>
+          </div>
+        </section>
+
+        {/* Concept Description */}
+        <section className="form-section">
+          <span className="form-section__label">Initial Idea & Concept</span>
+          <div className="concept-textarea">
+            <textarea
+              placeholder="Describe your software project and who it's for. Provide context on the core problem it solves..."
+              value={concept}
+              onChange={(e) => setConcept(e.target.value)}
+              required
+            />
+            <div className="counter-badge">
+              <div className={`dot dot--${concept.length < 50 ? 'warning' : 'success'}`}></div>
+              <span className="text">{concept.length}/50 min</span>
             </div>
+          </div>
+        </section>
 
-            <form onSubmit={handleSubmit} className="project-form">
-              <div className="form-group">
-                <label>프로젝트 이름</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="예: AI 일정 관리 앱"
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label>파이프라인 실행 모드</label>
-                <div className="mode-selector">
-                  {(['AUTO', 'MANUAL'] as const).map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => setMode(m)}
-                      className={`mode-btn ${mode === m ? 'active' : ''}`}
-                    >
-                      {m === 'AUTO' ? '자동 (Best-of-N 최적화)' : '수동 (단계별 확인)'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label>초기 기획 컨셉 (최소 50자)</label>
-                <textarea
-                  value={concept}
-                  onChange={(e) => setConcept(e.target.value)}
-                  placeholder="앱의 핵심 기능, 타겟 고객, 해결하고자 하는 문제 등을 상세히 적어주세요."
-                  required
-                />
-                <div className="counter-box">
-                  <span className={`counter ${concept.length < 50 ? 'warning' : 'success'}`}>
-                    {concept.length} / 50자 이상
-                  </span>
-                </div>
-              </div>
-
-              <AnimatePresence>
-                {error && (
-                  <motion.div
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0 }}
-                    className="error-message"
-                    style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '0.75rem', borderRadius: '0.5rem', color: '#f87171', fontSize: '0.875rem' }}
-                  >
-                     {error}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <div className="form-actions">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="btn-cancel"
-                >
-                  취소
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="btn-submit"
-                >
-                  {isLoading ? '프로젝트 생성 중...' : '기획 파이프라인 가동'}
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
+        {error && (
+          <div className="error-banner">
+            <span className="material-symbols-outlined">warning</span>
+            {error}
+          </div>
+        )}
+      </form>
+    </BaseModal>
   );
 };
 

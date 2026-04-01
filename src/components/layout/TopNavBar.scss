@@ -1,0 +1,77 @@
+@import "../../styles/variables";
+@import "../../styles/mixins";
+
+.top-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3.5rem; // h-14 = 56px
+  background: $surface-container-low; // #131b2e
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.5rem; // px-6
+  z-index: $z-navbar;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.025em; // tracking-tight
+
+  &__left {
+    display: flex;
+    align-items: center;
+    gap: 2rem; // gap-8
+  }
+
+  &__logo {
+    font-size: 1.25rem; // text-xl
+    font-weight: 700; // font-bold
+    letter-spacing: -0.05em; // tracking-tighter
+    color: $on-surface;
+    cursor: default;
+  }
+
+  &__menu {
+    display: none; // hidden
+    @media (min-width: 768px) {
+      display: flex; // md:flex
+    }
+    gap: 1.5rem; // gap-6
+  }
+
+  &__link {
+    font-size: 0.875rem; // text-sm
+    font-weight: 500; // font-medium
+    color: $on-surface;
+    padding-bottom: 0.25rem; // pb-1
+    border-bottom: 2px solid transparent;
+    transition: color 0.2s ease;
+
+    &.is-active {
+      border-bottom-color: $primary-container; // border-[#7c3aed]
+    }
+
+    &:hover:not(.is-active) {
+      color: $primary;
+    }
+  }
+
+  &__right {
+    display: flex;
+    align-items: center;
+    gap: 1rem; // gap-4
+  }
+
+  &__icon-btn {
+    color: $on-surface-variant;
+    padding: 0.5rem; // p-2
+    border-radius: 50%; // rounded-full
+    transition: all 0.15s ease;
+    transform: scale(0.95); // scale-95
+
+    &:hover {
+      background: $surface-bright; // hover:bg-[#31394d]
+      color: $on-surface;
+    }
+  }
+}

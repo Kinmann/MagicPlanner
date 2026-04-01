@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Arcane Logic | User Flow Specification</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-surface": "#dae2fd",
+                        "inverse-primary": "#732ee4",
+                        "secondary-fixed-dim": "#d2bbff",
+                        "on-background": "#dae2fd",
+                        "surface-container-low": "#131b2e",
+                        "on-tertiary-container": "#ffe0cd",
+                        "surface-container": "#171f33",
+                        "on-secondary": "#3b1e6f",
+                        "inverse-surface": "#dae2fd",
+                        "primary-fixed": "#eaddff",
+                        "tertiary-fixed-dim": "#ffb784",
+                        "tertiary": "#ffb784",
+                        "surface-dim": "#0b1326",
+                        "primary-container": "#7c3aed",
+                        "surface-bright": "#31394d",
+                        "secondary-fixed": "#eaddff",
+                        "on-tertiary-fixed-variant": "#713700",
+                        "outline-variant": "#4a4455",
+                        "secondary-container": "#523787",
+                        "outline": "#958da1",
+                        "on-secondary-fixed-variant": "#523787",
+                        "background": "#0b1326",
+                        "surface-container-highest": "#2d3449",
+                        "on-secondary-container": "#c3a6ff",
+                        "on-secondary-fixed": "#25005a",
+                        "on-error": "#690005",
+                        "surface-variant": "#2d3449",
+                        "primary-fixed-dim": "#d2bbff",
+                        "tertiary-fixed": "#ffdcc6",
+                        "surface": "#0b1326",
+                        "on-tertiary-fixed": "#301400",
+                        "on-primary-container": "#ede0ff",
+                        "on-primary-fixed": "#25005a",
+                        "on-primary": "#3f008e",
+                        "on-primary-fixed-variant": "#5a00c6",
+                        "error": "#ffb4ab",
+                        "surface-container-lowest": "#060e20",
+                        "surface-container-high": "#222a3d",
+                        "secondary": "#d2bbff",
+                        "on-tertiary": "#4f2500",
+                        "primary": "#d2bbff",
+                        "tertiary-container": "#a15100",
+                        "surface-tint": "#d2bbff",
+                        "on-error-container": "#ffdad6",
+                        "error-container": "#93000a",
+                        "on-surface-variant": "#ccc3d8",
+                        "inverse-on-surface": "#283044"
+                    },
+                    fontFamily: {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"],
+                        "mono": ["JetBrains Mono"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            background-color: #0b1326;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-panel {
+            background: rgba(23, 31, 51, 0.8);
+            backdrop-filter: blur(20px);
+        }
+        .code-glow {
+            box-shadow: inset 0 0 40px rgba(124, 58, 237, 0.05);
+        }
+        .active-revision {
+            border-bottom: 2px solid #7c3aed;
+        }
+        .canvas-grid {
+            background-image: 
+                radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px);
+            background-size: 32px 32px;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.1);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #2d3449;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="font-body text-on-surface flex flex-col h-screen w-screen overflow-hidden selection:bg-primary-container selection:text-on-primary-container">
+<div class="flex h-full w-full">
+<!-- SideNavBar Implementation (Matches SCREEN_10) -->
+<aside class="hidden md:flex flex-col h-screen py-6 px-4 bg-[#060e20] w-20 flex-shrink-0 z-50 border-r border-outline-variant/10">
+<div class="flex flex-col items-center gap-8">
+<div class="w-10 h-10 bg-gradient-to-br from-primary-container to-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined text-on-primary text-xl">auto_awesome</span>
+</div>
+<nav class="flex flex-col gap-6">
+<a class="w-12 h-12 flex items-center justify-center rounded-xl transition-all text-on-surface-variant hover:bg-surface-container-highest" href="#" title="Pipeline">
+<span class="material-symbols-outlined">account_tree</span>
+</a>
+<a class="w-12 h-12 flex items-center justify-center rounded-xl transition-all bg-primary-container/20 text-primary" href="#" title="Schema">
+<span class="material-symbols-outlined">schema</span>
+</a>
+<a class="w-12 h-12 flex items-center justify-center rounded-xl transition-all text-on-surface-variant hover:bg-surface-container-highest" href="#" title="Variables">
+<span class="material-symbols-outlined">database</span>
+</a>
+<a class="w-12 h-12 flex items-center justify-center rounded-xl transition-all text-on-surface-variant hover:bg-surface-container-highest" href="#" title="Logs">
+<span class="material-symbols-outlined">terminal</span>
+</a>
+</nav>
+</div>
+<div class="mt-auto flex flex-col items-center gap-6">
+<a class="w-12 h-12 flex items-center justify-center rounded-xl transition-all text-on-surface-variant hover:bg-surface-container-highest" href="#" title="Settings">
+<span class="material-symbols-outlined">settings</span>
+</a>
+<div class="w-10 h-10 rounded-full border-2 border-primary/30 p-0.5">
+<img alt="User" class="w-full h-full rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuADr1h26-REK8hpi71N9f26M39ksarIfafcfu0oja121ly9YAGNTlPnUF8dS1R9UEm72cKlJxynlKkVKoXeMYKpIpwiKn82I0zIf7Cgo7qsH5tHvamHUaZ0JGxp2DszlPhmsX-pHzRQ9PSvxTSmYGsicChGV07vBi6r7kMBFE48Q-jRsTjOlZQS4Zlv7rs0cua7NPVScUB0t4BLFxp4pSKf2TGPw7z_yMOXe8hvQC6ksAWt50rnMQAfwuZt8UQn2fmTswASmocIGfA"/>
+</div>
+</div>
+</aside>
+<!-- Main Workspace -->
+<main class="flex-1 flex flex-col min-w-0 relative">
+<!-- Top Toolbar (Matches SCREEN_10 Branding) -->
+<header class="h-14 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-md z-40 flex items-center justify-between px-6">
+<div class="flex items-center gap-4">
+<span class="text-sm font-bold text-on-surface/50 tracking-widest uppercase">Orchestrator</span>
+<div class="h-4 w-px bg-outline-variant/30"></div>
+<div class="flex items-center gap-2">
+<nav class="flex items-center gap-1 text-sm font-medium">
+<span class="text-on-surface-variant/70">Project Alpha</span>
+<span class="material-symbols-outlined text-xs text-on-surface-variant/40">chevron_right</span>
+<span class="text-on-surface font-bold">User Flow Specification</span>
+</nav>
+<span class="px-2 py-0.5 bg-primary/10 text-primary text-[10px] rounded font-bold uppercase tracking-tighter ml-2">Running</span>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex items-center bg-surface-container-low rounded-lg p-1 border border-outline-variant/10">
+<button class="px-3 py-1 text-xs font-bold text-on-surface-variant hover:text-on-surface">Canvas</button>
+<button class="px-3 py-1 text-xs font-bold text-on-surface bg-surface-container-highest rounded shadow-sm">Spec</button>
+</div>
+<button class="px-4 py-2 text-xs font-bold text-primary border border-primary/20 bg-primary/5 rounded-lg hover:bg-primary/10 transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">download</span>
+                        Export
+                    </button>
+<button class="bg-primary text-on-primary text-xs font-bold px-4 py-2 rounded-lg flex items-center gap-2 shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined text-sm">rocket_launch</span>
+                        Deploy
+                    </button>
+</div>
+</header>
+<div class="flex-1 flex overflow-hidden bg-surface-container-lowest canvas-grid">
+<!-- Content Column -->
+<div class="flex-1 flex flex-col overflow-hidden">
+<!-- Revision History Bar -->
+<div class="px-8 pt-4 border-b border-outline-variant/10 flex gap-8 items-end bg-surface/40 backdrop-blur-sm">
+<div class="pb-3 px-2 flex flex-col items-center gap-1 cursor-pointer group">
+<span class="text-[10px] font-bold text-on-surface-variant tracking-tighter uppercase">Rev #1</span>
+<div class="flex items-center gap-1">
+<span class="text-xs font-medium text-on-surface-variant">85 PTS</span>
+</div>
+<div class="w-full h-0.5 bg-transparent group-hover:bg-outline-variant/30 transition-all"></div>
+</div>
+<div class="pb-3 px-2 flex flex-col items-center gap-1 cursor-pointer group">
+<span class="text-[10px] font-bold text-on-surface-variant tracking-tighter uppercase">Rev #2</span>
+<div class="flex items-center gap-1">
+<span class="text-xs font-medium text-on-surface-variant">92 PTS</span>
+</div>
+<div class="w-full h-0.5 bg-transparent group-hover:bg-outline-variant/30 transition-all"></div>
+</div>
+<div class="pb-3 px-2 flex flex-col items-center gap-1 active-revision">
+<span class="text-[10px] font-bold text-primary tracking-tighter uppercase">Rev #3</span>
+<div class="flex items-center gap-1">
+<span class="text-xs font-medium text-primary">100 PTS</span>
+<span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+</div>
+</div>
+</div>
+<!-- Editor Canvas -->
+<div class="flex-1 p-8 overflow-y-auto relative custom-scrollbar">
+<!-- Pass Score Gauge -->
+<div class="absolute top-10 right-10 z-10 flex flex-col items-center justify-center w-28 h-28 glass-panel rounded-full border border-primary/20 shadow-2xl shadow-primary/10">
+<span class="text-[10px] font-black uppercase tracking-widest text-primary/70">Pass Score</span>
+<span class="text-4xl font-black text-on-surface">100</span>
+<div class="flex gap-0.5 mt-1">
+<div class="w-1.5 h-1.5 bg-primary rounded-full"></div>
+<div class="w-1.5 h-1.5 bg-primary rounded-full"></div>
+<div class="w-1.5 h-1.5 bg-primary rounded-full"></div>
+</div>
+</div>
+<!-- Code Window -->
+<div class="rounded-xl bg-surface-container-lowest border border-outline-variant/10 p-10 font-mono text-sm leading-relaxed code-glow min-h-full">
+<div class="flex items-center gap-2 mb-6 opacity-40">
+<div class="w-3 h-3 rounded-full bg-red-500/50"></div>
+<div class="w-3 h-3 rounded-full bg-amber-500/50"></div>
+<div class="w-3 h-3 rounded-full bg-emerald-500/50"></div>
+<span class="ml-4 text-xs font-sans tracking-widest uppercase">user_flow_spec_v3.json</span>
+</div>
+<div class="text-on-surface-variant">
+<span class="text-primary">{</span><br/>
+                                  <span class="text-secondary">"specification_id"</span>: <span class="text-tertiary">"ALPHA-ORCH-003"</span>,<br/>
+                                  <span class="text-secondary">"agent_signature"</span>: <span class="text-tertiary">"FlowDesigner-AI-v4"</span>,<br/>
+                                  <span class="text-secondary">"timestamp"</span>: <span class="text-tertiary">"2023-11-24T14:22:01Z"</span>,<br/>
+                                  <span class="text-secondary">"nodes"</span>: <span class="text-primary">[</span><br/>
+                                    <span class="text-primary">{</span><br/>
+                                      <span class="text-secondary">"id"</span>: <span class="text-tertiary">"START_01"</span>,<br/>
+                                      <span class="text-secondary">"intent"</span>: <span class="text-tertiary">"User Login Initiation"</span>,<br/>
+                                      <span class="text-secondary">"validation"</span>: <span class="text-primary">{</span><br/>
+                                        <span class="text-secondary">"auth_type"</span>: <span class="text-tertiary">"JWT_SYMMETRIC"</span>,<br/>
+                                        <span class="text-secondary">"retry_logic"</span>: <span class="text-tertiary">"exponential_backoff"</span><br/>
+                                      <span class="text-primary">}</span><br/>
+                                    <span class="text-primary">}</span>,<br/>
+                                    <span class="text-primary">{</span><br/>
+                                      <span class="text-secondary">"id"</span>: <span class="text-tertiary">"DASHBOARD_FETCH"</span>,<br/>
+                                      <span class="text-secondary">"triggers"</span>: <span class="text-primary">[</span><span class="text-tertiary">"AUTH_SUCCESS"</span>, <span class="text-tertiary">"TOKEN_REFRESH"</span><span class="text-primary">]</span>,<br/>
+                                      <span class="text-secondary">"optimization"</span>: <span class="text-primary">{</span><br/>
+                                        <span class="text-secondary">"cache_ttl"</span>: <span class="text-tertiary">"3600ms"</span>,<br/>
+                                        <span class="text-secondary">"parallel_fetch"</span>: <span class="text-primary">true</span><br/>
+                                      <span class="text-primary">}</span><br/>
+                                    <span class="text-primary">}</span><br/>
+                                  <span class="text-primary">]</span>,<br/>
+                                  <span class="text-secondary">"orchestration_logic"</span>: <span class="text-primary">{</span><br/>
+                                    <span class="text-secondary">"failover_region"</span>: <span class="text-tertiary">"us-east-1"</span>,<br/>
+                                    <span class="text-secondary">"concurrency_limit"</span>: <span class="text-primary">250</span><br/>
+                                  <span class="text-primary">}</span><br/>
+<span class="text-primary">}</span>
+</div>
+<div class="mt-20 flex justify-center opacity-10">
+<img alt="Flow diagram" class="max-w-md mix-blend-screen" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD5RRwfaiAv7Ga2kbEW6prFgGYhICZf_IEao_qM9uj98a5JeWiPHkVTS2GjcL2JZzNM2qM27zpYaJTl32JbL3xYywQDhgVu43IXHgr_pOnJp5L_FuXRvh8jG4HIamuOfU__jy0NcmEZYMJxmlQTzq1K-OU7jY5E1mO7tkSC21aMNACc08T3T18shxwwrw5P8pk20gC2-4SlGxSVUb9COX2mixMduGgRzEC0Ukl8Im3f734FOZ_RKl5ijZ_fMiEcpZ0OI1DUgEqBnRs"/>
+</div>
+</div>
+</div>
+</div>
+<!-- Live Activity Sidebar (Matches SCREEN_10 Styling) -->
+<aside class="w-80 bg-[#060e20] border-l border-outline-variant/10 z-50 flex flex-col">
+<div class="p-6 border-b border-outline-variant/10">
+<h3 class="text-sm font-bold uppercase tracking-widest text-on-surface mb-1">Live Activity</h3>
+<p class="text-[10px] text-on-surface-variant">Streaming parallel agent logs</p>
+</div>
+<div class="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 font-mono">
+<div class="flex items-center gap-3 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+<div class="w-2 h-2 bg-primary rounded-full shadow-[0_0_8px_#7c3aed]"></div>
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-primary">AGENT STREAMING</span>
+<span class="text-xs font-medium text-on-surface">FlowDesigner-AI</span>
+</div>
+</div>
+<div class="space-y-4">
+<div class="flex flex-col gap-1 p-2 rounded hover:bg-surface-bright transition-colors cursor-default">
+<div class="flex items-center gap-2">
+<span class="text-[9px] text-on-surface-variant/40">14:21:44</span>
+<span class="text-[10px] font-bold text-emerald-400">Synthesis complete.</span>
+</div>
+</div>
+<div class="flex flex-col gap-1 p-2 rounded hover:bg-surface-bright transition-colors cursor-default">
+<div class="flex items-center gap-2">
+<span class="text-[9px] text-on-surface-variant/40">14:21:42</span>
+<span class="text-[10px] font-bold text-primary">Optimizing DAG paths for concurrency...</span>
+</div>
+</div>
+<div class="flex flex-col gap-1 p-2 rounded hover:bg-surface-bright transition-colors cursor-default">
+<div class="flex items-center gap-2">
+<span class="text-[9px] text-on-surface-variant/40">14:21:40</span>
+<span class="text-[10px] text-on-surface font-bold">Score: <span class="text-primary">100.0000</span></span>
+</div>
+</div>
+<div class="flex flex-col gap-1 p-2 rounded hover:bg-surface-bright transition-colors cursor-default">
+<div class="flex items-center gap-2">
+<span class="text-[9px] text-on-surface-variant/40">14:21:38</span>
+<span class="text-[10px] text-on-surface-variant">Validated 14/14 schema constraints.</span>
+</div>
+</div>
+<div class="flex flex-col gap-1 p-2 rounded hover:bg-surface-bright transition-colors cursor-default">
+<div class="flex items-center gap-2">
+<span class="text-[9px] text-on-surface-variant/40">14:21:35</span>
+<span class="text-[10px] text-on-surface-variant">Agent <span class="text-secondary">FlowDesigner-AI</span> initialized.</span>
+</div>
+</div>
+</div>
+<!-- Terminal Prompt -->
+<div class="flex items-center gap-2 px-2 pt-4">
+<span class="text-primary">❯</span>
+<span class="w-2 h-4 bg-primary/40 animate-pulse"></span>
+</div>
+</div>
+<div class="p-6 bg-surface-container-low border-t border-outline-variant/10">
+<div class="flex justify-between items-center mb-4">
+<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-tighter">Model Uptime</span>
+<span class="text-[10px] font-bold text-on-surface">99.98%</span>
+</div>
+<div class="h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full w-[99%] bg-primary"></div>
+</div>
+</div>
+</aside>
+</div>
+</main>
+</div>
+</body></html>

@@ -112,6 +112,7 @@ pub fn run() {
             commands::get_node_iterations,
             commands::get_latest_iteration,
             commands::handle_hitl_action,
+            commands::update_node_max_iterations,
             commands::save_file
         ])
         .plugin(tauri_plugin_dialog::init())

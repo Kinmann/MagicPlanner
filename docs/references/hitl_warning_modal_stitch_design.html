@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Magic Planner - HITL Warning</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "on-error-container": "#ffdad6",
+            "outline": "#958da1",
+            "surface-container-low": "#131b2e",
+            "surface-container-highest": "#2d3449",
+            "surface-container": "#171f33",
+            "tertiary-fixed": "#ffdcc6",
+            "secondary-fixed": "#eaddff",
+            "on-surface-variant": "#ccc3d8",
+            "surface-tint": "#d2bbff",
+            "on-tertiary-container": "#ffe0cd",
+            "primary-fixed-dim": "#d2bbff",
+            "on-tertiary-fixed": "#301400",
+            "secondary": "#d2bbff",
+            "on-secondary": "#3b1e6f",
+            "surface-bright": "#31394d",
+            "on-primary": "#3f008e",
+            "on-secondary-fixed": "#25005a",
+            "surface": "#0b1326",
+            "primary-container": "#7c3aed",
+            "inverse-surface": "#dae2fd",
+            "tertiary": "#ffb784",
+            "primary": "#d2bbff",
+            "on-secondary-container": "#c3a6ff",
+            "primary-fixed": "#eaddff",
+            "on-tertiary": "#4f2500",
+            "on-background": "#dae2fd",
+            "on-primary-container": "#ede0ff",
+            "tertiary-container": "#a15100",
+            "secondary-container": "#523787",
+            "surface-dim": "#0b1326",
+            "inverse-primary": "#732ee4",
+            "error-container": "#93000a",
+            "on-primary-fixed": "#25005a",
+            "on-primary-fixed-variant": "#5a00c6",
+            "on-secondary-fixed-variant": "#523787",
+            "surface-container-lowest": "#060e20",
+            "secondary-fixed-dim": "#d2bbff",
+            "tertiary-fixed-dim": "#ffb784",
+            "surface-container-high": "#222a3d",
+            "surface-variant": "#2d3449",
+            "background": "#0b1326",
+            "inverse-on-surface": "#283044",
+            "on-tertiary-fixed-variant": "#713700",
+            "error": "#ffb4ab",
+            "on-error": "#690005",
+            "outline-variant": "#4a4455",
+            "on-surface": "#dae2fd"
+          },
+          fontFamily: {
+            "headline": ["Inter"],
+            "body": ["Inter"],
+            "label": ["Inter"]
+          },
+          borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+        },
+      },
+    }
+  </script>
+<style>
+    body { font-family: 'Inter', sans-serif; }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .glass-panel {
+      background: rgba(23, 31, 51, 0.8);
+      backdrop-filter: blur(20px);
+    }
+  </style>
+</head>
+<body class="bg-surface text-on-surface min-h-screen flex flex-col">
+<!-- TOP NAV BAR (Shared Component) -->
+<header class="bg-[#0b1326] dark:bg-[#0b1326] flex justify-between items-center w-full px-6 h-14 z-50 fixed top-0">
+<div class="flex items-center gap-4">
+<span class="text-xl font-bold tracking-tighter text-[#dae2fd]">Magic Planner</span>
+<nav class="hidden md:flex gap-6 ml-8">
+<a class="font-['Inter'] antialiased tracking-tight text-[#dae2fd] border-b-2 border-[#7c3aed] pb-1" href="#">Dashboard</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-[#ccc3d8] hover:bg-[#31394d] transition-colors p-2 rounded-lg scale-95 duration-150 flex items-center">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant">
+<img alt="User Settings Profile" data-alt="User profile avatar close-up with soft professional lighting on a neutral background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAhxGa_DPUK9rSeGQdgySjhl6tkdHk5emV5eglB2Pd59CIAkttomygp-dkpv5hnWB8v2bMMjxCpLML4GkHhgTEIzEjLbiLNJYgniJnHH1Aoqv9D4ohk6juvPZD1meNrh2qq9l-X4Cva7VYnO9p3i3brce53BmQB-vPO7k0NNZJ77d2245BMv-yJUWH7IsOQXbSdLwZSVHy8MCmljNnXcoeCypguqk5AOlm1kWhsPGlEQMIxZ6-3e2jZ6TaTKW4_UzKvqtHGW8z08Bo"/>
+</div>
+</div>
+</header>
+<div class="flex flex-1 pt-14">
+<!-- SIDE NAV BAR (Shared Component) -->
+<aside class="hidden md:flex flex-col h-[calc(100vh-3.5rem)] py-8 px-4 bg-[#131b2e] dark:bg-[#131b2e] w-64 fixed left-0">
+<div class="flex items-center gap-3 mb-10 px-2">
+<div class="w-10 h-10 bg-primary-container rounded flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary-container" data-icon="auto_awesome">auto_awesome</span>
+</div>
+<div>
+<p class="text-lg font-black text-[#dae2fd] leading-none">Project Workspace</p>
+<p class="text-xs text-on-surface-variant mt-1">Software Planning</p>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<div class="flex items-center gap-3 py-3 px-3 rounded-lg text-[#7c3aed] font-bold border-r-2 border-[#7c3aed] bg-[#2d3449] transition-all cursor-pointer">
+<span class="material-symbols-outlined" data-icon="input">input</span>
+<span class="font-['Inter'] text-sm font-medium">Input Phase</span>
+</div>
+<div class="flex items-center gap-3 py-3 px-3 rounded-lg text-[#ccc3d8] hover:bg-[#2d3449] transition-all cursor-pointer">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="font-['Inter'] text-sm font-medium">Monitoring</span>
+</div>
+<div class="flex items-center gap-3 py-3 px-3 rounded-lg text-[#ccc3d8] hover:bg-[#2d3449] transition-all cursor-pointer">
+<span class="material-symbols-outlined" data-icon="archive">archive</span>
+<span class="font-['Inter'] text-sm font-medium">Archive</span>
+</div>
+</nav>
+<button class="mt-auto bg-primary-container text-on-primary-container py-3 px-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:brightness-110 transition-all">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+        New Pipeline
+      </button>
+</aside>
+<!-- MAIN CONTENT CANVAS (Background content behind modal) -->
+<main class="flex-1 md:ml-64 p-8 bg-surface">
+<div class="max-w-5xl mx-auto space-y-8 opacity-40 grayscale-[0.5] pointer-events-none">
+<div class="flex justify-between items-end">
+<div>
+<h1 class="text-4xl font-extrabold tracking-tight text-on-surface">System Overview</h1>
+<p class="text-on-surface-variant mt-2">Pipeline execution status and node health.</p>
+</div>
+<div class="flex gap-4">
+<div class="bg-surface-container-high px-4 py-2 rounded-lg border border-outline-variant/10">
+<span class="text-xs text-on-surface-variant block uppercase tracking-widest font-bold">Uptime</span>
+<span class="text-xl font-bold text-on-surface">99.98%</span>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="bg-surface-container-high p-6 rounded-xl relative overflow-hidden group">
+<div class="absolute top-0 left-0 w-1 h-full bg-primary"></div>
+<h3 class="text-on-surface font-bold text-lg mb-4">Discovery Phase</h3>
+<div class="space-y-3">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-primary animate-pulse shadow-[0_0_8px_rgba(210,187,255,0.8)]"></div>
+<span class="text-sm text-on-surface-variant">Schema Mapping...</span>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-high p-6 rounded-xl relative overflow-hidden group">
+<div class="absolute top-0 left-0 w-1 h-full bg-[#10B981]"></div>
+<h3 class="text-on-surface font-bold text-lg mb-4">Requirement Logic</h3>
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#10B981] text-sm" data-icon="check_circle">check_circle</span>
+<span class="text-sm text-on-surface-variant">Validation Complete</span>
+</div>
+</div>
+<div class="bg-surface-container-high p-6 rounded-xl relative overflow-hidden group border border-error/20">
+<div class="absolute top-0 left-0 w-1 h-full bg-error"></div>
+<h3 class="text-on-surface font-bold text-lg mb-4">PRD Generation</h3>
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-error text-sm" data-icon="warning">warning</span>
+<span class="text-sm text-error">Stalled - HITL Required</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- OVERLAY MODAL (HITL Warning) -->
+<div class="fixed inset-0 z-[100] flex items-center justify-center p-4">
+<!-- Backdrop -->
+<div class="absolute inset-0 bg-surface-container-lowest/80 backdrop-blur-sm"></div>
+<!-- Modal Container -->
+<div class="relative glass-panel w-full max-w-lg rounded-2xl overflow-hidden shadow-[0px_20px_60px_rgba(0,0,0,0.6)] border border-outline-variant/10">
+<!-- Header / Warning Bar -->
+<div class="bg-error-container/20 px-8 py-6 flex items-start gap-5">
+<div class="bg-error text-on-error w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-[0_0_20px_rgba(239,68,68,0.3)]">
+<span class="material-symbols-outlined text-3xl" data-icon="rule" data-weight="fill" style="font-variation-settings: 'FILL' 1;">rule</span>
+</div>
+<div class="flex-1">
+<h2 class="text-2xl font-extrabold tracking-tight text-on-error-container leading-tight">Manual Intervention Required</h2>
+<p class="text-sm text-on-error-container/80 mt-1">Automated planning loop reached an evaluation deadlock.</p>
+</div>
+</div>
+<!-- Content Body -->
+<div class="p-8 space-y-6">
+<!-- JSON Error Log Section -->
+<div>
+<label class="text-[10px] font-bold tracking-widest text-on-surface-variant uppercase mb-3 block">Error Context Log</label>
+<div class="bg-surface-container-lowest rounded-xl p-4 border border-outline-variant/5">
+<ul class="space-y-3 font-mono text-xs">
+<li class="flex items-start gap-3">
+<span class="text-error mt-0.5">●</span>
+<span class="text-on-surface-variant"><span class="text-error font-bold">FAIL:</span> Missing field in PRD schema [id: 0x92f]</span>
+</li>
+<li class="flex items-start gap-3">
+<span class="text-error mt-0.5">●</span>
+<span class="text-on-surface-variant"><span class="text-error font-bold">WARN:</span> Evaluation score below 0.7 (Current: 0.52)</span>
+</li>
+<li class="flex items-start gap-3">
+<span class="text-on-surface-variant opacity-40">●</span>
+<span class="text-on-surface-variant/60">Trace: agent.reasoning.pipeline -&gt; consensus_failure</span>
+</li>
+</ul>
+</div>
+</div>
+<!-- Input Section -->
+<div class="grid grid-cols-1 gap-4">
+<div class="group">
+<label class="text-[10px] font-bold tracking-widest text-on-surface-variant uppercase mb-2 block" for="retry-count">Additional Retry Count</label>
+<div class="relative">
+<input class="w-full bg-surface-container-lowest border-outline-variant/20 rounded-lg py-3 px-4 text-on-surface focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all outline-none text-lg font-bold" id="retry-count" max="10" min="1" type="number" value="3"/>
+<div class="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col opacity-50">
+<span class="material-symbols-outlined text-xs cursor-pointer hover:text-primary" data-icon="keyboard_arrow_up">keyboard_arrow_up</span>
+<span class="material-symbols-outlined text-xs cursor-pointer hover:text-primary" data-icon="keyboard_arrow_down">keyboard_arrow_down</span>
+</div>
+</div>
+<p class="text-[10px] text-on-surface-variant mt-2 italic">Maximum system override limit is 10 attempts.</p>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex gap-3 pt-4">
+<button class="flex-1 h-12 rounded-xl bg-surface-container-highest text-on-surface font-bold hover:bg-surface-bright transition-all active:scale-95 duration-150">
+              Force Approve
+            </button>
+<button class="flex-[1.5] h-12 rounded-xl bg-gradient-to-br from-primary-container to-primary text-on-primary font-bold shadow-[0_4px_15px_rgba(124,58,237,0.4)] hover:brightness-110 flex items-center justify-center gap-3 transition-all active:scale-95 duration-150">
+<div class="w-4 h-4 border-2 border-on-primary border-t-transparent rounded-full animate-spin"></div>
+              Retry
+            </button>
+</div>
+</div>
+<!-- Footer Visual Hint -->
+<div class="bg-surface-container-highest/30 px-8 py-3 flex justify-between items-center">
+<span class="text-[10px] text-on-surface-variant flex items-center gap-2">
+<span class="material-symbols-outlined text-xs" data-icon="info">info</span>
+                Override will bypass schema validation
+            </span>
+<span class="text-[10px] text-on-surface-variant font-mono">0xDEADBEEF</span>
+</div>
+</div>
+</div>
+</div>
+</body></html>

@@ -1,0 +1,66 @@
+@import "../../styles/variables";
+@import "../../styles/mixins";
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: $radius-lg;
+  white-space: nowrap;
+
+  &__icon {
+    font-size: 0.875rem;
+  }
+
+  &--xs {
+    padding: 0.125rem 0.375rem;
+    font-size: 0.625rem;
+  }
+
+  &--sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.6875rem;
+  }
+
+  &--md {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+  }
+
+  // Variants
+  &--primary {
+    background: rgba($primary, 0.15);
+    color: $primary;
+    @include neon-shadow($primary, 0.2);
+  }
+
+  &--secondary {
+    background: $surface-container-highest;
+    color: $on-surface-variant;
+    border: 1px solid rgba($outline-variant, 0.3);
+  }
+
+  &--tertiary {
+    background: rgba($tertiary, 0.15);
+    color: $tertiary;
+  }
+
+  &--error {
+    background: rgba($error, 0.15);
+    color: $error;
+  }
+
+  &--success {
+    background: rgba($status-completed, 0.15);
+    color: $status-completed;
+  }
+
+  &--outline {
+    background: transparent;
+    border: 1px dashed rgba($outline-variant, 0.5);
+    color: $on-surface-variant;
+  }
+}

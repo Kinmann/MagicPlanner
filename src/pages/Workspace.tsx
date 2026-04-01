@@ -75,7 +75,9 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'BOARD' | 'CONTENT'>('BOARD');
   const [showApiErrorModal, setShowApiErrorModal] = useState(false);
+  const [apiErrorDismissed, setApiErrorDismissed] = useState(false);
   const [showHitlModal, setShowHitlModal] = useState(false);
+  const [hitlDismissed, setHitlDismissed] = useState(false);
   const [hitlNode, setHitlNode] = useState<DocumentNode | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [iterations, setIterations] = useState<any[]>([]);
@@ -123,12 +125,19 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
       setNodes(result);
       
       const hasApiError = result.some(n => n.node_state === 'PAUSED_API_ERROR');
-      if (hasApiError) setShowApiErrorModal(true);
+      if (hasApiError) {
+        if (!apiErrorDismissed) setShowApiErrorModal(true);
+      } else {
+        setApiErrorDismissed(false);
+      }
 
       const hitlNodeFound = result.find(n => n.node_state === 'PAUSED_HITL');
       if (hitlNodeFound) {
         setHitlNode(hitlNodeFound);
-        setShowHitlModal(true);
+        if (!hitlDismissed) setShowHitlModal(true);
+      } else {
+        setHitlDismissed(false);
+        setHitlNode(null);
       }
     } catch (err) {
       console.error(err);
@@ -161,6 +170,8 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
       const store = await Store.load('settings.json');
       const apiKeyValue = await store.get<{ value: string }>('gemini_api_key');
       if (!apiKeyValue?.value) throw new Error("API 키가 설정되지 않았습니다.");
+      setApiErrorDismissed(false);
+      setHitlDismissed(false);
       await invoke('run_pipeline', { projectId, nodeType, apiKey: apiKeyValue.value });
       fetchNodes();
     } catch (err: any) {
@@ -173,6 +184,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
   const handleHITLAction = async (nodeId: string, action: 'APPROVE' | 'RETRY') => {
     setLoading(true);
     setShowHitlModal(false);
+    setHitlDismissed(false);
     try {
       await invoke('handle_hitl_action', { nodeId, action });
       fetchNodes();
@@ -508,10 +520,14 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
         {/* Specialized Modals */}
         <CriticalErrorModal
           isOpen={showApiErrorModal}
-          onClose={() => setShowApiErrorModal(false)}
+          onClose={() => {
+            setShowApiErrorModal(false);
+            setApiErrorDismissed(true);
+          }}
           errorMessage={nodes.find(n => n.node_state === 'PAUSED_API_ERROR')?.api_error_message}
           onRetry={() => {
             setShowApiErrorModal(false);
+            setApiErrorDismissed(false);
             const errorNode = nodes.find(n => n.node_state === 'PAUSED_API_ERROR');
             if (errorNode) handleRunNode(errorNode.target_node_type);
           }}
@@ -520,7 +536,10 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
 
         <HitlWarningModal
           isOpen={showHitlModal}
-          onClose={() => setShowHitlModal(false)}
+          onClose={() => {
+            setShowHitlModal(false);
+            setHitlDismissed(true);
+          }}
           onRetry={() => hitlNode && handleHITLAction(hitlNode.node_id, 'RETRY')}
           onApprove={() => hitlNode && handleHITLAction(hitlNode.node_id, 'APPROVE')}
           nodeType={hitlNode?.target_node_type || ''}

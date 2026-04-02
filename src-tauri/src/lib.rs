@@ -108,6 +108,7 @@ pub fn run() {
             commands::list_projects,
             commands::create_project,
             commands::run_pipeline,
+            commands::get_project,
             commands::get_project_nodes,
             commands::get_node_iterations,
             commands::get_latest_iteration,

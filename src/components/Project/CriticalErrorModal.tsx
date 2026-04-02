@@ -1,6 +1,6 @@
 import React from 'react';
 import BaseModal from '../common/BaseModal';
-import Button from '../common/Button';
+import './CriticalErrorModal.scss';
 
 interface CriticalErrorModalProps {
   isOpen: boolean;
@@ -17,46 +17,70 @@ const CriticalErrorModal: React.FC<CriticalErrorModalProps> = ({
   onSettings,
   errorMessage
 }) => {
-  const footer = (
-    <>
-      <Button variant="ghost" onClick={onClose}>
-        Dismiss
-      </Button>
-      <Button variant="secondary" onClick={onSettings} leftIcon={<span className="material-symbols-outlined">settings</span>}>
-        Configure API
-      </Button>
-      <Button variant="primary" onClick={onRetry} leftIcon={<span className="material-symbols-outlined">refresh</span>}>
-        Attempt Recovery
-      </Button>
-    </>
-  );
-
   return (
     <BaseModal
       isOpen={isOpen}
       onClose={onClose}
-      title="Critical API Failure"
-      subtitle="Execution Context Interrupted"
-      footer={footer}
       size="md"
       className="modal--error"
     >
-      <div className="flex flex-col gap-5">
-        <div className="flex items-center gap-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
-          <span className="material-symbols-outlined text-red-500 text-4xl">report_problem</span>
-          <div>
-            <h4 className="text-red-500 font-bold mb-1">Service Unreachable</h4>
-            <p className="text-on-surface-variant text-sm">
-              The AI Orchestration engine encountered a lethal error while communicating with the Gemini API.
-            </p>
+      {/* 1. Custom Error Header Bar */}
+      <div className="error-header-bar">
+        <div className="error-icon-box">
+          <span className="material-symbols-outlined">report_problem</span>
+        </div>
+        <div className="error-title-group">
+          <h2 className="error-title">Critical API Failure</h2>
+          <p className="error-subtitle">The AI Orchestration engine encountered a lethal error.</p>
+        </div>
+      </div>
+
+      {/* 2. Modal Body */}
+      <div className="modal-body">
+        {/* Error Context Log Section */}
+        <div className="error-log-section">
+          <label className="log-label">Error Diagnostic Log</label>
+          <div className="log-container">
+            <div className="log-list">
+              {/* 1. Status */}
+              <div className="log-item">
+                <span className="dot">●</span>
+                <span className="content">
+                  <span className="highlight">STATUS:</span> 403 Forbidden (Gemini API)
+                </span>
+              </div>
+              {/* 2. Trace */}
+              <div className="log-item log-item--dim">
+                <span className="dot">●</span>
+                <span className="content">Trace: agent.orchestration.loop {'->'} api_deadlock</span>
+              </div>
+              {/* 3. Fail (ErrorMessage) */}
+              <div className="log-item">
+                <span className="dot">●</span>
+                <span className="content">
+                  <span className="highlight">FAIL:</span> {errorMessage || 'Unknown system override exception'}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
+      </div>
 
-        <div className="bg-surface-container-lowest p-4 rounded-xl border border-outline-variant/10">
-          <h5 className="label-uppercase text-xs text-on-surface-variant mb-2">Error Diagnostic Log</h5>
-          <pre className="text-error font-mono text-[10px] leading-relaxed p-2 bg-on-surface/5 rounded overflow-x-auto max-h-[120px] custom-scrollbar">
-            {errorMessage || 'Unknown stack trace exception'}
-          </pre>
+      {/* 3. Custom Action Area */}
+      <div className="custom-action-area">
+        <div className="button-row">
+          <button className="btn-secondary btn-small" onClick={onRetry} title="Attempt Recovery">
+            <span className="material-symbols-outlined">refresh</span>
+          </button>
+          <button className="btn-primary" onClick={onSettings}>
+            <span className="material-symbols-outlined">settings</span>
+            Configure API
+          </button>
+        </div>
+        <div className="dismiss-row">
+          <button className="btn-dismiss" onClick={onClose}>
+            Dismiss
+          </button>
         </div>
       </div>
     </BaseModal>

@@ -290,7 +290,10 @@
       display: flex;
       gap: 0.5rem;
       width: 100%;
-      .btn { flex: 1; }
+      .btn {
+        &.is-pass { flex: 3; }
+        &.is-retry { flex: 7; }
+      }
     }
 
     .btn {

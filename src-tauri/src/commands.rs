@@ -182,6 +182,23 @@ pub async fn save_api_key(
 }
 
 #[tauri::command]
+pub async fn get_project(
+    pool: tauri::State<'_, SqlitePool>,
+    project_id: String,
+) -> Result<Project, String> {
+    let project = sqlx::query_as::<_, Project>(
+        "SELECT * FROM project WHERE project_id = ? AND is_deleted = 0"
+    )
+    .bind(project_id)
+    .fetch_optional(&*pool)
+    .await
+    .map_err(|e| e.to_string())?
+    .ok_or_else(|| "Project not found".to_string())?;
+
+    Ok(project)
+}
+
+#[tauri::command]
 pub async fn list_projects(pool: tauri::State<'_, SqlitePool>) -> Result<Vec<Project>, String> {
     let projects = sqlx::query_as::<_, Project>(
         "SELECT 

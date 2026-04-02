@@ -4,11 +4,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import SetupPage from "./SetupPage";
 import Dashboard from "./pages/Dashboard";
 import Workspace from "./pages/Workspace";
+import PromptView from "./pages/PromptView";
 import "./App.scss";
 
 function App() {
   const [isSetup, setIsSetup] = useState<boolean | null>(null);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [viewingPromptProjectId, setViewingPromptProjectId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
 
@@ -61,12 +63,20 @@ function App() {
               onOpenSettings={() => setShowSettings(true)}
             />
           </motion.div>
+        ) : viewingPromptProjectId ? (
+          <motion.div key="prompt-view" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="page-wrapper">
+            <PromptView 
+              projectId={viewingPromptProjectId} 
+              onBack={() => setViewingPromptProjectId(null)} 
+            />
+          </motion.div>
         ) : (
           <motion.div key="workspace" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.02 }} className="page-wrapper">
             <Workspace 
               projectId={currentProjectId} 
               onBack={() => setCurrentProjectId(null)} 
               onOpenSettings={() => setShowSettings(true)}
+              onViewPrompt={() => setViewingPromptProjectId(currentProjectId)}
             />
           </motion.div>
         )}

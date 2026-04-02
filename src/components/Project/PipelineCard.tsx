@@ -178,24 +178,24 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
         )}
         
         {node.node_state === 'PAUSED_HITL' && (
-          <div className="flex gap-2 w-full">
+          <div className="hitl-actions">
             <button 
-              className="btn btn-secondary" 
-              onClick={(e) => {
-                e.stopPropagation();
-                onHITLAction(node.node_id, 'RETRY');
-              }}
-            >
-              Retry
-            </button>
-            <button 
-              className="btn btn-primary font-black" 
+              className="btn btn-ghost is-pass" 
               onClick={(e) => {
                 e.stopPropagation();
                 onHITLAction(node.node_id, 'APPROVE');
               }}
             >
-              Pass
+              <span className="material-symbols-outlined">check</span> Pass
+            </button>
+            <button 
+              className="btn btn-primary is-retry" 
+              onClick={(e) => {
+                e.stopPropagation();
+                onHITLAction(node.node_id, 'RETRY');
+              }}
+            >
+              <span className="material-symbols-outlined">refresh</span> Retry
             </button>
           </div>
         )}

@@ -17,6 +17,7 @@ interface WorkspaceProps {
   projectId: string;
   onBack: () => void;
   onOpenSettings: () => void;
+  onViewPrompt: () => void;
 }
 
 const renderJson = (val: any, indent = 0): React.ReactNode => {
@@ -67,7 +68,7 @@ const renderJson = (val: any, indent = 0): React.ReactNode => {
   return String(val);
 };
 
-const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings }) => {
+const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings, onViewPrompt }) => {
   const [nodes, setNodes] = useState<DocumentNode[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [nodeContent, setNodeContent] = useState<string | null>(null);
@@ -75,9 +76,9 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'BOARD' | 'CONTENT'>('BOARD');
   const [showApiErrorModal, setShowApiErrorModal] = useState(false);
-  const [apiErrorDismissed, setApiErrorDismissed] = useState(false);
+  const apiErrorDismissed = useRef(false);
   const [showHitlModal, setShowHitlModal] = useState(false);
-  const [hitlDismissed, setHitlDismissed] = useState(false);
+  const hitlDismissed = useRef(false);
   const [hitlNode, setHitlNode] = useState<DocumentNode | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [iterations, setIterations] = useState<any[]>([]);
@@ -126,17 +127,17 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
       
       const hasApiError = result.some(n => n.node_state === 'PAUSED_API_ERROR');
       if (hasApiError) {
-        if (!apiErrorDismissed) setShowApiErrorModal(true);
+        if (!apiErrorDismissed.current) setShowApiErrorModal(true);
       } else {
-        setApiErrorDismissed(false);
+        apiErrorDismissed.current = false;
       }
 
       const hitlNodeFound = result.find(n => n.node_state === 'PAUSED_HITL');
       if (hitlNodeFound) {
         setHitlNode(hitlNodeFound);
-        if (!hitlDismissed) setShowHitlModal(true);
+        if (!hitlDismissed.current) setShowHitlModal(true);
       } else {
-        setHitlDismissed(false);
+        hitlDismissed.current = false;
         setHitlNode(null);
       }
     } catch (err) {
@@ -170,8 +171,8 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
       const store = await Store.load('settings.json');
       const apiKeyValue = await store.get<{ value: string }>('gemini_api_key');
       if (!apiKeyValue?.value) throw new Error("API 키가 설정되지 않았습니다.");
-      setApiErrorDismissed(false);
-      setHitlDismissed(false);
+      apiErrorDismissed.current = false;
+      hitlDismissed.current = false;
       await invoke('run_pipeline', { projectId, nodeType, apiKey: apiKeyValue.value });
       fetchNodes();
     } catch (err: any) {
@@ -184,7 +185,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
   const handleHITLAction = async (nodeId: string, action: 'APPROVE' | 'RETRY') => {
     setLoading(true);
     setShowHitlModal(false);
-    setHitlDismissed(false);
+    hitlDismissed.current = false;
     try {
       await invoke('handle_hitl_action', { nodeId, action });
       fetchNodes();
@@ -212,9 +213,12 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
     setSelectedIteration(null);
     try {
       const iters = await invoke<any[]>('get_node_iterations', { nodeId: node.node_id });
-      setIterations(iters);
-      if (iters && iters.length > 0) {
-        const best = [...iters].sort((a, b) => (b.calculated_score || 0) - (a.calculated_score || 0))[0];
+      const sortedIters = [...iters].sort((a, b) => 
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+      setIterations(sortedIters);
+      if (sortedIters && sortedIters.length > 0) {
+        const best = [...sortedIters].sort((a, b) => (b.calculated_score || 0) - (a.calculated_score || 0))[0];
         handleSelectIteration(best);
       } else {
         setNodeContent("생성된 내용이 없습니다.");
@@ -309,6 +313,15 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
           </div>
           
           <div className="toolbar-right">
+            {viewMode === 'BOARD' && (
+              <button 
+                className="export-button"
+                onClick={onViewPrompt}
+              >
+                <span className="material-symbols-outlined">article</span>
+                View Prompt
+              </button>
+            )}
             {viewMode === 'CONTENT' && selectedNode && (
               <button 
                 className="export-button"
@@ -522,12 +535,12 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
           isOpen={showApiErrorModal}
           onClose={() => {
             setShowApiErrorModal(false);
-            setApiErrorDismissed(true);
+            apiErrorDismissed.current = true;
           }}
           errorMessage={nodes.find(n => n.node_state === 'PAUSED_API_ERROR')?.api_error_message}
           onRetry={() => {
             setShowApiErrorModal(false);
-            setApiErrorDismissed(false);
+            apiErrorDismissed.current = false;
             const errorNode = nodes.find(n => n.node_state === 'PAUSED_API_ERROR');
             if (errorNode) handleRunNode(errorNode.target_node_type);
           }}
@@ -538,7 +551,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
           isOpen={showHitlModal}
           onClose={() => {
             setShowHitlModal(false);
-            setHitlDismissed(true);
+            hitlDismissed.current = true;
           }}
           onRetry={() => hitlNode && handleHITLAction(hitlNode.node_id, 'RETRY')}
           onApprove={() => hitlNode && handleHITLAction(hitlNode.node_id, 'APPROVE')}

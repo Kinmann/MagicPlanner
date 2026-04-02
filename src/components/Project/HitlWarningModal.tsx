@@ -1,7 +1,6 @@
 import React from 'react';
 import BaseModal from '../common/BaseModal';
-import Button from '../common/Button';
-import Badge from '../common/Badge';
+import './HitlWarningModal.scss';
 
 interface HitlWarningModalProps {
   isOpen: boolean;
@@ -20,45 +19,82 @@ const HitlWarningModal: React.FC<HitlWarningModalProps> = ({
   nodeType,
   currentScore
 }) => {
-  const footer = (
-    <>
-      <Button variant="ghost" onClick={onClose}>
-        Dismiss
-      </Button>
-      <Button variant="danger" onClick={onRetry} leftIcon={<span className="material-symbols-outlined">refresh</span>}>
-        Retry Pipeline
-      </Button>
-      <Button variant="primary" onClick={onApprove} leftIcon={<span className="material-symbols-outlined">verified</span>}>
-        Force Approve
-      </Button>
-    </>
-  );
-
   return (
     <BaseModal
       isOpen={isOpen}
       onClose={onClose}
-      title="Quality Threshold Alert"
-      subtitle="Human-in-the-Loop Intervention"
-      footer={footer}
       size="md"
+      className="modal--hitl"
     >
-      <div className="flex flex-col gap-6">
-        <div className="flex items-center gap-4 p-4 bg-orange-500/10 border border-orange-500/20 rounded-xl">
-          <span className="material-symbols-outlined text-orange-500 text-4xl">warning</span>
-          <div>
-            <h4 className="text-orange-500 font-bold mb-1">Low Confidence Score</h4>
-            <p className="text-on-surface-variant text-sm">
-              The generated <Badge size="xs" variant="tertiary">{nodeType}</Badge> draft achieved a score of <strong>{currentScore}%</strong>, which is below the target threshold.
-            </p>
+      {/* 1. Custom Warning Header Bar */}
+      <div className="warning-header-bar">
+        <div className="warning-icon-box">
+          <span className="material-symbols-outlined">warning</span>
+        </div>
+        <div className="warning-title-group">
+          <h2 className="warning-title">Quality Threshold Alert</h2>
+          <p className="warning-subtitle">Human-in-the-Loop Intervention Required</p>
+        </div>
+      </div>
+
+      {/* 2. Modal Body */}
+      <div className="modal-body">
+        {/* Detail Section */}
+        <div className="hitl-detail-section">
+          <label className="detail-label">HITL Intervention Details</label>
+          <div className="detail-container">
+            <div className="detail-list">
+              <div className="detail-item">
+                <span className="dot">●</span>
+                <span className="content">
+                  <span className="highlight">NODE TYPE:</span> {nodeType}
+                </span>
+              </div>
+              <div className="detail-item">
+                <span className="dot">●</span>
+                <span className="content">
+                  <span className="highlight">SCORE:</span> {currentScore}% (Below Threshold)
+                </span>
+              </div>
+              <div className="detail-item">
+                <span className="dot">●</span>
+                <span className="content">
+                  <span className="highlight">STATUS:</span> Quality check failed by LLM judge.
+                </span>
+              </div>
+              <div className="detail-item">
+                <span className="dot">●</span>
+                <span className="content">
+                  <span className="highlight">ACTION REQUIRED:</span> Manual override or pipeline retry.
+                </span>
+              </div>
+            </div>
           </div>
         </div>
+      </div>
 
-        <div className="bg-surface-container-lowest p-5 rounded-xl border border-outline-variant/10">
-          <h5 className="label-uppercase text-xs text-on-surface-variant mb-3">Recommended Action</h5>
-          <p className="text-on-surface text-sm leading-relaxed">
-            We recommend retrying the generation with adjusted prompts or approving it manually if the content meets your specific requirements.
-          </p>
+      {/* 3. Custom Action Area */}
+      <div className="custom-action-area">
+        <div className="button-row">
+          {/* Left: Secondary Icon Button (Approve) */}
+          <button 
+            className="btn-secondary btn-small" 
+            onClick={onApprove} 
+            title="Force Approve"
+          >
+            <span className="material-symbols-outlined">verified</span>
+          </button>
+          
+          {/* Right: Primary Emphasis Button (Retry) */}
+          <button className="btn-primary" onClick={onRetry}>
+            <span className="material-symbols-outlined">refresh</span>
+            Retry Pipeline
+          </button>
+        </div>
+        <div className="dismiss-row">
+          <button className="btn-dismiss" onClick={onClose}>
+            Dismiss
+          </button>
         </div>
       </div>
     </BaseModal>

@@ -33,6 +33,29 @@
   line-height: 1.3;
 }
 
+@mixin headline-small {
+  font-family: $font-headline;
+  font-size: 1.125rem; // 18px
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+}
+
+@mixin body-medium {
+  font-family: $font-body;
+  font-size: 0.875rem; // 14px
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+@mixin label-medium {
+  font-family: $font-label;
+  font-size: 0.75rem; // 12px
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+}
+
 @mixin label-uppercase {
   font-family: $font-label;
   font-size: 0.625rem; // 10px

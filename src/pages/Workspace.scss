@@ -348,6 +348,8 @@
     padding: 2rem;
     position: relative;
     overflow-y: auto;
+    max-width: 1200px;
+    margin: auto;
     @include custom-scrollbar;
   }
 
@@ -395,7 +397,7 @@
     background: $surface-container-lowest;
     border: 1px solid rgba($outline-variant, 0.1);
     border-radius: $radius-xl;
-    padding: 2.5rem;
+    padding: 1rem 2rem;
     font-family: $font-mono;
     font-size: 0.875rem;
     line-height: 1.6;

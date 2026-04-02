@@ -432,7 +432,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
                     <div className="header-right">
                       {/* 2. Pass Score Gauge (Moved here) */}
                       <div className="pass-score-gauge">
-                        <span className="gauge-label">Pass Score</span>
+                        <span className="gauge-label">Score</span>
                         <span className="gauge-value">{selectedIteration?.calculated_score || 0}</span>
                         <div className="gauge-dots">
                           <div className="dot"></div>

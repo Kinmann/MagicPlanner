@@ -9,11 +9,44 @@
   overflow: hidden;
   color: $on-surface;
   font-family: $font-body;
+  position: relative; // Added for background glows
+
+  // Background Glows (Matching CreateProject)
+  .background-glow {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(120px);
+    pointer-events: none;
+    z-index: 0;
+    
+    &--1 {
+      top: 15%;
+      left: 10%;
+      width: 500px; // Larger size matching CreateProject
+      height: 500px;
+      background: rgba(210, 187, 255, 0.08); // $glow-primary
+      animation: float 15s ease-in-out infinite;
+    }
+    
+    &--2 {
+      bottom: 10%;
+      right: 15%;
+      width: 450px;
+      height: 450px;
+      background: rgba(124, 58, 237, 0.12); // $glow-secondary
+      animation: float 12s ease-in-out infinite reverse;
+    }
+  }
 
   ::selection {
     background-color: $primary-container;
     color: $on-primary-container;
   }
+}
+
+@keyframes float {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(-20px, 20px); }
 }
 
 // 1. Sidebar Styles
@@ -100,145 +133,15 @@
   height: 100vh;
 }
 
-.workspace-toolbar {
-  height: 3.5rem; // 56px
-  padding: 0 1.5rem;
-  border-bottom: 1px solid rgba($outline-variant, 0.1);
-  background: rgba($surface, 0.8);
-  backdrop-filter: blur(12px);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  z-index: 40;
-  flex-shrink: 0;
-
-  .toolbar-left {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-
-    .toolbar-label {
-      font-size: 0.75rem;
-      font-weight: 700;
-      color: rgba($on-surface, 0.5);
-      text-transform: uppercase;
-      letter-spacing: 0.15em;
-    }
-
-    .divider {
-      width: 1px;
-      height: 1rem;
-      background: rgba($outline-variant, 0.3);
-    }
-
-    .toolbar-info {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      
-      .title { font-weight: 700; color: $on-surface; font-size: 0.875rem; }
-      
-      .status-badge {
-        font-size: 0.625rem;
-        font-weight: 900;
-        text-transform: uppercase;
-        background: rgba($primary, 0.1);
-        color: $primary;
-        padding: 0.125rem 0.5rem;
-        border-radius: $radius-sm;
-      }
-
-      .breadcrumb {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        font-size: 0.875rem;
-
-        &-link {
-          color: $on-surface-variant;
-          background: transparent;
-          border: none;
-          padding: 0;
-          cursor: pointer;
-          transition: color 0.2s;
-          font-weight: 500;
-          &:hover { color: $primary; }
-        }
-
-        &-sep {
-          font-size: 1rem;
-          opacity: 0.3;
-        }
-
-        &-current {
-          color: $on-surface;
-          font-weight: 700;
-        }
-      }
-    }
-  }
-
-  .toolbar-right {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-
-    .view-selector {
-      display: flex;
-      background: $surface-container-low;
-      border: 1px solid rgba($outline-variant, 0.1);
-      border-radius: $radius-lg;
-      padding: 0.25rem;
-
-      .view-button {
-        padding: 0.25rem 0.75rem;
-        font-size: 0.75rem;
-        font-weight: 700;
-        border-radius: $radius-md;
-        transition: all 0.2s;
-        background: transparent;
-        border: none;
-        color: $on-surface-variant;
-        cursor: pointer;
-
-        &.active {
-          background: $surface-container-highest;
-          color: $on-surface;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        &:hover:not(.active) { color: $on-surface; }
-      }
-    }
-
-    .export-button {
-      background: $primary;
-      color: $on-primary;
-      font-size: 0.75rem;
-      font-weight: 700;
-      padding: 0.5rem 1rem;
-      border-radius: $radius-lg;
-      border: none;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      cursor: pointer;
-      box-shadow: 0 8px 16px rgba($primary, 0.2);
-      transition: transform 0.2s;
-      &:hover { transform: scale(1.05); }
-
-      .material-symbols-outlined { font-size: 1rem; }
-    }
-  }
-}
 
 .workspace-content {
   flex: 1;
   position: relative;
   overflow: hidden;
-  background: $surface-container-lowest;
+  background: transparent; // Changed from $surface-container-lowest to show global glows
 
   &.canvas-grid {
-    background-image: radial-gradient(circle, rgba($on-surface, 0.05) 1px, transparent 1px);
+    background-image: radial-gradient(circle, rgba($on-surface, 0.03) 1px, transparent 1px); // More subtle grid
     background-size: 32px 32px;
   }
 }
@@ -257,6 +160,8 @@
     display: flex;
     flex-direction: column;
     position: relative;
+    overflow: hidden;
+    background: transparent;
   }
 
   .revision-history-bar {
@@ -346,41 +251,81 @@
   .document-body {
     flex: 1;
     width: 100%;
-    padding: 2rem;
+    max-width: 800px;
+    padding: 0 24px 24px 24px;
     position: relative;
-    overflow-y: auto;
-    max-width: 1200px;
-    margin: auto;
+    display: flex; // Changed to flex to control internal scrolling
+    flex-direction: column;
+    overflow: hidden; // Prevent whole body from scrolling
+    margin: 0 auto;
     @include custom-scrollbar;
+
+    .content-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end; // Align at bottom for a grounded feel
+      margin-bottom: 24px;
+      flex-shrink: 0;
+
+      .header-left {
+        text-align: left;
+        
+        h2 {
+          font-size: 28px; // Slightly reduced
+          font-weight: 800;
+          letter-spacing: -0.03em;
+          margin-bottom: 4px;
+          color: $on-surface;
+        }
+
+        p {
+          color: $primary;
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.2em;
+          text-transform: uppercase;
+          opacity: 0.8;
+        }
+      }
+
+      .header-right {
+        display: flex;
+        align-items: flex-end;
+      }
+    }
   }
 
   .pass-score-gauge {
-    position: absolute;
-    top: 2.5rem;
-    right: 2.5rem;
-    z-index: 20;
-    width: 7rem;
-    height: 7rem;
-    background: rgba($surface-container, 0.8);
+    width: 5rem; // Reduced size for header
+    height: 5rem;
+    background: rgba($surface-container, 0.4);
     backdrop-filter: blur(20px);
-    border-radius: 50%;
+    border-radius: $radius-2xl; // More square-ish but rounded
     border: 1px solid rgba($primary, 0.2);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.3), inset 0 0 20px rgba($primary, 0.05);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 16px 32px rgba(0, 0, 0, 0.3);
+      border-color: rgba($primary, 0.4);
+    }
 
     .gauge-label {
-      font-size: 0.625rem;
+      font-size: 0.5rem;
       font-weight: 900;
       text-transform: uppercase;
       letter-spacing: 0.1em;
       color: rgba($primary, 0.7);
+      margin-bottom: 0.125rem;
     }
 
     .gauge-value {
-      font-size: 2.25rem;
+      font-size: 1.5rem;
       font-weight: 950;
       color: $on-surface;
       line-height: 1;
@@ -390,46 +335,37 @@
       display: flex;
       gap: 0.125rem;
       margin-top: 0.25rem;
-      .dot { width: 0.375rem; height: 0.375rem; background: $primary; border-radius: 50%; }
+      .dot { width: 4px; height: 4px; background: $primary; border-radius: 50%; opacity: 0.5; }
     }
   }
 
   .code-window {
-    background: $surface-container-lowest;
-    border: 1px solid rgba($outline-variant, 0.1);
-    border-radius: $radius-xl;
-    padding: 1rem 2rem;
+    @include glass-panel;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    transition: border-color 0.3s, box-shadow 0.3s;
     font-family: $font-mono;
     font-size: 0.875rem;
     line-height: 1.6;
-    box-shadow: inset 0 0 40px rgba($primary-container, 0.05);
-    min-height: 100%;
+    flex: 1; // Take up remaining space
+    display: flex;
+    flex-direction: column;
+    min-height: 0; // Important for flex child scrolling
 
-    .window-header {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      margin-bottom: 1.5rem;
-      opacity: 0.4;
-
-      .dot { width: 0.75rem; height: 0.75rem; border-radius: 50%; }
-      .red { background: #ef4444; }
-      .amber { background: #f59e0b; }
-      .emerald { background: #10b981; }
-      
-      .filename {
-        margin-left: 1rem;
-        font-size: 0.75rem;
-        font-family: $font-sans;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-      }
+    &:focus-within {
+      border-color: rgba($primary, 0.5);
+      box-shadow: 0 10px 40px rgba($primary, 0.1);
     }
 
     .code-content {
+      padding: 24px;
       color: $on-surface-variant;
       word-break: break-word;
       white-space: pre-wrap;
+      flex: 1;
+      overflow-y: auto; // Content within card is now scrollable
+      @include custom-scrollbar;
       
       pre {
         word-break: break-word;
@@ -519,7 +455,7 @@
 
     .stats-grid {
       display: grid;
-      grid-template-cols: 1fr 1fr;
+      grid-template-columns: 1fr 1fr;
       gap: 1rem;
     }
 

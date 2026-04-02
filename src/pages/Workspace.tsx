@@ -7,6 +7,7 @@ import { save } from '@tauri-apps/plugin-dialog';
 import { DocumentNode } from '../types/project';
 import PipelineBoard from '../components/Project/PipelineBoard';
 import Button from '../components/common/Button';
+import Header from "../components/layout/Header";
 import Spinner from '../components/common/Spinner';
 import CriticalErrorModal from '../components/Project/CriticalErrorModal';
 import HitlWarningModal from '../components/Project/HitlWarningModal';
@@ -251,6 +252,10 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
 
   return (
     <div className="workspace-layout">
+      {/* Background Glows for visual depth (Global) */}
+      <div className="background-glow background-glow--1" />
+      <div className="background-glow background-glow--2" />
+
       {/* 1. Left Side Navigation (Narrow) */}
       <aside className="workspace-sidebar">
         <div className="sidebar-inner">
@@ -285,54 +290,44 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
       {/* 2. Main Workspace (Header + Canvas) */}
       <main className="workspace-main">
         {/* Top Toolbar */}
-        <header className="workspace-toolbar">
-          <div className="toolbar-left">
-            <span className="toolbar-label">MAGIC PLANNER</span>
-            <div className="divider"></div>
-            <div className="toolbar-info">
-              {viewMode === 'BOARD' ? (
-                <>
-                  <span className="title">Pipeline Canvas</span>
-                  <span className="status-badge">
-                    {loading ? 'Running' : 'Ready'}
-                  </span>
-                </>
-              ) : (
-                <div className="breadcrumb">
-                  <button 
-                    className="breadcrumb-link"
-                    onClick={() => setViewMode('BOARD')}
-                  >
-                    Pipeline Canvas
-                  </button>
-                  <span className="material-symbols-outlined breadcrumb-sep">chevron_right</span>
-                  <span className="breadcrumb-current">{selectedNode?.target_node_type}</span>
-                </div>
-              )}
+        <Header
+          title={viewMode === 'BOARD' ? "Pipeline Canvas" : "Node Data Analysis"}
+          subtitle={viewMode === 'BOARD' ? (
+            <span className="status-badge">
+              {loading ? 'Running' : 'Ready'}
+            </span>
+          ) : (
+            <div className="breadcrumb">
+              <button 
+                className="breadcrumb-link"
+                onClick={() => setViewMode('BOARD')}
+              >
+                Pipeline Canvas
+              </button>
+              <span className="material-symbols-outlined breadcrumb-sep">chevron_right</span>
+              <span className="breadcrumb-current">{selectedNode?.target_node_type}</span>
             </div>
-          </div>
-          
-          <div className="toolbar-right">
-            {viewMode === 'BOARD' && (
-              <button 
-                className="export-button"
-                onClick={onViewPrompt}
-              >
-                <span className="material-symbols-outlined">article</span>
-                View Prompt
-              </button>
-            )}
-            {viewMode === 'CONTENT' && selectedNode && (
-              <button 
-                className="export-button"
-                onClick={handleDownload}
-              >
-                <span className="material-symbols-outlined">download</span>
-                Export Specs
-              </button>
-            )}
-          </div>
-        </header>
+          )}
+        >
+          {viewMode === 'BOARD' && (
+            <button 
+              className="header-action-button"
+              onClick={onViewPrompt}
+            >
+              <span className="material-symbols-outlined">article</span>
+              View Prompt
+            </button>
+          )}
+          {viewMode === 'CONTENT' && selectedNode && (
+            <button 
+              className="header-action-button"
+              onClick={handleDownload}
+            >
+              <span className="material-symbols-outlined">download</span>
+              Export Specs
+            </button>
+          )}
+        </Header>
 
         {/* Content Area */}
         <div className="workspace-content canvas-grid custom-scrollbar">
@@ -424,27 +419,32 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
                 </div>
 
                 <div className="document-body">
-                  {/* 2. Pass Score Gauge */}
-                  <div className="pass-score-gauge">
-                    <span className="gauge-label">Pass Score</span>
-                    <span className="gauge-value">{selectedIteration?.calculated_score || 0}</span>
-                    <div className="gauge-dots">
-                      <div className="dot"></div>
-                      <div className="dot"></div>
-                      <div className="dot"></div>
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="content-header"
+                  >
+                    <div className="header-left">
+                      <h2>{selectedNode?.target_node_type} Synthesis</h2>
+                      <p>Orchestrated intelligence output for precise software architecture and planning.</p>
                     </div>
-                  </div>
+                    
+                    <div className="header-right">
+                      {/* 2. Pass Score Gauge (Moved here) */}
+                      <div className="pass-score-gauge">
+                        <span className="gauge-label">Pass Score</span>
+                        <span className="gauge-value">{selectedIteration?.calculated_score || 0}</span>
+                        <div className="gauge-dots">
+                          <div className="dot"></div>
+                          <div className="dot"></div>
+                          <div className="dot"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
 
                   {/* 3. Code Window */}
                   <div className="code-window">
-                    <div className="window-header">
-                      <div className="dot red"></div>
-                      <div className="dot amber"></div>
-                      <div className="dot emerald"></div>
-                      <span className="filename">
-                        {selectedNode?.target_node_type.toLowerCase().replace(' ', '_')}_spec_v{selectedIteration?.iteration_number || 1}.json
-                      </span>
-                    </div>
 
                     <div className="code-content">
                       {nodeContent ? (

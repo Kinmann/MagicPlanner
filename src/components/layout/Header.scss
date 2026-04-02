@@ -1,0 +1,133 @@
+@import "../../styles/variables";
+
+.app-header {
+  height: 3.5rem;
+  padding: 0 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba($outline-variant, 0.1);
+  background: rgba($surface, 0.8);
+  backdrop-filter: blur(12px);
+  flex-shrink: 0;
+  width: 100%;
+  z-index: 100;
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .header-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: rgba($on-surface, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+  }
+
+  .header-divider {
+    width: 1px;
+    height: 1rem;
+    background: rgba($outline-variant, 0.3);
+  }
+
+  .header-info {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+
+    .header-title {
+      font-weight: 700;
+      color: $on-surface;
+      font-size: 0.875rem;
+    }
+  }
+
+  .header-subtitle {
+    font-size: 11px;
+    font-weight: 600;
+    color: $on-surface-variant;
+    opacity: 0.6;
+    letter-spacing: 0.02em;
+    display: flex;
+    align-items: center;
+  }
+
+  .breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .breadcrumb-link {
+      background: none;
+      border: none;
+      color: $on-surface-variant;
+      cursor: pointer;
+      padding: 0;
+      font-weight: 500;
+      transition: color 0.2s;
+      font-size: 11px;
+
+      &:hover {
+        color: $on-surface;
+      }
+    }
+
+    .breadcrumb-sep {
+      font-size: 14px;
+      color: $on-surface-variant;
+      opacity: 0.5;
+    }
+
+    .breadcrumb-current {
+      color: $on-surface;
+      font-weight: 600;
+      font-size: 11px;
+    }
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    .header-action-button {
+      padding: 0 1rem;
+      height: 2.25rem; // Slightly more compact
+      background: $primary;
+      color: $on-primary;
+      border: none;
+      border-radius: $radius-lg; // 12px radius matching Execute Node btn
+      font-size: 0.625rem; // 10px matching Execute Node btn
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba($primary, 0.2);
+
+      .material-symbols-outlined {
+        font-size: 1.1rem;
+        font-weight: 800;
+      }
+
+      &:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba($primary, 0.3);
+        filter: brightness(1.1);
+      }
+
+      &:active {
+        transform: translateY(0);
+        filter: brightness(0.95);
+        box-shadow: 0 2px 8px rgba($primary, 0.2);
+      }
+    }
+  }
+}

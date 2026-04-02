@@ -5,12 +5,14 @@ import SetupPage from "./SetupPage";
 import Dashboard from "./pages/Dashboard";
 import Workspace from "./pages/Workspace";
 import PromptView from "./pages/PromptView";
+import CreateProject from "./pages/CreateProject";
 import "./App.scss";
 
 function App() {
   const [isSetup, setIsSetup] = useState<boolean | null>(null);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [viewingPromptProjectId, setViewingPromptProjectId] = useState<string | null>(null);
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
 
@@ -56,11 +58,22 @@ function App() {
               onBack={isSetup ? () => setShowSettings(false) : undefined}
             />
           </motion.div>
+        ) : isCreatingProject ? (
+          <motion.div key="create-project" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="page-wrapper">
+             <CreateProject 
+               onBack={() => setIsCreatingProject(false)} 
+               onSuccess={(projectId: string) => {
+                 setIsCreatingProject(false);
+                 setCurrentProjectId(projectId);
+               }}
+             />
+          </motion.div>
         ) : !currentProjectId ? (
           <motion.div key="dashboard" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="page-wrapper">
             <Dashboard 
               onSelectProject={setCurrentProjectId} 
               onOpenSettings={() => setShowSettings(true)}
+              onCreateProject={() => setIsCreatingProject(true)}
             />
           </motion.div>
         ) : viewingPromptProjectId ? (
@@ -68,6 +81,10 @@ function App() {
             <PromptView 
               projectId={viewingPromptProjectId} 
               onBack={() => setViewingPromptProjectId(null)} 
+              onHome={() => {
+                setViewingPromptProjectId(null);
+                setCurrentProjectId(null);
+              }}
             />
           </motion.div>
         ) : (

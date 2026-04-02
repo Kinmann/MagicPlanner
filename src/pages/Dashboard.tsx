@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
-import CreateProjectModal from '../components/Project/CreateProjectModal';
-
 import Spinner from '../components/common/Spinner';
+import Header from '../components/layout/Header';
 import './Dashboard.scss';
 
 interface Project {
@@ -18,11 +17,11 @@ interface Project {
 interface DashboardProps {
   onSelectProject: (projectId: string) => void;
   onOpenSettings: () => void;
+  onCreateProject: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ onSelectProject, onOpenSettings }) => {
+const Dashboard: React.FC<DashboardProps> = ({ onSelectProject, onOpenSettings, onCreateProject }) => {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchProjects = async () => {
@@ -39,11 +38,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onSelectProject, onOpenSettings }
   useEffect(() => {
     fetchProjects();
   }, []);
-
-  const handleCreateSuccess = (projectId: string) => {
-    fetchProjects();
-    onSelectProject(projectId);
-  };
 
 
   const getCategoryIcon = (name: string) => {
@@ -95,29 +89,22 @@ const Dashboard: React.FC<DashboardProps> = ({ onSelectProject, onOpenSettings }
 
       {/* 2. Main Dashboard (Header + Content) */}
       <main className="dashboard-main">
-        {/* Header Section (Toolbar) */}
-        <header className="dashboard-toolbar">
-          <div className="toolbar-left">
-            <span className="toolbar-label">MAGIC PLANNER</span>
-            <div className="divider"></div>
-            <div className="toolbar-info">
-              <span className="title">Project Dashboard</span>
-              <span className="status-badge">
-                {projects.length} Projects
-              </span>
-            </div>
-          </div>
-          
-          <div className="toolbar-right">
-            <button 
-              className="create-btn"
-              onClick={() => setIsModalOpen(true)}
-            >
-              <span className="material-symbols-outlined">add</span>
-              New Project
-            </button>
-          </div>
-        </header>
+        <Header 
+          title="Project Dashboard"
+          subtitle={
+            <span className="status-badge">
+              {projects.length} Projects
+            </span>
+          }
+        >
+          <button 
+            className="header-action-button"
+            onClick={onCreateProject}
+          >
+            <span className="material-symbols-outlined">add</span>
+            New Project
+          </button>
+        </Header>
 
         {/* Content Area */}
         <div className="dashboard-content canvas-grid custom-scrollbar">
@@ -147,7 +134,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSelectProject, onOpenSettings }
                 </div>
                 <button 
                   className="btn-hero flex items-center gap-2 px-6 py-3 rounded-lg text-on-primary font-bold"
-                  onClick={() => setIsModalOpen(true)}
+                  onClick={onCreateProject}
                 >
                   <span className="material-symbols-outlined">add</span>
                   <span>Initialize First Project</span>
@@ -207,47 +194,40 @@ const Dashboard: React.FC<DashboardProps> = ({ onSelectProject, onOpenSettings }
               </div>
             )}
 
-            {/* System Status Bar */}
-            <section className="system-status">
-              <div className="system-status__container">
-                <div className="system-status__item border-l-2 border-primary/20">
-                  <span className="status-label">AI CORE</span>
-                  <div className="status-value flex items-center gap-2">
-                    <div className="status-dot w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_#d2bbff]"></div>
-                    <span className="text-sm font-medium">Operational</span>
-                  </div>
-                </div>
-                <div className="system-status__item border-l-2 border-primary/20">
-                  <span className="status-label">QUEUE</span>
-                  <div className="status-value flex items-center gap-2">
-                    <span className="text-sm font-medium">0 active tasks</span>
-                  </div>
-                </div>
-                <div className="system-status__item border-l-2 border-primary/20">
-                  <span className="status-label">RESOURCES</span>
-                  <div className="status-value flex items-center gap-2">
-                    <span className="text-sm font-medium">12.4GB / 32GB</span>
-                  </div>
-                </div>
-                <div className="system-status__item border-l-2 border-primary/20">
-                  <span className="status-label">VERSION</span>
-                  <div className="status-value flex items-center gap-2">
-                    <span className="text-sm font-medium">v2.5.0-stable</span>
-                  </div>
-                </div>
-              </div>
-            </section>
+      <section className="system-status">
+        <div className="system-status__container">
+          <div className="system-status__item border-l-2 border-primary/20">
+            <span className="status-label">AI CORE</span>
+            <div className="status-value flex items-center gap-2">
+              <div className="status-dot w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_#d2bbff]"></div>
+              <span className="text-sm font-medium">Operational</span>
+            </div>
+          </div>
+          <div className="system-status__item border-l-2 border-primary/20">
+            <span className="status-label">QUEUE</span>
+            <div className="status-value flex items-center gap-2">
+              <span className="text-sm font-medium">0 active tasks</span>
+            </div>
+          </div>
+          <div className="system-status__item border-l-2 border-primary/20">
+            <span className="status-label">RESOURCES</span>
+            <div className="status-value flex items-center gap-2">
+              <span className="text-sm font-medium">12.4GB / 32GB</span>
+            </div>
+          </div>
+          <div className="system-status__item border-l-2 border-primary/20">
+            <span className="status-label">VERSION</span>
+            <div className="status-value flex items-center gap-2">
+              <span className="text-sm font-medium">v2.5.0-stable</span>
+            </div>
           </div>
         </div>
-      </main>
-
-      <CreateProjectModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSuccess={handleCreateSuccess}
-      />
+      </section>
     </div>
-  );
+  </div>
+</main>
+</div>
+);
 };
 
 export default Dashboard;

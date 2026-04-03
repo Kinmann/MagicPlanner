@@ -538,14 +538,55 @@ $glow-secondary: rgba(124, 58, 237, 0.12);
 
 // SimpleMDE Overrides for Dark Mode
 .editor-container {
-  .CodeMirror {
-    background: transparent !important;
-    color: $on-surface !important;
-    border: none !important;
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 14px;
-    padding: 10px;
-  }
+    .CodeMirror {
+      background: transparent !important;
+      color: $on-surface !important;
+      border: none !important;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 14px;
+      padding: 10px;
+
+      // Hide markdown syntax tokens for non-active lines (except lists)
+      .CodeMirror-line:not(.CodeMirror-activeline) {
+        .cm-formatting:not(.cm-formatting-list) {
+          display: none;
+        }
+      }
+
+      // Slightly fade formatting characters even on active line for a cleaner look
+      .cm-formatting {
+        opacity: 0.4;
+        transition: opacity 0.2s;
+      }
+      .CodeMirror-activeline .cm-formatting {
+        opacity: 0.8;
+      }
+
+      // 1. Keep List Markers visible and slightly emphasized
+      .cm-formatting-list {
+        display: inline-block !important;
+        opacity: 0.7 !important;
+        color: $primary !important;
+        font-weight: 700;
+      }
+
+      // 2. Custom Caret (Cursor) Styling
+      .CodeMirror-cursor {
+        border-left: 2px solid $primary !important;
+        background: none !important;
+      }
+
+      // 3. Code Block & Inline Code Styling
+      .cm-comment {
+        font-family: inherit;
+        color: #d2bbff !important; // Vibrant primary-ish color
+        background: rgba(210, 187, 255, 0.08);
+        padding: 1px 4px;
+        border-radius: 4px;
+        opacity: 1 !important;
+        font-weight: 500;
+      }
+    }
 
   .editor-toolbar {
     background: rgba($surface-container-highest, 0.4) !important;

@@ -58,7 +58,7 @@ const CreateProject: React.FC<CreateProjectProps> = ({ onBack, onSuccess }) => {
     toolbar: [
       'bold', 'italic', 'heading', '|', 
       'quote', 'unordered-list', 'ordered-list', '|', 
-      'link', 'image', '|', 
+      'link', 'image', 'code', 'table', '|', 
       'preview', 'side-by-side', 'fullscreen', '|', 
       'guide'
     ] as any,

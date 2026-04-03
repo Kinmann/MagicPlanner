@@ -127,18 +127,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onSelectProject, onOpenSettings, 
                 animate={{ opacity: 1, scale: 1 }}
                 className="empty-state group relative bg-surface-container-high p-12 rounded-xl transition-all duration-300 flex flex-col items-center gap-6"
               >
-                <div className="empty-state__icon text-6xl opacity-30">folder_open</div>
                 <div className="text-center">
                   <h3 className="text-2xl font-bold text-on-surface mb-2">No projects orchestrated yet</h3>
                   <p className="text-on-surface-variant">Start your architectural journey by creating a new AI planning project.</p>
                 </div>
-                <button 
-                  className="btn-hero flex items-center gap-2 px-6 py-3 rounded-lg text-on-primary font-bold"
-                  onClick={onCreateProject}
-                >
-                  <span className="material-symbols-outlined">add</span>
-                  <span>Initialize First Project</span>
-                </button>
               </motion.div>
             ) : (
               <div className="project-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

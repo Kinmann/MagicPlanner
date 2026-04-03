@@ -74,11 +74,20 @@ const PromptView: React.FC<PromptViewProps> = ({ projectId, onBack, onHome }) =>
     );
   }
 
-  const handleCopy = () => {
-     if (project?.raw_input_text) {
-        navigator.clipboard.writeText(project.raw_input_text);
-        alert("프롬프트가 클립보드에 복사되었습니다.");
-     }
+  const handleDeleteProject = async () => {
+    if (!project) return;
+
+    const confirmed = window.confirm(`'${project.project_name}' 프로젝트를 정말 삭제하시겠습니까?\n이 작업은 되돌릴 수 없으나 데이터베이스에는 기록으로 남습니다.`);
+    
+    if (!confirmed) return;
+
+    try {
+      await invoke('delete_project', { projectId: project.project_id });
+      onHome(); // 삭제 성공 시 홈으로 이동
+    } catch (err: any) {
+      console.error("Failed to delete project:", err);
+      alert("프로젝트 삭제에 실패했습니다: " + err);
+    }
   };
 
   return (
@@ -201,9 +210,9 @@ const PromptView: React.FC<PromptViewProps> = ({ projectId, onBack, onHome }) =>
         </div>
 
         <div className="sidebar-footer">
-          <button className="copy-button" onClick={handleCopy}>
-            <span className="material-symbols-outlined">content_copy</span>
-            COPY PROMPT
+          <button className="delete-button" onClick={handleDeleteProject}>
+            <span className="material-symbols-outlined">delete_forever</span>
+            DELETE PROJECT
           </button>
         </div>
       </aside>

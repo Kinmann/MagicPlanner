@@ -1,4 +1,5 @@
 mod commands;
+pub mod schemas;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -114,7 +115,8 @@ pub fn run() {
             commands::get_latest_iteration,
             commands::handle_hitl_action,
             commands::update_node_max_iterations,
-            commands::save_file
+            commands::save_file,
+            commands::delete_project
         ])
         .plugin(tauri_plugin_dialog::init())
         .run(tauri::generate_context!())

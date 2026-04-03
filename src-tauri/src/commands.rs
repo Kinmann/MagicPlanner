@@ -76,13 +76,7 @@ pub struct GenerationIteration {
     pub created_at: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct EvaluationResult {
-    pub score: i32,
-    pub is_pass: bool,
-    pub feedback: String,
-    pub critical_errors: Vec<String>,
-}
+// EvaluationResult is now imported from crate::schemas
 
 #[tauri::command]
 pub async fn get_project_nodes(
@@ -295,6 +289,22 @@ pub async fn create_project(
 }
 
 #[tauri::command]
+pub async fn delete_project(
+    pool: tauri::State<'_, SqlitePool>,
+    project_id: String,
+) -> Result<(), String> {
+    sqlx::query(
+        "UPDATE project SET is_deleted = 1 WHERE project_id = ?"
+    )
+    .bind(project_id)
+    .execute(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn run_pipeline(
     app_handle: tauri::AppHandle,
     pool: tauri::State<'_, SqlitePool>,
@@ -377,6 +387,7 @@ pub async fn run_pipeline(
         // D. 결과 DB 기록 (ERD 준수)
         let iter_id = Uuid::new_v4().to_string();
         let errors_json = serde_json::to_string(&eval.critical_errors).unwrap_or_default();
+        let feedback_json = serde_json::to_string(&eval.feedback).unwrap_or_default();
         
         sqlx::query(
             "INSERT INTO generation_iteration (iteration_id, node_id, iteration_number, generated_draft_json, calculated_score, is_pass, critical_errors_array, actionable_feedback_text, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"
@@ -388,7 +399,7 @@ pub async fn run_pipeline(
         .bind(eval.score)
         .bind(eval.is_pass)
         .bind(errors_json)
-        .bind(eval.feedback.clone())
+        .bind(feedback_json)
         .bind(Utc::now().to_rfc3339())
         .bind(Utc::now().to_rfc3339())
         .execute(&*pool)
@@ -408,19 +419,19 @@ pub async fn run_pipeline(
 
         let _ = app_handle.emit("nodes-updated", ());
 
-        if eval.score > current_best_score {
+        if eval.score >= current_best_score {
             current_best_score = eval.score;
             current_best_content = draft.clone();
         }
 
         println!(">>> Iteration {}: Score = {}, Pass = {}", i, eval.score, eval.is_pass);
         
-        // 조기 종료(Early Stop) 제거. Max Iterations (10회)를 전수 조사하여 최고점을 찾음.
-        // 다음 회차 피드백 반영을 위해 무조건 현재 회차 데이터를 캐싱
+        // 다음 회차 피드백 반영을 위해 루프 내 피드백 조합
         previous_draft = draft;
         previous_feedback = eval.critical_errors.clone();
-        if !eval.feedback.is_empty() {
-            previous_feedback.push(format!("총평: {}", eval.feedback));
+        // 리스트 형태의 피드백을 모두 추가
+        for f in eval.feedback {
+            previous_feedback.push(format!("보강 필요: {}", f));
         }
     }
 
@@ -638,17 +649,15 @@ async fn generate_draft(
         println!("!!! ERROR loading domain schema: {}", e);
         String::new()
     });
-    let schema = std::fs::read_to_string(resource_dir.join(format!("prompts/schemas/{}.json", node_normalized))).unwrap_or_else(|e| {
-        println!("!!! ERROR loading schema JSON: {}", e);
-        String::new()
-    });
+    
+    let schema_obj = crate::schemas::get_schema_for_node(&node_normalized);
     
     let combined_sys_prompt = format!("{}\n\n[DOMAIN SPECIFIC RULE]\n{}", common_prompt, domain_prompt);
-    println!(">>> System Prompt Loaded! Length: {} chars, Schema Length: {} chars", combined_sys_prompt.len(), schema.len());
+    println!(">>> System Prompt Loaded! Length: {} chars", combined_sys_prompt.len());
     
     let mut user_prompt = format!(
-        "다음 사용자의 아이디어를 바탕으로 기획서를 작성하십시오.\n\n[사용자 아이디어]\n{}\n\n[출력 형식 스키마]\n{}",
-        input_text, schema
+        "다음 사용자의 아이디어를 바탕으로 기획서를 작성하십시오.\n\n[사용자 아이디어]\n{}",
+        input_text
     );
 
     if !previous_draft.is_empty() && !previous_feedback.is_empty() {
@@ -660,7 +669,7 @@ async fn generate_draft(
         println!(">>> Appending Previous Feedback to Generator Prompt");
     }
 
-    call_gemini(client, api_key, &combined_sys_prompt, &user_prompt).await
+    call_gemini(client, api_key, &combined_sys_prompt, &user_prompt, schema_obj).await
 }
 
 async fn evaluate_draft(
@@ -669,7 +678,7 @@ async fn evaluate_draft(
     api_key: &str,
     node_type: &str,
     draft: &str,
-) -> Result<EvaluationResult, PipelineError> {
+) -> Result<crate::schemas::EvaluationResult, PipelineError> {
     let node_normalized = node_type.to_lowercase().replace(" ", "_");
     let resource_dir = app_handle.path().resource_dir().map_err(|e: tauri::Error| PipelineError::Internal(e.to_string()))?;
 
@@ -686,54 +695,23 @@ async fn evaluate_draft(
     println!(">>> Evaluator Prompt Loaded! Length: {} chars", combined_sys_prompt.len());
 
     let user_prompt = format!(
-        "다음 작성된 기획서 초안을 제공된 루브릭에 따라 정량적으로 평가하고 JSON으로 반환하십시오.\n\n[기획서 초안]\n{}\n\n[평가 대상 문서 타입]\n{}",
+        "다음 작성된 기획서 초안을 제공된 루브릭에 따라 정량적으로 평가하십시오.\n\n[기획서 초안]\n{}\n\n[평가 대상 문서 타입]\n{}",
         draft, node_type
     );
 
-    let response_text = call_gemini(client, api_key, &combined_sys_prompt, &user_prompt).await?;
+    let schema_obj = crate::schemas::get_schema_for_node("evaluator");
+    let response_text = call_gemini(client, api_key, &combined_sys_prompt, &user_prompt, schema_obj).await?;
     
-    // JSON 추출 (Markdown Block 제거)
+    // JSON 추출 (정형화된 출력으로 인해 바로 파싱 시도, Gemini 2.5 Flash Structured Output 대응)
     let json_str = response_text.trim_start_matches("```json").trim_end_matches("```").trim();
     
-    let parsed: serde_json::Value = serde_json::from_str(json_str)
-        .map_err(|e| PipelineError::Internal(format!("Eval Parsing Error: {} - Content: {}", e, json_str)))?;
+    let eval: crate::schemas::EvaluationResult = serde_json::from_str(json_str)
+        .map_err(|e| PipelineError::Internal(format!("Eval Deserialization Error: {} - Content: {}", e, json_str)))?;
 
-    let score = parsed.get("score")
-        .or_else(|| parsed.get("overall_score"))
-        .or_else(|| parsed.pointer("/evaluation/overall_score"))
-        .or_else(|| parsed.pointer("/evaluation/score"))
-        .and_then(|v| v.as_f64())
-        .map(|f| f as i32)
-        .unwrap_or(0);
-
-    let is_pass = parsed.get("is_pass")
-        .or_else(|| parsed.pointer("/evaluation/is_pass"))
-        .and_then(|v| v.as_bool())
-        .unwrap_or(score >= 80);
-
-    let feedback = parsed.get("feedback")
-        .or_else(|| parsed.get("overall_comment"))
-        .or_else(|| parsed.pointer("/evaluation/overall_comment"))
-        .or_else(|| parsed.pointer("/evaluation/feedback"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("No feedback provided.")
-        .to_string();
-
-    let critical_errors = parsed.get("critical_errors")
-        .or_else(|| parsed.pointer("/evaluation/critical_errors"))
-        .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|i| i.as_str().map(|s| s.to_string())).collect())
-        .unwrap_or_else(|| vec![]);
-
-    Ok(EvaluationResult {
-        score,
-        is_pass,
-        feedback,
-        critical_errors,
-    })
+    Ok(eval)
 }
 
-async fn call_gemini(client: &Client, api_key: &str, sys_prompt: &str, user_prompt: &str) -> Result<String, PipelineError> {
+async fn call_gemini(client: &Client, api_key: &str, sys_prompt: &str, user_prompt: &str, schema_opt: Option<serde_json::Value>) -> Result<String, PipelineError> {
     let model = "gemini-2.5-flash";
     println!(">>> Calling Gemini API ({})", model);
     let url = format!(
@@ -742,16 +720,22 @@ async fn call_gemini(client: &Client, api_key: &str, sys_prompt: &str, user_prom
         api_key
     );
 
+    let mut generation_config = serde_json::json!({
+        "temperature": 0.7,
+        "topP": 0.95,
+        "topK": 40,
+        "maxOutputTokens": 8192,
+        "responseMimeType": "application/json"
+    });
+
+    if let Some(schema) = schema_opt {
+        generation_config.as_object_mut().unwrap().insert("responseSchema".to_string(), schema);
+    }
+
     let body = serde_json::json!({
         "system_instruction": { "parts": { "text": sys_prompt } },
         "contents": { "parts": { "text": user_prompt } },
-        "generationConfig": {
-            "temperature": 0.7,
-            "topP": 0.95,
-            "topK": 40,
-            "maxOutputTokens": 8192,
-            "responseMimeType": "text/plain"
-        }
+        "generationConfig": generation_config
     });
 
     let resp = client.post(&url)

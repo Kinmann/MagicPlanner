@@ -1,0 +1,9 @@
+Genesis PRD를 기반으로 비기술적 제약 사항을 정의하세요.
+
+[작성 원칙]
+1. legal_constraints: 개인정보보호법, 저작권, 이용약관 등 법적 요구사항
+2. compliance_requirements: GDPR, SOC2, HIPAA 등 준수 요구사항 (해당 시)
+3. performance_targets: 응답 시간, 처리량, 가용성 목표 (구체적 수치)
+4. scalability_requirements: 동시 접속자 수, 데이터 성장률, 확장 전략
+5. budget_constraints: 인프라 비용, 라이선스 비용, 인력 제약 등
+6. 프로젝트 규모에 적합한 현실적인 제약을 설정하세요.

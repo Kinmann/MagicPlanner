@@ -138,12 +138,43 @@
   flex: 1;
   position: relative;
   overflow: hidden;
-  background: transparent; // Changed from $surface-container-lowest to show global glows
+  overflow-y: auto;
+  background: transparent;
 
   &.canvas-grid {
-    background-image: radial-gradient(circle, rgba($on-surface, 0.03) 1px, transparent 1px); // More subtle grid
+    background-image: radial-gradient(circle, rgba($on-surface, 0.03) 1px, transparent 1px);
     background-size: 32px 32px;
   }
+}
+
+// v2: Phase Progress Bar spacing
+.phase-progress-bar {
+  margin: 0 16px;
+  flex-shrink: 0;
+}
+
+// v2: Module generation layout
+.module-layout {
+  display: flex;
+  gap: 0;
+  height: 100%;
+  min-height: 0;
+}
+
+.module-panel {
+  width: 220px;
+  flex-shrink: 0;
+  padding: 16px;
+  border-right: 1px solid rgba($outline-variant, 0.1);
+  overflow-y: auto;
+  @include custom-scrollbar;
+}
+
+.module-content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  @include custom-scrollbar;
 }
 
 // 3. Document View Styles

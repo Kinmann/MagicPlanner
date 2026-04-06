@@ -1,0 +1,12 @@
+Genesis PRD를 기반으로 시스템 전체의 기술 스택을 상세히 정의하세요.
+
+[작성 원칙]
+1. 각 기술 선택에 대한 명확한 근거(rationale)를 제시하세요.
+2. frontend: UI 프레임워크, 상태관리, 스타일링 도구
+3. backend: 언어, 프레임워크, ORM
+4. database: RDBMS/NoSQL 선택 및 사유
+5. framework: 주요 미들웨어, 메시지큐, 캐시 등
+6. infrastructure: 클라우드 플랫폼, 컨테이너, 오케스트레이션
+7. ci_cd: CI/CD 파이프라인 도구 및 전략
+8. monitoring: 로깅, 모니터링, 알림 도구
+9. Genesis PRD의 tech_stack과 일관성을 유지하세요.

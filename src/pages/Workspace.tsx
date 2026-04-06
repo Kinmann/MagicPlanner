@@ -4,8 +4,12 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { Store } from '@tauri-apps/plugin-store';
 import { save } from '@tauri-apps/plugin-dialog';
-import { DocumentNode } from '../types/project';
+import { DocumentNode, Project, LocalModule, PipelinePhase } from '../types/project';
 import PipelineBoard from '../components/Project/PipelineBoard';
+import PhaseProgressBar from '../components/Project/PhaseProgressBar';
+import GenesisPrdView from '../components/Project/GenesisPrdView';
+import SadOverview from '../components/Project/SadOverview';
+import ModuleTree from '../components/Project/ModuleTree';
 import Button from '../components/common/Button';
 import Header from "../components/layout/Header";
 import Spinner from '../components/common/Spinner';
@@ -88,6 +92,13 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [dragConstraints, setDragConstraints] = useState({ left: 0, right: 0 });
 
+  // v2: Phase-based state
+  const [project, setProject] = useState<Project | null>(null);
+  const [currentPhase, setCurrentPhase] = useState<PipelinePhase>('GENESIS_PRD');
+  const [activePhase, setActivePhase] = useState<PipelinePhase | null>(null);
+  const [modules, setModules] = useState<LocalModule[]>([]);
+  const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
+
   const maxScore = useMemo(() => {
     if (iterations.length === 0) return 0;
     return Math.max(...iterations.map(it => it.calculated_score || 0));
@@ -121,19 +132,45 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
     return nodes.find(n => n.node_id === selectedNodeId) || null;
   }, [nodes, selectedNodeId]);
 
+  // v2: Fetch project info
+  const fetchProject = useCallback(async () => {
+    try {
+      const proj = await invoke<Project>('get_project', { projectId });
+      setProject(proj);
+      setCurrentPhase(proj.pipeline_phase as PipelinePhase);
+    } catch {}
+  }, [projectId]);
+
+  // v2: Fetch modules
+  const fetchModules = useCallback(async () => {
+    try {
+      const mods = await invoke<LocalModule[]>('get_project_modules', { projectId });
+      setModules(mods);
+      if (mods.length > 0 && !selectedModuleId) {
+        const active = mods.find(m => m.module_state === 'ACTIVE') || mods[0];
+        setSelectedModuleId(active.module_id);
+      }
+    } catch {}
+  }, [projectId, selectedModuleId]);
+
   const fetchNodes = useCallback(async () => {
     try {
       const result = await invoke<DocumentNode[]>('get_project_nodes', { projectId });
       setNodes(result);
       
-      const hasApiError = result.some(n => n.node_state === 'PAUSED_API_ERROR');
+      // MODULE_GENERATION phase에서는 선택된 모듈의 노드만 필터
+      const relevantNodes = currentPhase === 'MODULE_GENERATION' && selectedModuleId
+        ? result.filter(n => n.module_id === selectedModuleId)
+        : result;
+
+      const hasApiError = relevantNodes.some(n => n.node_state === 'PAUSED_API_ERROR');
       if (hasApiError) {
         if (!apiErrorDismissed.current) setShowApiErrorModal(true);
       } else {
         apiErrorDismissed.current = false;
       }
 
-      const hitlNodeFound = result.find(n => n.node_state === 'PAUSED_HITL');
+      const hitlNodeFound = relevantNodes.find(n => n.node_state === 'PAUSED_HITL' && n.node_category === 'MODULE');
       if (hitlNodeFound) {
         setHitlNode(hitlNodeFound);
         if (!hitlDismissed.current) setShowHitlModal(true);
@@ -144,11 +181,13 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
     } catch (err) {
       console.error(err);
     }
-  }, [projectId]);
+  }, [projectId, currentPhase, selectedModuleId]);
 
   useEffect(() => {
+    fetchProject();
     fetchNodes();
-    const interval = setInterval(fetchNodes, 3000);
+    fetchModules();
+    const interval = setInterval(() => { fetchNodes(); fetchProject(); fetchModules(); }, 3000);
     const unlistenStatusPromise = listen<string>('pipeline-status', (event) => {
       setStatusMessage(event.payload);
       setTimeout(() => setStatusMessage(null), 5000);
@@ -156,6 +195,8 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
     
     const unlistenNodesPromise = listen<void>('nodes-updated', () => {
       fetchNodes();
+      fetchProject();
+      fetchModules();
     });
 
     return () => {
@@ -163,7 +204,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
       unlistenStatusPromise.then(u => u());
       unlistenNodesPromise.then(u => u());
     };
-  }, [fetchNodes]);
+  }, [fetchNodes, fetchProject, fetchModules]);
 
   const handleRunNode = async (nodeType: string) => {
     setLoading(true);
@@ -172,9 +213,24 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
       const store = await Store.load('settings.json');
       const apiKeyValue = await store.get<{ value: string }>('gemini_api_key');
       if (!apiKeyValue?.value) throw new Error("API 키가 설정되지 않았습니다.");
+      
       apiErrorDismissed.current = false;
       hitlDismissed.current = false;
-      await invoke('run_pipeline', { projectId, nodeType, apiKey: apiKeyValue.value });
+
+      // v2: MODULE_GENERATION 페이즈인 경우 run_module_pipeline 호출
+      if (currentPhase === 'MODULE_GENERATION' || currentPhase === 'COMPLETED') {
+        if (!selectedModuleId) throw new Error("선택된 모듈이 없습니다.");
+        await invoke('run_module_pipeline', { 
+          projectId, 
+          moduleId: selectedModuleId, 
+          nodeType, 
+          apiKey: apiKeyValue.value 
+        });
+      } else {
+        // 기존 및 기타 페이즈 대응 (Genesis PRD, SAD 등은 각 View에서 별도 처리하지만 보조적 유지)
+        await invoke('run_pipeline', { projectId, nodeType, apiKey: apiKeyValue.value });
+      }
+      
       fetchNodes();
     } catch (err: any) {
       setError(err.toString());
@@ -250,6 +306,14 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
     }
   };
 
+  const handlePhaseClick = (phase: PipelinePhase) => {
+    setActivePhase(phase);
+    setViewMode('BOARD');
+    setSelectedNodeId(null);
+  };
+
+  const displayPhase = activePhase || currentPhase;
+
   return (
     <div className="workspace-layout">
       {/* Background Glows for visual depth (Global) */}
@@ -291,7 +355,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
       <main className="workspace-main">
         {/* Top Toolbar */}
         <Header
-          title={viewMode === 'BOARD' ? "Pipeline Canvas" : "Node Data Analysis"}
+          title={project?.project_name || "Pipeline Canvas"}
           subtitle={viewMode === 'BOARD' ? (
             <span className="status-badge">
               {loading ? 'Running' : 'Ready'}
@@ -329,6 +393,13 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
           )}
         </Header>
 
+        {/* v2: Phase Progress Bar */}
+        <PhaseProgressBar 
+          currentPhase={currentPhase} 
+          activePhase={displayPhase}
+          onPhaseClick={handlePhaseClick}
+        />
+
         {/* Content Area */}
         <div className="workspace-content canvas-grid custom-scrollbar">
         {error && (
@@ -338,132 +409,173 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
             <Button variant="ghost" size="sm" onClick={() => setError(null)}>X</Button>
           </div>
         )}
+
+        {/* v2: Phase-based content */}
         <AnimatePresence mode="wait">
-          {viewMode === 'BOARD' ? (
-            <motion.div 
-              key="board"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="h-full w-full"
-            >
-              <PipelineBoard 
-                nodes={nodes} 
-                onRunNode={handleRunNode} 
-                onViewNode={handleViewNode}
-                onHITLAction={handleHITLAction}
+          {displayPhase === 'GENESIS_PRD' && (
+            <motion.div key="genesis" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <GenesisPrdView
+                projectId={projectId}
+                node={nodes.find(n => n.target_node_type === 'Genesis_PRD') || null}
+                onApprove={async () => {
+                  setLoading(true);
+                  await Promise.all([fetchProject(), fetchNodes()]);
+                  setLoading(false);
+                }}
+                onRefresh={() => { fetchProject(); fetchNodes(); }}
                 onUpdateMaxIterations={handleUpdateMaxIterations}
               />
-
-              {/* Progress Overlay (Bottom Center) */}
-              <div className="global-progress-bar">
-                <div className="progress-card">
-                  <div className="progress-info">
-                    <span className="label">Global Progress</span>
-                    <span className="value">
-                      {Math.round((nodes.filter(n => n.node_state === 'COMPLETED').length / (nodes.length || 1)) * 100)}%
-                    </span>
-                  </div>
-                  <div className="track">
-                    <div 
-                      className="bar" 
-                      style={{ width: `${(nodes.filter(n => n.node_state === 'COMPLETED').length / (nodes.length || 1)) * 100}%` }}
-                    ></div>
-                  </div>
-                  <div className="avatars">
-                    <div className="avatar">
-                      <span className="material-symbols-outlined">smart_toy</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </motion.div>
-          ) : (
-            <motion.div 
-              key={`content-${selectedNodeId}`}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="document-view"
-            >
-              <div className="document-view-container">
-                {/* 1. Revision History Bar */}
-                <div className="revision-history-bar scrollbar-hide" ref={sliderRef}>
-                  <motion.div 
-                    ref={wrapperRef}
-                    className="revision-tabs-wrapper"
-                    drag="x"
-                    dragConstraints={dragConstraints}
-                    dragElastic={0.1}
-                    onDragStart={updateDragConstraints} // Refresh on start just in case
-                  >
-                    {iterations.map((it) => {
-                      const isBest = it.calculated_score === maxScore && maxScore > 0;
-                      return (
-                        <button
-                          key={it.iteration_id}
-                          onClick={() => handleSelectIteration(it)}
-                          className={`revision-tab ${
-                            selectedIteration?.iteration_id === it.iteration_id ? 'active' : ''
-                          } ${isBest ? 'best' : ''}`}
-                        >
-                          <span className="rev-num">Rev #{it.iteration_number}</span>
-                          <div className="rev-score">
-                            <span>{it.calculated_score} PTS</span>
-                            {selectedIteration?.iteration_id === it.iteration_id && <span className="pulse-dot"></span>}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </motion.div>
-                </div>
+          )}
 
-                <div className="document-body">
+          {displayPhase === 'SAD' && (
+            <motion.div key="sad" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              {nodes.find(n => n.target_node_type === 'SAD') ? (
+                <SadOverview
+                  projectId={projectId}
+                  node={nodes.find(n => n.target_node_type === 'SAD') || null}
+                  onModulesCreated={() => { fetchProject(); fetchModules(); fetchNodes(); }}
+                  onRefresh={() => { fetchProject(); fetchNodes(); }}
+                  onUpdateMaxIterations={handleUpdateMaxIterations}
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center h-64 gap-4">
+                  <Spinner size="lg" />
+                  <p className="text-white/50 animate-pulse">SAD 노드를 불러오는 중입니다...</p>
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {(displayPhase === 'MODULE_GENERATION' || displayPhase === 'COMPLETED') && (
+            <motion.div key="modules" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="module-layout">
+              {/* Module Tree Panel */}
+              <div className="module-panel">
+                <ModuleTree
+                  modules={modules}
+                  selectedModuleId={selectedModuleId}
+                  onSelectModule={(id) => {
+                    setSelectedModuleId(id);
+                    setViewMode('BOARD');
+                    setSelectedNodeId(null);
+                  }}
+                />
+              </div>
+
+              {/* Module Pipeline Content */}
+              <div className="module-content">
+                {viewMode === 'BOARD' ? (
+                  <motion.div key="board" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                    <PipelineBoard 
+                      nodes={selectedModuleId ? nodes.filter(n => n.module_id === selectedModuleId) : []} 
+                      onRunNode={handleRunNode} 
+                      onViewNode={handleViewNode}
+                      onHITLAction={handleHITLAction}
+                      onUpdateMaxIterations={handleUpdateMaxIterations}
+                    />
+
+                    {/* Progress Overlay */}
+                    {selectedModuleId && (() => {
+                      const moduleNodes = nodes.filter(n => n.module_id === selectedModuleId);
+                      const completedCount = moduleNodes.filter(n => n.node_state === 'COMPLETED').length;
+                      const total = moduleNodes.length || 1;
+                      return (
+                        <div className="global-progress-bar">
+                          <div className="progress-card">
+                            <div className="progress-info">
+                              <span className="label">Module Progress</span>
+                              <span className="value">{Math.round((completedCount / total) * 100)}%</span>
+                            </div>
+                            <div className="track">
+                              <div className="bar" style={{ width: `${(completedCount / total) * 100}%` }}></div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </motion.div>
+                ) : (
                   <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="content-header"
+                    key={`content-${selectedNodeId}`}
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="document-view"
                   >
-                    <div className="header-left">
-                      <h2>{selectedNode?.target_node_type} Synthesis</h2>
-                      <p>Orchestrated intelligence output for precise software architecture and planning.</p>
-                    </div>
-                    
-                    <div className="header-right">
-                      {/* 2. Pass Score Gauge (Moved here) */}
-                      <div className="pass-score-gauge">
-                        <span className="gauge-label">Score</span>
-                        <span className="gauge-value">{selectedIteration?.calculated_score || 0}</span>
-                        <div className="gauge-dots">
-                          <div className="dot"></div>
-                          <div className="dot"></div>
-                          <div className="dot"></div>
+                    <div className="document-view-container">
+                      <div className="revision-history-bar scrollbar-hide" ref={sliderRef}>
+                        <motion.div 
+                          ref={wrapperRef}
+                          className="revision-tabs-wrapper"
+                          drag="x"
+                          dragConstraints={dragConstraints}
+                          dragElastic={0.1}
+                          onDragStart={updateDragConstraints}
+                        >
+                          {iterations.map((it) => {
+                            const isBest = it.calculated_score === maxScore && maxScore > 0;
+                            return (
+                              <button
+                                key={it.iteration_id}
+                                onClick={() => handleSelectIteration(it)}
+                                className={`revision-tab ${
+                                  selectedIteration?.iteration_id === it.iteration_id ? 'active' : ''
+                                } ${isBest ? 'best' : ''}`}
+                              >
+                                <span className="rev-num">Rev #{it.iteration_number}</span>
+                                <div className="rev-score">
+                                  <span>{it.calculated_score} PTS</span>
+                                  {selectedIteration?.iteration_id === it.iteration_id && <span className="pulse-dot"></span>}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </motion.div>
+                      </div>
+
+                      <div className="document-body">
+                        <motion.div 
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="content-header"
+                        >
+                          <div className="header-left">
+                            <h2>{selectedNode?.target_node_type} Synthesis</h2>
+                            <p>Orchestrated intelligence output for precise software architecture and planning.</p>
+                          </div>
+                          <div className="header-right">
+                            <div className="pass-score-gauge">
+                              <span className="gauge-label">Score</span>
+                              <span className="gauge-value">{selectedIteration?.calculated_score || 0}</span>
+                              <div className="gauge-dots">
+                                <div className="dot"></div><div className="dot"></div><div className="dot"></div>
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+
+                        <div className="code-window">
+                          <div className="code-content">
+                            {nodeContent ? (
+                              <pre>
+                                {(() => {
+                                  try {
+                                    const json = typeof nodeContent === 'string' ? JSON.parse(nodeContent) : nodeContent;
+                                    return renderJson(json);
+                                  } catch (e) {
+                                    return nodeContent;
+                                  }
+                                })()}
+                              </pre>
+                            ) : (
+                              <div className="opacity-30 italic">생성된 내용이 없습니다.</div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
                   </motion.div>
-
-                  {/* 3. Code Window */}
-                  <div className="code-window">
-
-                    <div className="code-content">
-                      {nodeContent ? (
-                        <pre>
-                          {(() => {
-                            try {
-                              const json = typeof nodeContent === 'string' ? JSON.parse(nodeContent) : nodeContent;
-                              return renderJson(json);
-                            } catch (e) {
-                              return nodeContent;
-                            }
-                          })()}
-                        </pre>
-                      ) : (
-                        <div className="opacity-30 italic">생성된 내용이 없습니다.</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
             </motion.div>
           )}

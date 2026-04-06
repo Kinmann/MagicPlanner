@@ -1,0 +1,13 @@
+모듈 목록을 기반으로 모듈 간 의존성을 정의하고 권장 개발 순서를 제시하세요.
+
+[작성 원칙]
+1. dependency_type: "API", "DATA", "EVENT", "SHARED_LIB" 중 택
+   - API: 한 모듈이 다른 모듈의 REST/gRPC API를 호출
+   - DATA: 한 모듈이 다른 모듈의 데이터베이스 테이블을 참조
+   - EVENT: 이벤트/메시지 기반 비동기 통신
+   - SHARED_LIB: 공유 라이브러리/유틸리티 참조
+2. 순환 의존성(circular dependency)이 없도록 설계하세요.
+3. recommended_build_order: 의존성 기반으로 빌드/개발 순서 제안
+   - 의존성이 적은 기초 모듈부터, 의존성이 많은 상위 모듈 순서로
+4. from_module → to_module: "from이 to에 의존한다"는 의미
+5. 모든 모듈이 recommended_build_order에 포함되어야 합니다.

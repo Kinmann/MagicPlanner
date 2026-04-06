@@ -64,13 +64,22 @@ const renderPRD = (data: any) => {
   md += `## 2. 목표 (Goals)\n${data.goals?.map((g: any) => `- ${g}`).join('\n') || '(목표 정보 없음)'}\n\n`;
   
   md += `## 3. 핵심 기능 (Core Features)\n${data.core_features?.map((f: any) => `### ${f.feature_name || '기능명 없음'} [${f.priority || '-'}]\n- ${f.description || ''}`).join('\n\n') || '(주요 기능 없음)'}\n\n`;
+
+  if (data.tech_stack) {
+    md += `## 4. 기술 스택 (Tech Stack)\n`;
+    md += `- **Frontend:** ${data.tech_stack.frontend || '-'}\n`;
+    md += `- **Backend:** ${data.tech_stack.backend || '-'}\n`;
+    md += `- **Database:** ${data.tech_stack.database || '-'}\n`;
+    md += `- **Framework:** ${data.tech_stack.framework || '-'}\n`;
+    md += `- **Infrastructure:** ${data.tech_stack.infrastructure || '-'}\n\n`;
+  }
   
   if (data.user_stories && data.user_stories.length > 0) {
-    md += `## 4. 유저 스토리 (User Stories)\n${data.user_stories.map((s: string) => `- ${s}`).join('\n')}\n\n`;
+    md += `## 5. 유저 스토리 (User Stories)\n${data.user_stories.map((s: string) => `- ${s}`).join('\n')}\n\n`;
   }
   
   if (data.constraints && data.constraints.length > 0) {
-    md += `## 5. 제약 사항 (Constraints)\n${data.constraints.map((c: string) => `- ${c}`).join('\n')}\n\n`;
+    md += `## 6. 제약 사항 (Constraints)\n${data.constraints.map((c: string) => `- ${c}`).join('\n')}\n\n`;
   }
   
   return md;
@@ -133,14 +142,26 @@ const renderTC = (data: any) => {
 
 const renderAPI = (data: any) => {
   let md = `## 1. API 명세서 (API Specification)\n\n`;
+  
+  const parseSafe = (jsonStr: any) => {
+    if (typeof jsonStr !== 'string') return jsonStr;
+    try {
+      return JSON.parse(jsonStr);
+    } catch (e) {
+      return jsonStr;
+    }
+  };
+
   data.endpoints?.forEach((ep: any) => {
     md += `### [${ep.method || 'GET'}] ${ep.path || '/'}\n`;
     md += `- **요약:** ${ep.summary || ''}\n`;
     md += `- **설명:** ${ep.description || ''}\n`;
     
     // Request Body
-    if (ep.request_body && Object.keys(ep.request_body).length > 0) {
-      md += `- **Request Body:** \n\`\`\`json\n${JSON.stringify(ep.request_body, null, 2)}\n\`\`\`\n`;
+    const reqBody = parseSafe(ep.request_body);
+    if (reqBody && (typeof reqBody === 'object' ? Object.keys(reqBody).length > 0 : reqBody.length > 0)) {
+      const bodyContent = typeof reqBody === 'string' ? reqBody : JSON.stringify(reqBody, null, 2);
+      md += `- **Request Body:** \n\`\`\`json\n${bodyContent}\n\`\`\`\n`;
     } else {
       md += `- **Request Body:** 없음\n`;
     }
@@ -150,8 +171,10 @@ const renderAPI = (data: any) => {
       md += `- **Responses:**\n`;
       ep.responses.forEach((res: any) => {
         md += `  - **[${res.status_code || 200}]** ${res.description || ''}\n`;
-        if (res.schema && Object.keys(res.schema).length > 0) {
-          md += `    \`\`\`json\n${JSON.stringify(res.schema, null, 2).split('\n').map(l => '    ' + l).join('\n')}\n    \`\`\`\n`;
+        const resSchema = parseSafe(res.schema);
+        if (resSchema && (typeof resSchema === 'object' ? Object.keys(resSchema).length > 0 : resSchema.length > 0)) {
+          const schemaContent = typeof resSchema === 'string' ? resSchema : JSON.stringify(resSchema, null, 2);
+          md += `    \`\`\`json\n${schemaContent.split('\n').map(l => '    ' + l).join('\n')}\n    \`\`\`\n`;
         }
       });
     }

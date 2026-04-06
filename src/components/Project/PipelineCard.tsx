@@ -133,7 +133,7 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
                 ) : (
                   <>
                     <span className="value">{node.current_iteration} / {node.max_iterations}</span>
-                    {(node.node_state === 'PENDING' || node.node_state === 'READY') && (
+                    {['PENDING', 'READY', 'PAUSED_HITL', 'PAUSED_API_ERROR'].includes(node.node_state) && (
                       <button 
                         className="edit-btn" 
                         onClick={(e) => {

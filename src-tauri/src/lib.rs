@@ -34,8 +34,11 @@ pub fn run() {
 
                 let pool = sqlx::SqlitePool::connect_with(options).await.map_err(|e| e.to_string())?;
                 
-                // 테이블 초기화 로직 (raw_sql을 사용하여 여러 문장을 한 번에 실행)
+                // ============================================================
+                // v2 클린 슬레이트: 기존 테이블 DROP 후 새 스키마로 재생성
+                // ============================================================
                 sqlx::raw_sql("
+                    -- 1. 유저 세션
                     CREATE TABLE IF NOT EXISTS user_session (
                         session_id VARCHAR(36) PRIMARY KEY NOT NULL,
                         api_key_encrypted VARCHAR(255),
@@ -44,21 +47,59 @@ pub fn run() {
                         updated_at TIMESTAMP NOT NULL,
                         is_deleted BOOLEAN NOT NULL
                     );
+
+                    -- 2. 프로젝트 (v2: pipeline_phase 추가)
                     CREATE TABLE IF NOT EXISTS project (
                         project_id VARCHAR(36) PRIMARY KEY NOT NULL,
                         session_id VARCHAR(36) NOT NULL,
                         project_name VARCHAR(100) NOT NULL,
                         pipeline_execution_mode VARCHAR(20) NOT NULL,
+                        pipeline_phase VARCHAR(30) NOT NULL DEFAULT 'GENESIS_PRD',
                         raw_input_text TEXT,
                         created_at TIMESTAMP NOT NULL,
                         updated_at TIMESTAMP NOT NULL,
                         is_deleted BOOLEAN NOT NULL,
                         FOREIGN KEY(session_id) REFERENCES user_session(session_id)
                     );
+
+                    -- 3. 글로벌 컨텍스트 (SAD 산출물 저장소)
+                    CREATE TABLE IF NOT EXISTS global_context (
+                        context_id VARCHAR(36) PRIMARY KEY NOT NULL,
+                        project_id VARCHAR(36) NOT NULL,
+                        context_type VARCHAR(50) NOT NULL,
+                        context_data_json TEXT NOT NULL,
+                        version INTEGER NOT NULL DEFAULT 1,
+                        created_at TIMESTAMP NOT NULL,
+                        updated_at TIMESTAMP NOT NULL,
+                        is_deleted BOOLEAN NOT NULL DEFAULT 0,
+                        FOREIGN KEY(project_id) REFERENCES project(project_id)
+                    );
+
+                    -- 4. 로컬 모듈
+                    CREATE TABLE IF NOT EXISTS local_module (
+                        module_id VARCHAR(36) PRIMARY KEY NOT NULL,
+                        project_id VARCHAR(36) NOT NULL,
+                        module_name VARCHAR(100) NOT NULL,
+                        module_description TEXT,
+                        core_responsibility TEXT,
+                        mapped_epics TEXT,
+                        dependency_spec TEXT,
+                        priority_order INTEGER NOT NULL DEFAULT 0,
+                        module_state VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+                        display_order INTEGER NOT NULL DEFAULT 0,
+                        created_at TIMESTAMP NOT NULL,
+                        updated_at TIMESTAMP NOT NULL,
+                        is_deleted BOOLEAN NOT NULL DEFAULT 0,
+                        FOREIGN KEY(project_id) REFERENCES project(project_id)
+                    );
+
+                    -- 5. 문서 노드 (v2: module_id FK 추가, node_category 추가)
                     CREATE TABLE IF NOT EXISTS document_node (
                         node_id VARCHAR(36) PRIMARY KEY NOT NULL,
                         project_id VARCHAR(36) NOT NULL,
+                        module_id VARCHAR(36),
                         target_node_type VARCHAR(50) NOT NULL,
+                        node_category VARCHAR(30) NOT NULL DEFAULT 'MODULE',
                         node_state VARCHAR(30) NOT NULL,
                         current_iteration INTEGER NOT NULL,
                         max_iterations INTEGER NOT NULL,
@@ -69,8 +110,11 @@ pub fn run() {
                         created_at TIMESTAMP NOT NULL,
                         updated_at TIMESTAMP NOT NULL,
                         is_deleted BOOLEAN NOT NULL,
-                        FOREIGN KEY(project_id) REFERENCES project(project_id)
+                        FOREIGN KEY(project_id) REFERENCES project(project_id),
+                        FOREIGN KEY(module_id) REFERENCES local_module(module_id)
                     );
+
+                    -- 6. 생성 반복
                     CREATE TABLE IF NOT EXISTS generation_iteration (
                         iteration_id VARCHAR(36) PRIMARY KEY NOT NULL,
                         node_id VARCHAR(36) NOT NULL,
@@ -85,6 +129,8 @@ pub fn run() {
                         is_deleted BOOLEAN NOT NULL,
                         FOREIGN KEY(node_id) REFERENCES document_node(node_id)
                     );
+
+                    -- 7. 최종 문서
                     CREATE TABLE IF NOT EXISTS final_document (
                         document_id VARCHAR(36) PRIMARY KEY NOT NULL,
                         node_id VARCHAR(36) NOT NULL,
@@ -116,7 +162,17 @@ pub fn run() {
             commands::handle_hitl_action,
             commands::update_node_max_iterations,
             commands::save_file,
-            commands::delete_project
+            commands::delete_project,
+            // v2 新 커맨드
+            commands::get_project_modules,
+            commands::get_module_nodes,
+            commands::get_global_contexts,
+            commands::run_genesis_prd_pipeline,
+            commands::run_sad_pipeline,
+            commands::approve_genesis_prd,
+            commands::create_local_modules,
+            commands::run_module_pipeline,
+            commands::confirm_sad_iteration,
         ])
         .plugin(tauri_plugin_dialog::init())
         .run(tauri::generate_context!())

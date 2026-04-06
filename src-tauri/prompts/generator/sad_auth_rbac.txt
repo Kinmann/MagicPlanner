@@ -1,0 +1,9 @@
+Genesis PRD를 기반으로 인증(Auth) 및 역할 기반 접근 제어(RBAC) 명세를 작성하세요.
+
+[작성 원칙]
+1. auth_method: JWT, OAuth2, Session 등 구체적인 인증 방식을 선택하고 근거를 제시
+2. token_strategy: Access/Refresh 토큰 전략, 만료 시간, 갱신 로직
+3. roles: 시스템에 필요한 모든 역할을 도출 (예: admin, user, guest)
+4. 각 역할의 permissions는 CRUD 수준으로 구체적으로 (예: "user:read", "post:write")
+5. access_policies: 리소스별 접근 정책 (예: "자신의 데이터만 수정 가능")
+6. 보안 모범 사례를 반영 (비밀번호 해싱, rate limiting, CORS 등)

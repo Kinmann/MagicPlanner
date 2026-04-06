@@ -1,0 +1,9 @@
+Genesis PRD를 기반으로 전체 시스템의 코어 ERD(Entity-Relationship Diagram)를 설계하세요.
+
+[작성 원칙]
+1. Genesis PRD의 모든 Epic/Feature를 커버하는 핵심 엔티티를 도출하세요.
+2. 각 엔티티에는 최소 PK, 주요 속성, 외래키, 생성일/수정일을 포함하세요.
+3. 관계는 1:1, 1:N, N:M을 명시하고, N:M은 중간 테이블을 명시하세요.
+4. data_type은 STRING, INTEGER, BOOLEAN, TIMESTAMP, TEXT, JSON 중 택하세요.
+5. 모든 엔티티에 is_deleted(soft delete) 패턴을 적용하세요.
+6. 확장성을 고려하여 정규화를 유지하되: 실용적인 수준에서 타협하세요.

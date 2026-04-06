@@ -1,0 +1,10 @@
+Genesis PRD를 기반으로 API 인터페이스 규칙 및 에러 코드 체계를 정의하세요.
+
+[작성 원칙]
+1. api_versioning_strategy: URL 기반(v1/v2) 또는 헤더 기반 등 버전 관리 전략
+2. response_format: 표준 응답 형식 (예: {success, data, error, meta})
+3. pagination_strategy: offset, cursor, keyset 중 선택 및 근거
+4. error_codes: 최소 10개 이상의 표준 에러 코드 정의
+   - HTTP 상태 코드와 커스텀 비즈니스 에러 코드를 구분
+   - 각 에러에 대한 사용자 친화적 메시지와 개발자용 설명 포함
+5. 일관된 네이밍 컨벤션 (camelCase vs snake_case 등)

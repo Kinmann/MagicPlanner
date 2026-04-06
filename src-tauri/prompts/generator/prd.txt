@@ -24,7 +24,16 @@
 ### D. 모호성 배제 및 제약 사항(Constraints) 정의
 - 가정(Assumption)과 범위 외(Out of Scope) 사항을 명확히 격리.
 
-### E. 창의적 확장 (Evolution Mechanism)
+### E. 기술 스택 정의 (Tech Stack Definition)
+- 사용자의 요구사항과 프로젝트의 규모를 고려하여 최적의 기술 스택을 제안함.
+- `tech_stack` 필드는 아래의 구조를 가지며 각 항목을 명확히 정의함:
+    - `frontend`: 프론트엔드 언어 및 프레임워크 (예: React, Next.js, Tailwind CSS)
+    - `backend`: 백엔드 언어 및 프레임워크 (예: Rust, Axum, Node.js)
+    - `database`: 사용될 데이터베이스 (예: PostgreSQL, Redis)
+    - `framework`: 애플리케이션 프레임워크 (예: Tauri, Expo)
+    - `infrastructure`: 배포 및 인프라 (예: AWS, GitHub Actions, Vercel)
+
+### F. 창의적 확장 (Evolution Mechanism)
 - 1~3회차: 구조화 및 필독 기능 정의 집중.
 - 4~7회차: 혁신적 UX 및 차별화 기능 제안 (측면 사고 적용).
 - 8회차 이상: 시스템적 실현 가능성 점검 및 데이터 정합성 정제.

@@ -33,12 +33,22 @@ pub struct PrdCoreFeature {
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct PrdTechStack {
+    pub frontend: String,
+    pub backend: String,
+    pub database: String,
+    pub framework: String,
+    pub infrastructure: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct PrdSchema {
     pub project_name: String,
     pub overview: PrdOverview,
     pub goals: Vec<String>,
     pub core_features: Vec<PrdCoreFeature>,
     pub user_stories: Vec<String>,
+    pub tech_stack: PrdTechStack,
     pub constraints: Vec<String>,
 }
 
@@ -184,7 +194,7 @@ pub struct WireframeSchema {
 pub struct ApiSpecResponse {
     pub status_code: i32,
     pub description: String,
-    pub schema: serde_json::Value,
+    pub schema: String, // Changed from serde_json::Value
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -193,7 +203,7 @@ pub struct ApiSpecEndpoint {
     pub path: String,
     pub summary: String,
     pub description: String,
-    pub request_body: serde_json::Value,
+    pub request_body: String, // Changed from serde_json::Value
     pub responses: Vec<ApiSpecResponse>,
 }
 
@@ -257,21 +267,21 @@ fn resolve_refs(value: &mut serde_json::Value, definitions: &serde_json::Value) 
 /// Flattens a JSON Schema by inlining all definitions and removing unsupported metadata.
 /// Recursively cleans and flattens a JSON Schema for Gemini's strict Structured Outputs API.
 fn flatten_schema(mut schema: serde_json::Value) -> serde_json::Value {
+    // 1. Resolve definitions if present at this level (usually only at root)
+    let definitions = if let Some(map) = schema.as_object_mut() {
+        map.remove("definitions").or_else(|| map.remove("$defs"))
+    } else {
+        None
+    };
+
+    if let Some(defs) = definitions {
+        resolve_refs(&mut schema, &defs);
+        // Resolve refs might have changed the structure, recurse to process the new structure
+        return flatten_schema(schema);
+    }
+
     match &mut schema {
         serde_json::Value::Object(map) => {
-            // 1. Resolve definitions if present at this level (usually only at root)
-            let definitions = map.remove("definitions")
-                .or_else(|| map.remove("$defs"));
-            if let Some(defs) = definitions {
-                resolve_refs(&mut schema, &defs);
-                // Re-borrow map after schema might have changed
-                if let Some(new_map) = schema.as_object_mut() {
-                    // Continue with cleaning the newly resolved map
-                    let cloned_val = serde_json::Value::Object(new_map.clone());
-                    return flatten_schema(cloned_val);
-                }
-            }
-
             // 2. Remove Gemini-unsupported keys
             map.remove("$schema");
             map.remove("title");
@@ -308,7 +318,15 @@ fn flatten_schema(mut schema: serde_json::Value) -> serde_json::Value {
                 }
             }
 
-            // 5. Recurse into properties, items, etc.
+            // 5. Recurse into properties and ensure all are listed in "required"
+            let required_keys: Option<Vec<String>> = map.get("properties")
+                .and_then(|p| p.as_object())
+                .map(|p| p.keys().cloned().collect());
+
+            if let Some(keys) = required_keys {
+                map.insert("required".to_string(), serde_json::to_value(keys).unwrap_or(serde_json::json!([])));
+            }
+
             if let Some(properties) = map.get_mut("properties") {
                 if let Some(props_map) = properties.as_object_mut() {
                     for v in props_map.values_mut() {
@@ -329,6 +347,10 @@ fn flatten_schema(mut schema: serde_json::Value) -> serde_json::Value {
     }
     schema
 }
+pub fn get_evaluation_schema() -> serde_json::Value {
+    let schema = schemars::schema_for!(EvaluationResult);
+    flatten_schema(serde_json::to_value(schema).unwrap())
+}
 
 pub fn get_schema_for_node(node_type: &str) -> Option<serde_json::Value> {
     let schema_val = match node_type.to_lowercase().replace(" ", "_").as_str() {
@@ -341,6 +363,18 @@ pub fn get_schema_for_node(node_type: &str) -> Option<serde_json::Value> {
         "api_spec" => schemars::schema_for!(ApiSpecSchema),
         "tc" => schemars::schema_for!(TcSchema),
         "evaluator" => schemars::schema_for!(EvaluationResult),
+        // v2: Genesis PRD
+        "genesis_prd" => schemars::schema_for!(GenesisPrdSchema),
+        // v2: SAD 글로벌 5종
+        "sad_core_erd" => schemars::schema_for!(SadCoreErdSchema),
+        "sad_auth_rbac" => schemars::schema_for!(SadAuthRbacSchema),
+        "sad_interface_error" => schemars::schema_for!(SadInterfaceErrorSchema),
+        "sad_tech_stack" => schemars::schema_for!(SadTechStackSchema),
+        "sad_non_tech" => schemars::schema_for!(SadNonTechSchema),
+        // v2: SAD 모듈 분할 3종
+        "sad_module_list" => schemars::schema_for!(SadModuleListSchema),
+        "sad_epic_mapping" => schemars::schema_for!(SadEpicMappingSchema),
+        "sad_module_deps" => schemars::schema_for!(SadModuleDepsSchema),
         _ => return None,
     };
     
@@ -348,4 +382,236 @@ pub fn get_schema_for_node(node_type: &str) -> Option<serde_json::Value> {
     
     // Gemini API responseSchema requires a flattened, self-contained schema (no $ref/definitions)
     Some(flatten_schema(val))
+}
+
+// ============================================================
+// v2: Genesis PRD Schema
+// ============================================================
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct GenesisPrdMetadata {
+    pub project_name: String,
+    pub version: String, // pattern: "^[0-9]+\.[0-9]+\.[0-9]+$"
+    pub generated_at: String, // format: "date-time"
+    pub status: String, // enum: ["DRAFT", "AI_EVALUATED", "HUMAN_APPROVED"]
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct GenesisPrdBusinessContext {
+    pub product_vision: String,
+    pub target_market: String,
+    pub success_metrics: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct GenesisPrdUserRole {
+    pub role_id: String, // pattern: "^ROLE_[A-Z0-9_]+$"
+    pub role_name: String,
+    pub permissions_level: String, // enum: ["GUEST", "USER", "ADMIN", "SYSTEM"]
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct GenesisPrdEpic {
+    pub epic_id: String, // pattern: "^EPIC_[A-Z0-9_]+$"
+    pub title: String,
+    pub description: String,
+    pub target_roles: Vec<String>, // role_id references
+    pub acceptance_criteria: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct GenesisPrdGlobalConstraints {
+    pub compliance: Vec<String>,
+    pub performance: Vec<String>,
+    pub legacy_integrations: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct GenesisPrdFrontend {
+    pub framework: String, // enum: ["REACT", "NEXT_JS", "VUE", "SVELTE"]
+    pub state_management: String,
+    pub ui_library: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct GenesisPrdBackend {
+    pub runtime: String, // enum: ["NODE_JS", "PYTHON", "GO", "RUST"]
+    pub framework: String,
+    pub language_version: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct GenesisPrdDatabase {
+    pub primary: String,
+    pub vector_db: String,
+    pub caching: Option<String>, // enum: ["REDIS", "MEMCACHED", "NONE"]
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct GenesisPrdInfrastructure {
+    pub platform: String, // enum: ["AWS", "AZURE", "GCP", "ON_PREMISE"]
+    pub containerization: String, // enum: ["DOCKER", "KUBERNETES", "NONE"]
+    pub ci_cd_tool: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct GenesisPrdAiModelSpec {
+    pub model_family: String,
+    pub version: String,
+    pub temperature: Option<f64>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct GenesisPrdInterfaceProtocols {
+    pub api_type: String, // enum: ["REST", "GRAPHQL", "GRPC"]
+    pub auth_protocol: String, // enum: ["OAUTH2", "JWT", "SAML"]
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct GenesisPrdTechStack {
+    pub frontend: GenesisPrdFrontend,
+    pub backend: GenesisPrdBackend,
+    pub database: GenesisPrdDatabase,
+    pub infrastructure: GenesisPrdInfrastructure,
+    pub ai_model_spec: GenesisPrdAiModelSpec,
+    pub interface_protocols: GenesisPrdInterfaceProtocols,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct GenesisPrdSchema {
+    pub metadata: GenesisPrdMetadata,
+    pub business_context: GenesisPrdBusinessContext,
+    pub user_roles: Vec<GenesisPrdUserRole>,
+    pub core_epics: Vec<GenesisPrdEpic>,
+    pub global_constraints: GenesisPrdGlobalConstraints,
+    pub tech_stack: GenesisPrdTechStack,
+}
+
+// ============================================================
+// v2: SAD Global Context 5종
+// ============================================================
+
+// 1. Core ERD
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SadEntity {
+    pub entity_name: String,
+    pub description: String,
+    pub attributes: Vec<SadEntityAttribute>,
+}
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SadEntityAttribute {
+    pub name: String,
+    pub data_type: String,
+    pub is_primary_key: bool,
+    pub is_nullable: bool,
+    pub description: String,
+}
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SadRelationship {
+    pub from_entity: String,
+    pub to_entity: String,
+    pub relationship_type: String,
+    pub description: String,
+}
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SadCoreErdSchema {
+    pub entities: Vec<SadEntity>,
+    pub relationships: Vec<SadRelationship>,
+}
+
+// 2. Auth & RBAC
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SadRole {
+    pub role_name: String,
+    pub description: String,
+    pub permissions: Vec<String>,
+}
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SadAuthRbacSchema {
+    pub auth_method: String,
+    pub token_strategy: String,
+    pub roles: Vec<SadRole>,
+    pub access_policies: Vec<String>,
+}
+
+// 3. Interface & Error
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SadErrorCode {
+    pub code: String,
+    pub http_status: i32,
+    pub message: String,
+    pub description: String,
+}
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SadInterfaceErrorSchema {
+    pub api_versioning_strategy: String,
+    pub response_format: String,
+    pub pagination_strategy: String,
+    pub error_codes: Vec<SadErrorCode>,
+}
+
+// 4. Tech Stack
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SadTechStackSchema {
+    pub frontend: String,
+    pub backend: String,
+    pub database: String,
+    pub framework: String,
+    pub infrastructure: String,
+    pub ci_cd: String,
+    pub monitoring: String,
+    pub rationale: Vec<String>,
+}
+
+// 5. Non-technical
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SadNonTechSchema {
+    pub legal_constraints: Vec<String>,
+    pub compliance_requirements: Vec<String>,
+    pub performance_targets: Vec<String>,
+    pub scalability_requirements: Vec<String>,
+    pub budget_constraints: Vec<String>,
+}
+
+// ============================================================
+// v2: SAD Module Split 3종
+// ============================================================
+
+// 6. Module List
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SadModuleEntry {
+    pub module_name: String,
+    pub description: String,
+    pub core_responsibility: String,
+    pub priority_order: i32,
+}
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SadModuleListSchema {
+    pub modules: Vec<SadModuleEntry>,
+}
+
+// 7. Epic Mapping
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SadEpicModuleMapping {
+    pub epic_id: String,
+    pub epic_name: String,
+    pub mapped_modules: Vec<String>,
+}
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SadEpicMappingSchema {
+    pub mappings: Vec<SadEpicModuleMapping>,
+}
+
+// 8. Module Dependencies
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SadModuleDependency {
+    pub from_module: String,
+    pub to_module: String,
+    pub dependency_type: String,
+    pub description: String,
+}
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SadModuleDepsSchema {
+    pub dependencies: Vec<SadModuleDependency>,
+    pub recommended_build_order: Vec<String>,
 }

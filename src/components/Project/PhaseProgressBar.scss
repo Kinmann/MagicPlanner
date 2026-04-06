@@ -1,0 +1,96 @@
+.phase-progress-bar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 12px 24px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 20px;
+}
+
+.phase-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    .phase-label {
+      color: #fff;
+      text-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
+    }
+    .phase-dot {
+      border-color: rgba(255, 255, 255, 0.5);
+      background: rgba(255, 255, 255, 0.15);
+    }
+  }
+
+  &:active {
+    transform: translateY(0);
+    opacity: 0.8;
+  }
+
+  &.completed {
+    .phase-dot {
+      background: rgba(74, 222, 128, 0.15);
+      border-color: #4ade80;
+    }
+    .phase-label {
+      color: rgba(74, 222, 128, 0.8);
+    }
+    &:hover .phase-label {
+      color: #4ade80;
+    }
+  }
+
+  &.current {
+    .phase-dot {
+      background: rgba(139, 92, 246, 0.25);
+      border-color: #8b5cf6;
+      box-shadow: 0 0 12px rgba(139, 92, 246, 0.4);
+      animation: pulseDot 2s ease-in-out infinite;
+    }
+    .phase-number {
+      color: #c4b5fd;
+      font-weight: 700;
+    }
+    .phase-label {
+      color: #c4b5fd;
+      font-weight: 600;
+    }
+  }
+
+  &.active:not(.current) {
+    .phase-dot {
+      border-color: #fff;
+      background: rgba(255, 255, 255, 0.2);
+    }
+    .phase-label {
+      color: #fff;
+      font-weight: 600;
+    }
+  }
+}
+
+.phase-connector {
+  flex: 1;
+  height: 2px;
+  min-width: 24px;
+  max-width: 60px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 0 8px;
+  border-radius: 2px;
+  transition: background 0.3s ease;
+
+  &.completed {
+    background: linear-gradient(90deg, #4ade80, #22d3ee);
+  }
+}
+
+@keyframes pulseDot {
+  0%, 100% { box-shadow: 0 0 12px rgba(139, 92, 246, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(139, 92, 246, 0.6); }
+}

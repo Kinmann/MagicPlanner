@@ -1,0 +1,8 @@
+Genesis PRD의 Epic 목록과 모듈 목록을 기반으로 Epic-Module 매핑을 작성하세요.
+
+[작성 원칙]
+1. 모든 Epic은 최소 1개 모듈에 매핑되어야 합니다.
+2. 1개 Epic이 여러 모듈에 걸칠 수 있습니다.
+3. epic_id와 epic_name은 Genesis PRD에 정의된 것과 정확히 일치해야 합니다.
+4. mapped_modules에는 모듈 목록(sad_module_list)에서 정의된 module_name을 사용하세요.
+5. 매핑에 누락된 Epic이나 모듈이 없는지 교차 검증하세요.

@@ -22,6 +22,21 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({ projectId, node, onAppr
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [showRaw, setShowRaw] = useState(false);
+
+  // 모든 키를 snake_case로 정규화하는 헬퍼 함수
+  const normalizeKeys = (obj: any): any => {
+    if (Array.isArray(obj)) {
+      return obj.map(normalizeKeys);
+    } else if (obj !== null && typeof obj === 'object') {
+      return Object.keys(obj).reduce((acc: any, key) => {
+        const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`).replace(/^_/, '');
+        acc[snakeKey] = normalizeKeys(obj[key]);
+        return acc;
+      }, {});
+    }
+    return obj;
+  };
 
   const handleRun = async () => {
     setLoading(true);
@@ -64,11 +79,14 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({ projectId, node, onAppr
     try {
       const iters = await invoke<any[]>('get_node_iterations', { nodeId: node.node_id });
       if (iters && iters.length > 0) {
-        // 기본값: 최고점 순으로 정렬하여 표시
         const sorted = [...iters].sort((a, b) => (b.calculated_score || 0) - (a.calculated_score || 0));
         setIterations(sorted);
         setSelectedIdx(0);
-        try { setContent(JSON.parse(sorted[0].generated_draft_json)); } catch { setContent(sorted[0].generated_draft_json); }
+        let rawData = sorted[0].generated_draft_json;
+        if (typeof rawData === 'string') {
+          try { rawData = JSON.parse(rawData); } catch {}
+        }
+        setContent(normalizeKeys(rawData));
       }
     } catch {}
   };
@@ -77,7 +95,11 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({ projectId, node, onAppr
     setSelectedIdx(idx);
     const item = iterations[idx];
     if (item) {
-      try { setContent(JSON.parse(item.generated_draft_json)); } catch { setContent(item.generated_draft_json); }
+      let rawData = item.generated_draft_json;
+      if (typeof rawData === 'string') {
+        try { rawData = JSON.parse(rawData); } catch {}
+      }
+      setContent(normalizeKeys(rawData));
     }
   };
 
@@ -148,7 +170,13 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({ projectId, node, onAppr
 
       {iterations.length > 0 && (
         <div className="iteration-selector">
-          <h3 className="selector-title">Generated Documents:</h3>
+          <div className="selector-header">
+            <h3 className="selector-title">Generated Documents:</h3>
+            <Button variant="ghost" size="sm" onClick={() => setShowRaw(!showRaw)}>
+              <span className="material-symbols-outlined">{showRaw ? 'grid_view' : 'code'}</span>
+              {showRaw ? '그리드 보기' : 'JSON 보기'}
+            </Button>
+          </div>
           <div className="iteration-tabs">
             {iterations.map((it, idx) => (
               <button 
@@ -169,7 +197,11 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({ projectId, node, onAppr
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          {typeof content === 'object' ? (
+          {showRaw ? (
+            <div className="genesis-prd-view__raw">
+              <pre>{JSON.stringify(content, null, 2)}</pre>
+            </div>
+          ) : typeof content === 'object' ? (
             <div className="genesis-prd-view__grid">
               
               {/* 1. Metadata & Business Context */}

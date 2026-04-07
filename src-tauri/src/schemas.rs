@@ -389,6 +389,7 @@ pub fn get_schema_for_node(node_type: &str) -> Option<serde_json::Value> {
 // ============================================================
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct GenesisPrdMetadata {
     pub project_name: String,
     pub version: String, // pattern: "^[0-9]+\.[0-9]+\.[0-9]+$"
@@ -397,6 +398,7 @@ pub struct GenesisPrdMetadata {
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct GenesisPrdBusinessContext {
     pub product_vision: String,
     pub target_market: String,
@@ -404,6 +406,7 @@ pub struct GenesisPrdBusinessContext {
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct GenesisPrdUserRole {
     pub role_id: String, // pattern: "^ROLE_[A-Z0-9_]+$"
     pub role_name: String,
@@ -411,6 +414,7 @@ pub struct GenesisPrdUserRole {
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct GenesisPrdEpic {
     pub epic_id: String, // pattern: "^EPIC_[A-Z0-9_]+$"
     pub title: String,
@@ -420,6 +424,7 @@ pub struct GenesisPrdEpic {
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct GenesisPrdGlobalConstraints {
     pub compliance: Vec<String>,
     pub performance: Vec<String>,
@@ -427,6 +432,7 @@ pub struct GenesisPrdGlobalConstraints {
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct GenesisPrdFrontend {
     pub framework: String, // enum: ["REACT", "NEXT_JS", "VUE", "SVELTE"]
     pub state_management: String,
@@ -434,6 +440,7 @@ pub struct GenesisPrdFrontend {
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct GenesisPrdBackend {
     pub runtime: String, // enum: ["NODE_JS", "PYTHON", "GO", "RUST"]
     pub framework: String,
@@ -441,6 +448,7 @@ pub struct GenesisPrdBackend {
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct GenesisPrdDatabase {
     pub primary: String,
     pub vector_db: String,
@@ -448,6 +456,7 @@ pub struct GenesisPrdDatabase {
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct GenesisPrdInfrastructure {
     pub platform: String, // enum: ["AWS", "AZURE", "GCP", "ON_PREMISE"]
     pub containerization: String, // enum: ["DOCKER", "KUBERNETES", "NONE"]
@@ -455,6 +464,7 @@ pub struct GenesisPrdInfrastructure {
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct GenesisPrdAiModelSpec {
     pub model_family: String,
     pub version: String,
@@ -462,12 +472,14 @@ pub struct GenesisPrdAiModelSpec {
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct GenesisPrdInterfaceProtocols {
     pub api_type: String, // enum: ["REST", "GRAPHQL", "GRPC"]
     pub auth_protocol: String, // enum: ["OAUTH2", "JWT", "SAML"]
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct GenesisPrdTechStack {
     pub frontend: GenesisPrdFrontend,
     pub backend: GenesisPrdBackend,
@@ -478,6 +490,7 @@ pub struct GenesisPrdTechStack {
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct GenesisPrdSchema {
     pub metadata: GenesisPrdMetadata,
     pub business_context: GenesisPrdBusinessContext,
@@ -493,12 +506,14 @@ pub struct GenesisPrdSchema {
 
 // 1. Core ERD
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct SadEntity {
     pub entity_name: String,
     pub description: String,
     pub attributes: Vec<SadEntityAttribute>,
 }
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct SadEntityAttribute {
     pub name: String,
     pub data_type: String,
@@ -507,6 +522,7 @@ pub struct SadEntityAttribute {
     pub description: String,
 }
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct SadRelationship {
     pub from_entity: String,
     pub to_entity: String,
@@ -514,6 +530,7 @@ pub struct SadRelationship {
     pub description: String,
 }
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct SadCoreErdSchema {
     pub entities: Vec<SadEntity>,
     pub relationships: Vec<SadRelationship>,
@@ -521,12 +538,14 @@ pub struct SadCoreErdSchema {
 
 // 2. Auth & RBAC
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct SadRole {
     pub role_name: String,
     pub description: String,
     pub permissions: Vec<String>,
 }
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct SadAuthRbacSchema {
     pub auth_method: String,
     pub token_strategy: String,
@@ -536,6 +555,7 @@ pub struct SadAuthRbacSchema {
 
 // 3. Interface & Error
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct SadErrorCode {
     pub code: String,
     pub http_status: i32,
@@ -543,6 +563,7 @@ pub struct SadErrorCode {
     pub description: String,
 }
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct SadInterfaceErrorSchema {
     pub api_versioning_strategy: String,
     pub response_format: String,
@@ -552,6 +573,7 @@ pub struct SadInterfaceErrorSchema {
 
 // 4. Tech Stack
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct SadTechStackSchema {
     pub frontend: String,
     pub backend: String,
@@ -565,6 +587,7 @@ pub struct SadTechStackSchema {
 
 // 5. Non-technical
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct SadNonTechSchema {
     pub legal_constraints: Vec<String>,
     pub compliance_requirements: Vec<String>,
@@ -579,6 +602,7 @@ pub struct SadNonTechSchema {
 
 // 6. Module List
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct SadModuleEntry {
     pub module_name: String,
     pub description: String,
@@ -586,24 +610,28 @@ pub struct SadModuleEntry {
     pub priority_order: i32,
 }
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct SadModuleListSchema {
     pub modules: Vec<SadModuleEntry>,
 }
 
 // 7. Epic Mapping
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct SadEpicModuleMapping {
     pub epic_id: String,
     pub epic_name: String,
     pub mapped_modules: Vec<String>,
 }
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct SadEpicMappingSchema {
     pub mappings: Vec<SadEpicModuleMapping>,
 }
 
 // 8. Module Dependencies
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct SadModuleDependency {
     pub from_module: String,
     pub to_module: String,
@@ -611,6 +639,7 @@ pub struct SadModuleDependency {
     pub description: String,
 }
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct SadModuleDepsSchema {
     pub dependencies: Vec<SadModuleDependency>,
     pub recommended_build_order: Vec<String>,

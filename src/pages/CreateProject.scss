@@ -546,20 +546,14 @@ $glow-secondary: rgba(124, 58, 237, 0.12);
       font-size: 14px;
       padding: 10px;
 
-      // Hide markdown syntax tokens for non-active lines (except lists)
-      .CodeMirror-line:not(.CodeMirror-activeline) {
-        .cm-formatting:not(.cm-formatting-list) {
-          display: none;
-        }
-      }
-
-      // Slightly fade formatting characters even on active line for a cleaner look
+      // Show all markdown formatting characters clearly
       .cm-formatting {
-        opacity: 0.4;
-        transition: opacity 0.2s;
+        opacity: 0.8;
+        display: inline-block !important;
+        color: $primary !important;
       }
       .CodeMirror-activeline .cm-formatting {
-        opacity: 0.8;
+        opacity: 1;
       }
 
       // 1. Keep List Markers visible and slightly emphasized
@@ -586,6 +580,11 @@ $glow-secondary: rgba(124, 58, 237, 0.12);
         opacity: 1 !important;
         font-weight: 500;
       }
+
+      // 4. Headline scaling in editor
+      .cm-header-1 { font-size: 1.5rem !important; }
+      .cm-header-2 { font-size: 1.3rem !important; }
+      .cm-header-3 { font-size: 1.1rem !important; }
     }
 
   .editor-toolbar {

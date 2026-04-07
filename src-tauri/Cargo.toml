@@ -28,5 +28,5 @@ reqwest = { version = "0.12", features = ["json"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "chrono", "uuid"] }
-schemars = "0.8"
+schemars = { version = "0.8", features = ["derive"] }
 

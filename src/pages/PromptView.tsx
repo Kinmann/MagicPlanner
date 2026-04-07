@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
+import { ask } from '@tauri-apps/plugin-dialog';
 import { Project, DocumentNode } from '../types/project';
 import Spinner from '../components/common/Spinner';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 import Header from '../components/layout/Header';
 import "./PromptView.scss";
 
@@ -19,6 +21,8 @@ const PromptView: React.FC<PromptViewProps> = ({ projectId, onBack, onHome }) =>
   const [nodes, setNodes] = useState<DocumentNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'rendered' | 'raw'>('rendered');
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -55,6 +59,41 @@ const PromptView: React.FC<PromptViewProps> = ({ projectId, onBack, onHome }) =>
     return { current, total };
   }, [nodes]);
 
+  const handleCopy = async () => {
+    if (!project?.raw_input_text) return;
+    try {
+      await navigator.clipboard.writeText(project.raw_input_text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
+
+  const handleDeleteProject = async () => {
+    if (!project) return;
+
+    const confirmed = await ask(
+      `'${project.project_name}' 프로젝트를 정말 삭제하시겠습니까?\n이 작업은 되돌릴 수 없으며 모든 관련 데이터가 영구적으로 삭제됩니다.`,
+      { 
+        title: '프로젝트 삭제 확인',
+        kind: 'warning',
+        okLabel: '삭제',
+        cancelLabel: '취소'
+      }
+    );
+    
+    if (!confirmed) return;
+
+    try {
+      await invoke('delete_project', { projectId: project.project_id });
+      onHome(); 
+    } catch (err: any) {
+      console.error("Failed to delete project:", err);
+      alert("프로젝트 삭제에 실패했습니다: " + err);
+    }
+  };
+
   if (loading) {
     return (
       <div className="prompt-view-loading">
@@ -73,22 +112,6 @@ const PromptView: React.FC<PromptViewProps> = ({ projectId, onBack, onHome }) =>
       </div>
     );
   }
-
-  const handleDeleteProject = async () => {
-    if (!project) return;
-
-    const confirmed = window.confirm(`'${project.project_name}' 프로젝트를 정말 삭제하시겠습니까?\n이 작업은 되돌릴 수 없으나 데이터베이스에는 기록으로 남습니다.`);
-    
-    if (!confirmed) return;
-
-    try {
-      await invoke('delete_project', { projectId: project.project_id });
-      onHome(); // 삭제 성공 시 홈으로 이동
-    } catch (err: any) {
-      console.error("Failed to delete project:", err);
-      alert("프로젝트 삭제에 실패했습니다: " + err);
-    }
-  };
 
   return (
     <div className="prompt-view-layout">
@@ -146,10 +169,29 @@ const PromptView: React.FC<PromptViewProps> = ({ projectId, onBack, onHome }) =>
               </div>
               
               <div className="header-right">
-                <div className="project-badge">
-                  <span className="material-symbols-outlined">description</span>
-                  <span>Source Manifest</span>
+                <div className="view-mode-toggle">
+                  <button 
+                    className={`mode-btn ${viewMode === 'rendered' ? 'active' : ''}`}
+                    onClick={() => setViewMode('rendered')}
+                    title="Rendered View"
+                  >
+                    <span className="material-symbols-outlined">description</span>
+                    <span>Preview</span>
+                  </button>
+                  <button 
+                    className={`mode-btn ${viewMode === 'raw' ? 'active' : ''}`}
+                    onClick={() => setViewMode('raw')}
+                    title="Raw View"
+                  >
+                    <span className="material-symbols-outlined">code</span>
+                    <span>Raw</span>
+                  </button>
                 </div>
+                
+                <button className={`copy-btn ${copied ? 'copied' : ''}`} onClick={handleCopy}>
+                  <span className="material-symbols-outlined">{copied ? 'check' : 'content_copy'}</span>
+                  <span>{copied ? 'Copied!' : 'Copy'}</span>
+                </button>
               </div>
             </motion.div>
 
@@ -159,10 +201,14 @@ const PromptView: React.FC<PromptViewProps> = ({ projectId, onBack, onHome }) =>
               transition={{ delay: 0.1 }}
               className="prompt-code-window"
             >
-              <div className="prompt-text markdown-body">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {project.raw_input_text || ""}
-                </ReactMarkdown>
+              <div className={`prompt-text ${viewMode === 'rendered' ? 'markdown-body' : 'raw-body'}`}>
+                {viewMode === 'rendered' ? (
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                    {project.raw_input_text || ""}
+                  </ReactMarkdown>
+                ) : (
+                  <pre>{project.raw_input_text || ""}</pre>
+                )}
               </div>
 
               <div className="editor-footer">

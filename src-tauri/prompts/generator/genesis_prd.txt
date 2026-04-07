@@ -12,10 +12,10 @@
    - status는 "AI_EVALUATED"로 설정하세요.
    - version은 "1.0.0"부터 시작합니다.
 2. user_roles:
-   - role_id는 반드시 "ROLE_" 접두어를 사용하세요 (예: ROLE_CUSTOMER, ROLE_ADMIN).
+   - role_id는 반드시 "ROLE-" 접두어를 사용하세요 (예: ROLE-CUSTOMER, ROLE-ADMIN).
    - 각 역할의 권한 레벨(GUEST, USER, ADMIN, SYSTEM)을 지정하세요.
 3. core_epics:
-   - epic_id는 반드시 "EPIC_" 접두어를 사용하세요 (예: EPIC_ORDER_MANAGEMENT).
+   - epic_id는 반드시 "EPIC-" 접두어를 사용하세요 (예: EPIC-ORDER-MANAGEMENT).
    - 각 Epic은 SAD에서 로컬 모듈별 책임으로 분할될 수 있도록 응집력 있게 정의하세요.
    - target_roles에는 앞서 정의한 user_roles의 role_id를 참조하세요.
 4. tech_stack:
@@ -27,6 +27,6 @@
    - SAD 전역 설정으로 직결될 컴플라이언스 및 성능 요구사항을 기술하세요.
 
 [품질 기준]
-- 모든 ID(role_id, epic_id)는 대문자와 언더바(_)만 사용하세요.
+- 모든 ID(role_id, epic_id)는 대문자와 하이픈(-)만 사용하세요.
 - 기술 스택은 상호 호환성이 검증된 조합으로 선정하세요.
 - acceptance_criteria는 나중에 테스트 케이스로 변환될 수 있을 만큼 구체적이어야 합니다.

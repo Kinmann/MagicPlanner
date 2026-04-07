@@ -12,7 +12,7 @@
 - **경계값 분석(BVA)**: 데이터 제약(Length, Nullable 등) 기반의 Negative/Edge Case 도출 필수.
 
 ### B. 단일 검증 원칙 (Single Verification Principle)
-- **검증의 원자성**: 하나의 `tc_id`는 오직 하나의 `expected_result`만 검증. 복합 결과 예측 TC 병합 금지.
+- **검증의 원자성**: 하이픈 기반의 `tc_id` (예: TC-001)는 오직 하나의 `expected_result`만 검증. 복합 결과 예측 TC 병합 금지.
 
 ### C. 재현의 독립성 및 기계적 지시 (Reproduction Independence)
 - **사전 지식 배제**: 제3자나 자동화 도구가 오차 없이 실행 가능하도록 작성.

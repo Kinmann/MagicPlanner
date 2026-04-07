@@ -55,6 +55,7 @@ pub struct PrdSchema {
 // 2. FSD
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct FsdFeature {
+    #[schemars(regex(pattern = "^FUNC-[0-9]{3}$"))]
     pub func_id: String,
     pub module: String,
     pub summary: String,
@@ -75,6 +76,7 @@ pub struct FsdSchema {
 // 3. User Flow
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct UserFlowNode {
+    #[schemars(regex(pattern = "^[A-Z0-9-]+$"))]
     pub id: String,
     pub node_type: String, // Action/Decision/Screen mapped from "type"
     pub actor: String,
@@ -102,6 +104,7 @@ pub struct UserFlowSchema {
 pub struct IaHierarchy {
     pub depth: i32,
     pub parent_id: Option<String>,
+    #[schemars(regex(pattern = "^SCR-[0-9]{3}$"))]
     pub screen_id: String,
     pub title: String,
     pub actor: String,
@@ -112,6 +115,7 @@ pub struct IaHierarchy {
 pub struct IaScreenElement {
     pub component_type: String, // mapped from "type"
     pub label: String,
+    #[schemars(regex(pattern = "^FUNC-[0-9]{3}$"))]
     pub mapped_func_id: String,
 }
 
@@ -165,6 +169,7 @@ pub struct ErdSchema {
 pub struct WireframeComponent {
     pub component_type: String,
     pub label: String,
+    #[schemars(regex(pattern = "^FUNC-[0-9]{3}$"))]
     pub mapped_func_id: String,
     pub mapped_data_fields: Vec<String>,
     pub state_condition: String,
@@ -179,6 +184,7 @@ pub struct WireframeRegion {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct WireframeScreen {
+    #[schemars(regex(pattern = "^SCR-[0-9]{3}$"))]
     pub screen_id: String,
     pub screen_name: String,
     pub layout_regions: Vec<WireframeRegion>,
@@ -215,8 +221,11 @@ pub struct ApiSpecSchema {
 // 8. TC (Test Case)
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct TestCaseItem {
+    #[schemars(regex(pattern = "^TC-[0-9]{3}$"))]
     pub tc_id: String,
+    #[schemars(regex(pattern = "^REQ-[0-9]{3}$"))]
     pub mapped_req_id: String,
+    #[schemars(regex(pattern = "^FUNC-[0-9]{3}$"))]
     pub mapped_func_id: String,
     pub tc_type: String,
     pub title: String,
@@ -408,7 +417,8 @@ pub struct GenesisPrdBusinessContext {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct GenesisPrdUserRole {
-    pub role_id: String, // pattern: "^ROLE_[A-Z0-9_]+$"
+    #[schemars(regex(pattern = "^ROLE-[A-Z0-9-]+$"))]
+    pub role_id: String, // pattern: "^ROLE-[A-Z0-9-]+$"
     pub role_name: String,
     pub permissions_level: String, // enum: ["GUEST", "USER", "ADMIN", "SYSTEM"]
 }
@@ -416,7 +426,8 @@ pub struct GenesisPrdUserRole {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct GenesisPrdEpic {
-    pub epic_id: String, // pattern: "^EPIC_[A-Z0-9_]+$"
+    #[schemars(regex(pattern = "^EPIC-[A-Z0-9-]+$"))]
+    pub epic_id: String, // pattern: "^EPIC-[A-Z0-9-]+$"
     pub title: String,
     pub description: String,
     pub target_roles: Vec<String>, // role_id references

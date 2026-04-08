@@ -401,8 +401,10 @@ pub fn get_schema_for_node(node_type: &str) -> Option<serde_json::Value> {
 #[serde(rename_all = "snake_case")]
 pub struct GenesisPrdMetadata {
     pub project_name: String,
+    #[schemars(regex(pattern = "^[0-9]+\\.[0-9]+\\.[0-9]+$"))]
     pub version: String, // pattern: "^[0-9]+\.[0-9]+\.[0-9]+$"
-    pub generated_at: String, // format: "date-time"
+    /// format: "date-time"
+    pub generated_at: String,
     pub status: String, // enum: ["DRAFT", "AI_EVALUATED", "HUMAN_APPROVED"]
 }
 
@@ -430,7 +432,9 @@ pub struct GenesisPrdEpic {
     pub epic_id: String, // pattern: "^EPIC-[A-Z0-9-]+$"
     pub title: String,
     pub description: String,
-    pub target_roles: Vec<String>, // role_id references
+    /// Each element must match pattern: "^ROLE-[A-Z0-9-]+$"
+    pub target_roles: Vec<String>,
+    #[schemars(description = "True/False 판별 가능한 객관적 명제 배열")]
     pub acceptance_criteria: Option<Vec<String>>,
 }
 
@@ -479,6 +483,8 @@ pub struct GenesisPrdInfrastructure {
 pub struct GenesisPrdAiModelSpec {
     pub model_family: String,
     pub version: String,
+    /// Range: 0.0 to 2.0 (Higher values like 1.0+ for more creativity)
+    #[schemars(range(min = 0.0, max = 2.0))]
     pub temperature: Option<f64>,
 }
 

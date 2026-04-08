@@ -1,13 +1,21 @@
-모듈 목록을 기반으로 모듈 간 의존성을 정의하고 권장 개발 순서를 제시하세요.
+설계된 모듈 간의 의존 관계 및 통신 방식을 정의하십시오.
 
-[작성 원칙]
-1. dependency_type: "API", "DATA", "EVENT", "SHARED_LIB" 중 택
-   - API: 한 모듈이 다른 모듈의 REST/gRPC API를 호출
-   - DATA: 한 모듈이 다른 모듈의 데이터베이스 테이블을 참조
-   - EVENT: 이벤트/메시지 기반 비동기 통신
-   - SHARED_LIB: 공유 라이브러리/유틸리티 참조
-2. 순환 의존성(circular dependency)이 없도록 설계하세요.
-3. recommended_build_order: 의존성 기반으로 빌드/개발 순서 제안
-   - 의존성이 적은 기초 모듈부터, 의존성이 많은 상위 모듈 순서로
-4. from_module → to_module: "from이 to에 의존한다"는 의미
-5. 모든 모듈이 recommended_build_order에 포함되어야 합니다.
+## [SAD - Module Split 설계 원칙]
+1. **토폴로지 설계**: 모듈 간의 연결망을 식별자 관계(`MOD-A` -> `MOD-B`)로 정의하십시오.
+2. **순환 참조 방지**: 순환 참조(Circular Dependency) 구조가 발생하지 않도록 의존 방향성을 엄격히 통제하십시오.
+3. **글로벌 규격 준수**: 통신 방식 정의 시 선행 확정된 `Global Context`와 `Genesis PRD`의 프로토콜 규격을 반드시 매핑하십시오.
+
+---
+
+## [모듈 의존성/통신망 정의 규칙]
+
+1. **의존성 그래프 (DAG)**:
+   - 모듈 식별자 간의 참조 방향성을 명확히 정의하여 유향 비순환 그래프(DAG) 구조를 산출하십시오.
+
+2. **통신 방식 (Communication Protocol)**:
+   - 각 의존성 링크에 `Global Context` 기준에 맞는 통신 방식(예: `SYNC_REST`, `ASYNC_KAFKA`, `GRPC`)을 Enum 형태로 반드시 매핑하십시오.
+
+3. **고립 방지**: 모든 모듈은 시스템 전체 토폴로지 내에서 최소 하나 이상의 Inbound 또는 Outbound 의존성을 가져야 합니다 (완전 고립 방지).
+
+[출력 형식]
+반드시 유효한 JSON 객체 1개만 출력하십시오. 인사말이나 설명을 붙이지 마십시오.

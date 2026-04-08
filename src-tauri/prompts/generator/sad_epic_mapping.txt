@@ -1,8 +1,20 @@
-Genesis PRD의 Epic 목록과 모듈 목록을 기반으로 Epic-Module 매핑을 작성하세요.
+Genesis PRD의 에픽(Epic)들을 설계된 모듈(Module)에 1:1 또는 N:M으로 매핑하십시오.
 
-[작성 원칙]
-1. 모든 Epic은 최소 1개 모듈에 매핑되어야 합니다.
-2. 1개 Epic이 여러 모듈에 걸칠 수 있습니다.
-3. epic_id와 epic_name은 Genesis PRD에 정의된 것과 정확히 일치해야 합니다.
-4. mapped_modules에는 모듈 목록(sad_module_list)에서 정의된 module_name을 사용하세요.
-5. 매핑에 누락된 Epic이나 모듈이 없는지 교차 검증하세요.
+## [SAD - Module Split 설계 원칙]
+1. **완전 탐색 원칙 (Exhaustion)**: `Genesis PRD`에 정의된 모든 에픽을 누락 없이 매핑해야 합니다.
+2. **식별자 고정**: 모든 관계는 `EPIC-XXX` 식별자와 `MOD-XXX` 식별자 간의 연결로만 표현하십시오. 자연어 서술에 의한 관계 정의를 금지합니다.
+
+---
+
+## [에픽-모듈 매핑 규칙]
+
+1. **전수 매핑 (Full Mapping)**:
+   - `Genesis PRD`의 `core_epics` 배열 내 모든 `epic_id`를 단 1건의 누락도 없이 타겟 `MOD-XXX` ID에 할당하십시오.
+
+2. **책임 구분**:
+   - 특정 에픽이 여러 모듈에 걸쳐 있는 경우, 주 책임(Primary) 모듈과 보조(Secondary) 모듈을 명확히 구분하여 데이터화하십시오.
+
+3. **추상화 유지**: 에픽 내부의 세부 구현 기능(Feature)이나 태스크 단위의 매핑은 다루지 마십시오.
+
+[출력 형식]
+반드시 유효한 JSON 객체 1개만 출력하십시오. 인사말이나 설명을 붙이지 마십시오.

@@ -397,7 +397,7 @@ pub async fn run_pipeline(
         println!(">>> Iteration {}/{} starting for {}", i, max_iters, node_type);
         let _ = app_handle.emit("pipeline-status", format!("{} 생성 중 (반복 {}/{})", node_type, i, max_iters));
         
-        let draft_res = generate_draft(&app_handle, &client, &api_key, &node_type, &project.raw_input_text, &previous_draft, &previous_feedback).await;
+        let draft_res = generate_draft(&app_handle, &client, &api_key, &node_type, &project.raw_input_text, &previous_draft, &previous_feedback, i).await;
         let draft = match draft_res {
             Ok(d) => d,
             Err(e) => {
@@ -411,7 +411,7 @@ pub async fn run_pipeline(
         
         let input_text_for_eval = if node_type == "Genesis_PRD" { Some(project.raw_input_text.clone()) } else { None };
         let empty_feedback = Vec::new(); // run_pipeline에서는 개별 피드백 추적 안 하므로 빈 값 전달
-        let eval_res = evaluate_draft(&app_handle, &client, &api_key, &node_type, &draft, input_text_for_eval, "", "", &empty_feedback).await;
+        let eval_res = evaluate_draft(&app_handle, &client, &api_key, &node_type, &draft, input_text_for_eval, "", "", &empty_feedback, i).await;
         let eval = match eval_res {
             Ok(e) => e,
             Err(e) => {
@@ -625,6 +625,7 @@ async fn trigger_next_nodes(app_handle: tauri::AppHandle, project_id: &str, comp
             "Wireframe" => vec!["FSD", "User Flow", "IA"],
             "API_Spec" => vec!["FSD", "ERD"],
             "TC" => vec!["PRD", "FSD", "API_Spec"],
+            "SAD_Global" => vec!["Genesis_PRD"],
             _ => vec![],
         };
 
@@ -674,6 +675,7 @@ async fn generate_draft(
     input_text: &str,
     previous_draft: &str,
     previous_feedback: &Vec<String>,
+    iteration: i32,
 ) -> Result<String, PipelineError> {
     let node_normalized = node_type.to_lowercase().replace(" ", "_");
     let resource_dir = app_handle.path().resource_dir().map_err(|e: tauri::Error| PipelineError::Internal(e.to_string()))?;
@@ -693,15 +695,14 @@ async fn generate_draft(
     println!(">>> System Prompt Loaded! Length: {} chars", combined_sys_prompt.len());
     
     let mut user_prompt = format!(
-        "다음 사용자의 아이디어를 바탕으로 기획서를 작성하십시오.\n\n[사용자 아이디어]\n{}",
-        input_text
+        "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}",
+        node_type, iteration, input_text
     );
 
-    if !previous_draft.is_empty() && !previous_feedback.is_empty() {
-        let feedback_text = previous_feedback.iter().map(|f| format!("- {}", f)).collect::<Vec<_>>().join("\n");
+    if !previous_feedback.is_empty() {
         user_prompt = format!(
-            "{}\n\n[이전 회차 결과물]\n{}\n\n[이전 회차 피드백 (반드시 보완 및 반영할 것)]\n{}\n\n위 피드백에서 지적된 문제점들을 완벽하게 개선하여 새로운 기획서 초안을 작성하십시오.",
-            user_prompt, previous_draft, feedback_text
+            "{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n$PREVIOUS_DRAFT\n{}",
+            user_prompt, previous_feedback.join("\n"), previous_draft
         );
         println!(">>> Appending Previous Feedback to Generator Prompt");
     }
@@ -719,6 +720,7 @@ async fn evaluate_draft(
     global_context: &str,
     module_context: &str,
     previous_feedback: &Vec<String>,
+    iteration: i32,
 ) -> Result<crate::schemas::EvaluationResult, PipelineError> {
     let node_normalized = node_type.to_lowercase().replace(" ", "_");
     let resource_dir = app_handle.path().resource_dir().map_err(|e: tauri::Error| PipelineError::Internal(e.to_string()))?;
@@ -732,19 +734,19 @@ async fn evaluate_draft(
         String::new()
     });
     
-    let combined_sys_prompt = format!("{}\n\n[DOMAIN SPECIFIC RUBRIC]\n{}", common_rubric, domain_rubric);
+    let combined_sys_prompt = format!("$COMMON_RUBRIC\n{}\n\n$DOMAIN_RUBRIC\n{}", common_rubric, domain_rubric);
     println!(">>> Evaluator Prompt Loaded! Length: {} chars", combined_sys_prompt.len());
 
     let mut user_prompt = format!(
-        "다음 작성된 기획서 초안을 제공된 루브릭에 따라 정량적으로 평가하십시오.\n\n[기획서 초안]\n{}\n\n[평가 대상 문서 타입]\n{}",
-        draft, node_type
+        "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$GENERATED_DOCUMENT\n{}",
+        node_type, iteration, draft
     );
 
     // 모듈 PRD가 아닐 때만 사용자 아이디어 참조
-    if node_type != "PRD" {
+    if node_type == "Genesis_PRD" {
         if let Some(original_idea) = input_text {
             user_prompt = format!(
-                "{}\n\n[사용자 원본 아이디어]\n{}\n\n위의 사용자 원본 아이디어가 기획서 초안에 누락 없이 충실하게 반영되었는지 확인하여 평가에 반영하십시오.",
+                "{}\n\n$SOURCE_DOCUMENTS\n{}",
                 user_prompt, original_idea
             );
         }
@@ -752,24 +754,22 @@ async fn evaluate_draft(
 
     if !global_context.is_empty() {
         user_prompt = format!(
-            "{}\n\n[글로벌 시스템 아키텍처 규칙]\n{}\n\n초안이 위 아키텍처 규칙(인증/인가, 데이터 모델 등)을 준수하고 있는지 철저히 검증하십시오.",
+            "{}\n\n$GLOBAL_CONTEXT\n{}",
             user_prompt, global_context
         );
     }
 
     if !module_context.is_empty() {
         user_prompt = format!(
-            "{}\n\n[모듈 명세 및 제약 사항]\n{}\n\n초안이 해당 모듈의 책임 범위와 의존성 정보를 위반하지 않았는지 확인하십시오.",
+            "{}\n\n$MODULE_CONTEXT\n{}",
             user_prompt, module_context
         );
     }
 
-    // 이전 피드백 검증 추가
     if !previous_feedback.is_empty() {
-        let feedback_str = previous_feedback.join("\n- ");
         user_prompt = format!(
-            "{}\n\n[이전 회차 피드백]\n- {}\n\n이번 초안이 위 피드백 사항들을 충분히 반영하여 개선되었는지 중점적으로 검토하십시오.",
-            user_prompt, feedback_str
+            "{}\n\n$EVALUATOR_FEEDBACK\n{}",
+            user_prompt, previous_feedback.join("\n")
         );
     }
 
@@ -1076,6 +1076,12 @@ pub async fn run_sad_global_pipeline(
     let mut last_error = String::new();
     let mut last_feedback = String::new();
 
+    let resource_dir = app_handle.path().resource_dir().map_err(|e| e.to_string())?;
+    let common_prompt = std::fs::read_to_string(resource_dir.join("prompts/generator/common.txt")).unwrap_or_else(|_| {
+        println!("!!! Failed to load common.txt generator prompt");
+        String::new()
+    });
+
     // Stage 1: 글로벌 컨텍스트 5종 생성 및 평가 루프
     while current_iter < max_iters && !is_global_success {
         current_iter += 1;
@@ -1089,18 +1095,11 @@ pub async fn run_sad_global_pipeline(
             let resource_dir = app_handle.path().resource_dir().map_err(|e: tauri::Error| e.to_string())?;
             let domain_prompt = std::fs::read_to_string(resource_dir.join(format!("prompts/generator/{}.txt", ctx_type))).unwrap_or_default();
 
-            let sys_prompt = format!("당신은 시스템 아키텍트입니다. Genesis PRD를 기반으로 시스템 아키텍처 문서(SAD)의 일부를 작성합니다.\n\n{}", domain_prompt);
-            let user_prompt = if last_feedback.is_empty() {
-                format!(
-                    "다음 Genesis PRD를 기반으로 {} 명세를 작성하십시오.\n\n[Genesis PRD]\n{}\n\n[사용자 원본 아이디어]\n{}",
-                    ctx_type, genesis_prd_content, project.raw_input_text
-                )
-            } else {
-                format!(
-                    "다음 Genesis PRD를 기반으로 {} 명세를 작성하십시오. 이전 회차의 피드백을 반영하여 내용을 개선하십시오.\n\n[Genesis PRD]\n{}\n\n[사용자 원본 아이디어]\n{}\n\n[이전 회차 피드백]\n{}",
-                    ctx_type, genesis_prd_content, project.raw_input_text, last_feedback
-                )
-            };
+            let sys_prompt = format!("$COMMON_RULES\n{}\n\n$DOMAIN_SPECIFIC_RULE\n{}", common_prompt, domain_prompt);
+            let user_prompt = format!(
+                "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n위 정보를 기반으로 {} 명세를 작성하십시오.",
+                ctx_type, current_iter, genesis_prd_content, last_feedback, ctx_type
+            );
 
             let result = call_gemini(&client, &api_key, &sys_prompt, &user_prompt, schema_obj).await;
             match result {
@@ -1125,18 +1124,11 @@ pub async fn run_sad_global_pipeline(
         let resource_dir = app_handle.path().resource_dir().map_err(|e: tauri::Error| e.to_string())?;
         let eval_rubric = std::fs::read_to_string(resource_dir.join("prompts/evaluator/sad_global.txt")).unwrap_or_default();
         
-        let eval_sys_prompt = format!("당신은 수석 시스템 설계자입니다. 다음 SAD 글로벌 컨텍스트 결과물을 평가하십시오.\n\n{}", eval_rubric);
-        let eval_user_prompt = if last_feedback.is_empty() {
-            format!(
-                "[Genesis PRD]\n{}\n\n[평가 대상 SAD 글로벌 컨텍스트]\n{}",
-                genesis_prd_content, serde_json::to_string_pretty(&stage_context_json).unwrap_or_default()
-            )
-        } else {
-            format!(
-                "[Genesis PRD]\n{}\n\n[이전 회차 피드백]\n{}\n\n[평가 대상 SAD 글로벌 컨텍스트]\n{}\n\n이번 결과물이 위 피드백 사항들을 충분히 반영하여 개선되었는지 중점적으로 검토하십시오.",
-                genesis_prd_content, last_feedback, serde_json::to_string_pretty(&stage_context_json).unwrap_or_default()
-            )
-        };
+        let eval_sys_prompt = format!("$COMMON_RUBRIC\n$DOMAIN_RUBRIC\n{}", eval_rubric);
+        let eval_user_prompt = format!(
+            "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$GENERATED_DOCUMENT\n{}\n\n$EVALUATOR_FEEDBACK\n{}",
+            "SAD_Global", current_iter, genesis_prd_content, serde_json::to_string_pretty(&stage_context_json).unwrap_or_default(), last_feedback
+        );
 
         let eval_result = call_gemini(&client, &api_key, &eval_sys_prompt, &eval_user_prompt, Some(eval_schema)).await;
         match eval_result {
@@ -1310,6 +1302,12 @@ pub async fn run_sad_module_pipeline(
     let mut last_feedback = String::new();
     let mut last_error = String::new();
 
+    let resource_dir = app_handle.path().resource_dir().map_err(|e| e.to_string())?;
+    let common_prompt = std::fs::read_to_string(resource_dir.join("prompts/generator/common.txt")).unwrap_or_else(|_| {
+        println!("!!! Failed to load common.txt generator prompt");
+        String::new()
+    });
+
     while current_iter < max_iters && !is_module_success {
         current_iter += 1;
         let _ = app_handle.emit("pipeline-status", format!("SAD Stage 2 (Iteration {}/{}): 모듈 분할 명세 3종 생성 중...", current_iter, max_iters));
@@ -1322,18 +1320,11 @@ pub async fn run_sad_module_pipeline(
             let resource_dir = app_handle.path().resource_dir().map_err(|e: tauri::Error| e.to_string())?;
             let domain_prompt = std::fs::read_to_string(resource_dir.join(format!("prompts/generator/{}.txt", ctx_type))).unwrap_or_default();
 
-            let sys_prompt = format!("당신은 시스템 아키텍트입니다. Genesis PRD와 글로벌 컨텍스트를 기반으로 모듈 분할 명세를 작성합니다.\n\n{}", domain_prompt);
-            let user_prompt = if last_feedback.is_empty() {
-                format!(
-                    "[Genesis PRD]\n{}\n\n[글로벌 시스템 아키텍처 컨텍스트]\n{}\n\n[사용자 원본 아이디어]\n{}\n\n위 정보를 기반으로 {} 명세를 작성하십시오.",
-                    genesis_prd_content, global_context_str, project.raw_input_text, ctx_type
-                )
-            } else {
-                format!(
-                    "이전 회차의 피드백을 반영하여 내용을 개선해 주세요.\n\n[Genesis PRD]\n{}\n\n[글로벌 시스템 아키텍처 컨텍스트]\n{}\n\n[사용자 원본 아이디어]\n{}\n\n[이전 회차 피드백]\n{}\n\n위 정보를 기반으로 {} 명세를 작성하십시오.",
-                    genesis_prd_content, global_context_str, project.raw_input_text, last_feedback, ctx_type
-                )
-            };
+            let sys_prompt = format!("$COMMON_RULES\n{}\n\n$DOMAIN_SPECIFIC_RULE\n{}", common_prompt, domain_prompt);
+            let user_prompt = format!(
+                "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$GLOBAL_CONTEXT\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n위 정보를 기반으로 {} 명세를 작성하십시오.",
+                ctx_type, current_iter, genesis_prd_content, global_context_str, last_feedback, ctx_type
+            );
 
             let result = call_gemini(&client, &api_key, &sys_prompt, &user_prompt, schema_obj).await;
             match result {
@@ -1354,18 +1345,11 @@ pub async fn run_sad_module_pipeline(
         let resource_dir = app_handle.path().resource_dir().map_err(|e: tauri::Error| e.to_string())?;
         let eval_rubric = std::fs::read_to_string(resource_dir.join("prompts/evaluator/sad_module.txt")).unwrap_or_default();
         
-        let eval_sys_prompt = format!("당신은 수석 시스템 설계자입니다. 다음 SAD 모듈 분할 명세 결과물을 평가하십시오.\n\n{}", eval_rubric);
-        let eval_user_prompt = if last_feedback.is_empty() {
-            format!(
-                "[Genesis PRD]\n{}\n\n[글로벌 컨텍스트]\n{}\n\n[평가 대상 모듈 분할 명세]\n{}",
-                genesis_prd_content, global_context_str, serde_json::to_string_pretty(&stage_module_json).unwrap_or_default()
-            )
-        } else {
-            format!(
-                "[Genesis PRD]\n{}\n\n[이전 회차 피드백]\n{}\n\n[글로벌 컨텍스트]\n{}\n\n[평가 대상 모듈 분할 명세]\n{}\n\n이번 결과물이 위 피드백 사항들을 충분히 반영하여 개선되었는지 중점적으로 검토하십시오.",
-                genesis_prd_content, last_feedback, global_context_str, serde_json::to_string_pretty(&stage_module_json).unwrap_or_default()
-            )
-        };
+        let eval_sys_prompt = format!("$COMMON_RUBRIC\n$DOMAIN_RUBRIC\n{}", eval_rubric);
+        let eval_user_prompt = format!(
+            "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$GLOBAL_CONTEXT\n{}\n\n$GENERATED_DOCUMENT\n{}\n\n$EVALUATOR_FEEDBACK\n{}",
+            "SAD_Module", current_iter, genesis_prd_content, global_context_str, serde_json::to_string_pretty(&stage_module_json).unwrap_or_default(), last_feedback
+        );
 
         let eval_result = call_gemini(&client, &api_key, &eval_sys_prompt, &eval_user_prompt, Some(eval_schema)).await;
         match eval_result {
@@ -1723,7 +1707,7 @@ pub async fn run_module_pipeline(
         let _ = app_handle.emit("pipeline-status", format!("[{}] {} 생성 중 (반복 {}/{})", module.module_name, node_type, i, max_iters));
 
         // 3. Draft 생성 (원본 아이디어 제외, 통합 컨텍스트 주입)
-        let draft_res = generate_draft_with_context(&app_handle, &client, &api_key, &node_type, "", &previous_draft, &previous_feedback, &combined_context).await;
+        let draft_res = generate_draft_with_context(&app_handle, &client, &api_key, &node_type, "", &previous_draft, &previous_feedback, &combined_context, i).await;
         let draft = match draft_res {
             Ok(d) => d,
             Err(e) => { loop_error = Some(e); break; }
@@ -1731,7 +1715,7 @@ pub async fn run_module_pipeline(
 
         let _ = app_handle.emit("pipeline-status", format!("[{}] {} 검증 중 (반복 {}/{})", module.module_name, node_type, i, max_iters));
         // 4. Draft 평가 (통합 컨텍스트 및 이전 피드백 주입)
-        let eval_res = evaluate_draft(&app_handle, &client, &api_key, &node_type, &draft, None, &combined_context, &module_context, &previous_feedback).await;
+        let eval_res = evaluate_draft(&app_handle, &client, &api_key, &node_type, &draft, None, &combined_context, &module_context, &previous_feedback, i).await;
         let eval = match eval_res {
             Ok(e) => e,
             Err(e) => { loop_error = Some(e); break; }
@@ -1807,6 +1791,7 @@ async fn generate_draft_with_context(
     previous_draft: &str,
     previous_feedback: &Vec<String>,
     global_context: &str,
+    iteration: i32,
 ) -> Result<String, PipelineError> {
     let node_normalized = node_type.to_lowercase().replace(" ", "_");
     let resource_dir = app_handle.path().resource_dir().map_err(|e: tauri::Error| PipelineError::Internal(e.to_string()))?;
@@ -1815,22 +1800,25 @@ async fn generate_draft_with_context(
     let domain_prompt = std::fs::read_to_string(resource_dir.join(format!("prompts/generator/{}.txt", node_normalized))).unwrap_or_default();
     
     let schema_obj = crate::schemas::get_schema_for_node(&node_normalized);
-    let combined_sys_prompt = format!("{}\n\n[DOMAIN SPECIFIC RULE]\n{}", common_prompt, domain_prompt);
+    let combined_sys_prompt = format!("$COMMON_RULES\n{}\n\n$DOMAIN_SPECIFIC_RULE\n{}", common_prompt, domain_prompt);
     
     let mut user_prompt = if node_type != "PRD" {
         format!(
-            "다음 사용자의 아이디어를 바탕으로 기획서를 작성하십시오.\n\n[사용자 아이디어]\n{}",
-            input_text
+            "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n위 정보를 바탕으로 기획서를 작성하십시오.",
+            node_type, iteration, input_text
         )
     } else {
-        "제공된 글로벌 아키텍처 규칙과 모듈 명세를 바탕으로 상세 기획서(PRD)를 작성하십시오.".to_string()
+        format!(
+            "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n제공된 글로벌 아키텍처 규칙과 모듈 명세를 바탕으로 상세 기획서(PRD)를 작성하십시오.",
+            node_type, iteration
+        )
     };
 
     // 글로벌 컨텍스트 주입
     if !global_context.is_empty() {
         let prefix = if user_prompt.is_empty() { "" } else { "\n\n" };
         user_prompt = format!(
-            "{}{}[글로벌 시스템 아키텍처 컨텍스트 (반드시 준수)]\n{}",
+            "{}{}$GLOBAL_CONTEXT\n{}",
             user_prompt, prefix, global_context
         );
     }
@@ -1838,7 +1826,7 @@ async fn generate_draft_with_context(
     if !previous_draft.is_empty() && !previous_feedback.is_empty() {
         let feedback_text = previous_feedback.iter().map(|f| format!("- {}", f)).collect::<Vec<_>>().join("\n");
         user_prompt = format!(
-            "{}\n\n[이전 회차 결과물]\n{}\n\n[이전 회차 피드백]\n{}\n\n위 피드백을 반영하여 새로운 기획서를 작성하십시오.",
+            "{}\n\n이전 회차 결과물\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n위 피드백을 반영하여 새로운 결과물을 작성하십시오.",
             user_prompt, previous_draft, feedback_text
         );
     }

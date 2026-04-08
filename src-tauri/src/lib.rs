@@ -26,7 +26,6 @@ pub fn run() {
             
             let pool = tauri::async_runtime::block_on(async {
                 use sqlx::sqlite::SqliteConnectOptions;
-                use sqlx::ConnectOptions;
                 
                 let options = SqliteConnectOptions::new()
                     .filename(&db_path)
@@ -168,7 +167,8 @@ pub fn run() {
             commands::get_module_nodes,
             commands::get_global_contexts,
             commands::run_genesis_prd_pipeline,
-            commands::run_sad_pipeline,
+            commands::run_sad_global_pipeline,
+            commands::run_sad_module_pipeline,
             commands::approve_genesis_prd,
             commands::create_local_modules,
             commands::run_module_pipeline,

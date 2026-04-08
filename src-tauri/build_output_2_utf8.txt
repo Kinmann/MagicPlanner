@@ -1,0 +1,45 @@
+﻿cargo :    Compiling magic-planner v0.1.0 (D:\?숈쁺??vibeCoding\
+MagicPlanner\src-tauri)
+위치 줄:1 문자:1
++ cargo build --lib > build_output_2.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (   Compiling ma. 
+   ..nner\src-tauri):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+error[E0425]: cannot find value `_all_context_json` in this sc
+ope
+    --> src\commands.rs:1125:21
+     |
+1125 |                     _all_context_json = stage_context_j
+son.clone();
+     |                     ^^^^^^^^^^^^^^^^^
+     |
+help: a local variable with a similar name exists
+     |
+1125 -                     _all_context_json = stage_context_j
+son.clone();
+1125 +                     all_context_json = stage_context_js
+on.clone();
+     |
+help: you might have meant to introduce a new binding
+     |
+1125 |                     let _all_context_json = stage_conte
+xt_json.clone();
+     |                     +++
+
+warning: unused import: `sqlx::ConnectOptions`
+  --> src\lib.rs:29:21
+   |
+29 |                 use sqlx::ConnectOptions;
+   |                     ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]
+`) on by default
+
+For more information about this error, try `rustc --explain E0
+425`.
+warning: `magic-planner` (lib) generated 1 warning
+error: could not compile `magic-planner` (lib) due to 1 previo
+us error; 1 warning emitted
+

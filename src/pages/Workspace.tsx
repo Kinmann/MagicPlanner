@@ -430,20 +430,14 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
 
           {displayPhase === 'SAD' && (
             <motion.div key="sad" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              {nodes.find(n => n.target_node_type === 'SAD') ? (
-                <SadOverview
-                  projectId={projectId}
-                  node={nodes.find(n => n.target_node_type === 'SAD') || null}
-                  onModulesCreated={() => { fetchProject(); fetchModules(); fetchNodes(); }}
-                  onRefresh={() => { fetchProject(); fetchNodes(); }}
-                  onUpdateMaxIterations={handleUpdateMaxIterations}
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center h-64 gap-4">
-                  <Spinner size="lg" />
-                  <p className="text-white/50 animate-pulse">SAD 노드를 불러오는 중입니다...</p>
-                </div>
-              )}
+              <SadOverview
+                projectId={projectId}
+                globalNode={nodes.find(n => n.target_node_type === 'SAD_Global') || null}
+                moduleNode={nodes.find(n => n.target_node_type === 'SAD_Module') || null}
+                onModulesCreated={() => { fetchProject(); fetchModules(); fetchNodes(); }}
+                onRefresh={() => { fetchProject(); fetchNodes(); }}
+                onUpdateMaxIterations={handleUpdateMaxIterations}
+              />
             </motion.div>
           )}
 

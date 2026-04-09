@@ -126,6 +126,7 @@
           &--in-progress { background: rgba(245, 158, 11, 0.1); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.2); animation: pulse-border 2s infinite; }
           &--completed { background: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2); }
           &--paused-hitl { background: rgba(139, 92, 246, 0.1); color: #a78bfa; border: 1px solid rgba(139, 92, 246, 0.2); }
+          &--paused-stopped { background: rgba(148, 163, 184, 0.1); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); }
         }
       }
       p { margin: 0; font-size: 14px; color: rgba(255, 255, 255, 0.5); }

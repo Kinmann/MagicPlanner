@@ -32,14 +32,6 @@ pub struct PrdCoreFeature {
     pub priority: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct PrdTechStack {
-    pub frontend: String,
-    pub backend: String,
-    pub database: String,
-    pub framework: String,
-    pub infrastructure: String,
-}
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct PrdSchema {
@@ -48,7 +40,6 @@ pub struct PrdSchema {
     pub goals: Vec<String>,
     pub core_features: Vec<PrdCoreFeature>,
     pub user_stories: Vec<String>,
-    pub tech_stack: PrdTechStack,
     pub constraints: Vec<String>,
 }
 

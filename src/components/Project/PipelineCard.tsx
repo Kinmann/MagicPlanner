@@ -5,6 +5,8 @@ import './PipelineCard.scss';
 interface PipelineCardProps {
   node: DocumentNode;
   onRun: (nodeType: string) => void;
+  onStop: (nodeId: string) => void;
+  onResume: (nodeId: string) => void;
   onView: (node: DocumentNode) => void;
   onHITLAction: (nodeId: string, action: 'APPROVE' | 'RETRY') => void;
   onUpdateMaxIterations: (nodeId: string, maxIterations: number) => void;
@@ -14,6 +16,8 @@ interface PipelineCardProps {
 const PipelineCard: React.FC<PipelineCardProps> = ({ 
   node, 
   onRun, 
+  onStop,
+  onResume,
   onView, 
   onHITLAction, 
   onUpdateMaxIterations,
@@ -60,6 +64,12 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
     switch (state) {
       case 'PENDING':
         return { variant: 'is-pending', label: 'PENDING', active: false };
+      case 'PAUSED_STOPPED':
+        return { 
+          icon: 'pause_circle', 
+          label: 'Stopped', 
+          color: '#cbd5e1' // Slate 300
+        };
       case 'READY':
         return { variant: 'is-ready', label: 'READY', active: false };
       case 'IN_PROGRESS':
@@ -176,6 +186,18 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
             <span className="material-symbols-outlined">play_arrow</span> Execute Node
           </button>
         )}
+
+        {node.node_state === 'PAUSED_STOPPED' && (
+          <button 
+            className="btn btn-primary" 
+            onClick={(e) => {
+              e.stopPropagation();
+              onResume(node.node_id);
+            }}
+          >
+            <span className="material-symbols-outlined">settings_backup_restore</span> Resume Node
+          </button>
+        )}
         
         {node.node_state === 'PAUSED_HITL' && (
           <div className="hitl-actions">
@@ -201,16 +223,30 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
         )}
 
         {(node.node_state === 'PAUSED_API_ERROR' || node.node_state === 'IN_PROGRESS') && (
-          <button 
-            className="btn btn-error" 
-            onClick={(e) => {
-              e.stopPropagation();
-              onRun(node.target_node_type);
-            }}
-          >
-            <span className="material-symbols-outlined">refresh</span> 
-            {node.node_state === 'IN_PROGRESS' ? 'Force Reboot' : 'Retry Cycle'}
-          </button>
+          <div className="status-actions">
+            <button 
+              className="btn btn-error" 
+              onClick={(e) => {
+                e.stopPropagation();
+                onRun(node.target_node_type);
+              }}
+            >
+              <span className="material-symbols-outlined">refresh</span> 
+              {node.node_state === 'IN_PROGRESS' ? 'Force Reboot' : 'Retry Cycle'}
+            </button>
+            
+            {node.node_state === 'IN_PROGRESS' && (
+              <button 
+                className="btn btn-ghost is-stop" 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStop(node.node_id);
+                }}
+              >
+                <span className="material-symbols-outlined">stop_circle</span> Stop
+              </button>
+            )}
+          </div>
         )}
 
         {node.node_state === 'COMPLETED' && (

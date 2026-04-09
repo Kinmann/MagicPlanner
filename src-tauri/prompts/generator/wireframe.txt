@@ -7,7 +7,11 @@
 
 ## 2. Wireframe 특화 작성 통제 원칙 (Domain Principles)
 
-### A. 스크린 식별자 절대 동기화 (Screen ID Synchronization)
+### A. 이전 설계 계승 및 발전 (Refinement)
+- 만약 `$PREVIOUS_DRAFT`에 데이터가 존재한다면 이를 기본 골격으로 삼으십시오.
+- `$EVALUATOR_FEEDBACK`의 내용을 분석하여 결함 사항을 최우선으로 교정하고, 기존의 정합성 있는 UI 구조는 최대한 유지하십시오.
+
+### B. 스크린 식별자 절대 동기화 (Screen ID Synchronization)
 - **식별자 매핑**: 모든 화면 명세는 IA의 `SCR-{NNN}` 식별자와 1:1 일치 필수.
 - **화면 창조 금지**: IA에 없는 새로운 팝업, 모달, 페이지 등의 임의 창조 엄격 금지.
 
@@ -19,8 +23,10 @@
 - **노출 항목 통제**: 표시되는 모든 데이터 필드는 FSD의 `data_requirements` 범위 내에서만 정의.
 - **임의 데이터 금지**: FSD에 없는 더미 텍스트, 통계, 부가 정보 등의 임의 배치 금지.
 
-### D. 레이아웃의 구조적 분할 (Structural Layout Segmentation)
-- 화면을 `GNB`, `LNB`, `Header`, `Main`, `Footer`, `Sidebar` 등 논리적 구역(Region)으로 분할하여 배치.
+### E. 기술 스택 기반 UI 컴포넌트 선정 (Tech Stack Alignment)
+- 주입된 `sad_tech_stack`의 `frontend` 및 `framework` 정보를 확인하십시오.
+- 해당 기술 환경(예: React + Tailwind, Tauri 등)에 적합하고 구현 가능한 표준 UI 컴포넌트를 선정하십시오.
+- 글로벌 기술 스택에서 제공하는 라이브러리(UI Library)가 명시된 경우, 해당 라이브러리의 컴포넌트 명칭과 스타일 가이드를 최대한 반영하십시오.
 
 ## 3. 스키마 및 데이터 작성 규칙
 - **UI 상태 명세**: User Flow 분기 및 FSD `pre_condition`에 따라 상태(Default, Disabled, Error 등) 명시.

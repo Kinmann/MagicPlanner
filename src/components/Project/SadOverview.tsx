@@ -35,6 +35,8 @@ const SadOverview: React.FC<SadOverviewProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedCtx, setExpandedCtx] = useState<string | null>(null);
+  const [tempMax, setTempMax] = useState(10);
+
 
   const fetchContexts = async () => {
     try {
@@ -65,6 +67,14 @@ const SadOverview: React.FC<SadOverviewProps> = ({
       }
     } catch {}
   };
+  
+  // 렌더링용 변수 추출 (useEffect에서 사용하기 위해 위치 이동)
+  const isGlobalDone = globalNode?.node_state === 'COMPLETED';
+  const isModuleDone = moduleNode?.node_state === 'COMPLETED';
+  const currentIters = activeStage === 'GLOBAL' ? globalIters : moduleIters;
+  const currentSelectedIterId = activeStage === 'GLOBAL' ? selectedGlobalIterId : selectedModuleIterId;
+  const currentNode = activeStage === 'GLOBAL' ? globalNode : moduleNode;
+  const activeIteration = currentIters.find(it => it.iteration_id === currentSelectedIterId);
 
   useEffect(() => { 
     fetchContexts(); 
@@ -77,6 +87,12 @@ const SadOverview: React.FC<SadOverviewProps> = ({
       setActiveStage('MODULE');
     }
   }, [globalNode?.node_state]);
+
+  useEffect(() => {
+    if (currentNode) {
+      setTempMax(currentNode.max_iterations);
+    }
+  }, [currentNode?.node_id, currentNode?.max_iterations]);
 
   const handleRunStage = async (stage: 'GLOBAL' | 'MODULE') => {
     setLoading(true);
@@ -114,6 +130,23 @@ const SadOverview: React.FC<SadOverviewProps> = ({
       alert("확정 실패: " + err.toString());
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleStop = async (nodeId: string) => {
+    try {
+      await invoke('stop_node_pipeline', { nodeId });
+    } catch (err: any) {
+      setError(err.toString());
+    }
+  };
+
+  const handleResume = async (nodeId: string) => {
+    try {
+      await invoke('resume_node_pipeline', { nodeId });
+      onRefresh();
+    } catch (err: any) {
+      setError(err.toString());
     }
   };
 
@@ -156,16 +189,6 @@ const SadOverview: React.FC<SadOverviewProps> = ({
     };
     return map[type] || 'article';
   };
-
-  // 렌더링용 변수 추출
-  const isGlobalDone = globalNode?.node_state === 'COMPLETED';
-  const isModuleDone = moduleNode?.node_state === 'COMPLETED';
-  
-  const currentIters = activeStage === 'GLOBAL' ? globalIters : moduleIters;
-  const currentSelectedIterId = activeStage === 'GLOBAL' ? selectedGlobalIterId : selectedModuleIterId;
-  const currentNode = activeStage === 'GLOBAL' ? globalNode : moduleNode;
-
-  const activeIteration = currentIters.find(it => it.iteration_id === currentSelectedIterId);
 
   // 통합 Grid에 표시할 데이터 결정
   const displayContexts = (() => {
@@ -252,8 +275,15 @@ const SadOverview: React.FC<SadOverviewProps> = ({
                type="number" 
                min="1" 
                max="20" 
-               value={currentNode?.max_iterations || 10} 
-               onChange={(e) => currentNode && onUpdateMaxIterations(currentNode.node_id, parseInt(e.target.value))}
+               value={tempMax} 
+               onChange={(e) => setTempMax(parseInt(e.target.value) || 1)}
+                onBlur={() => currentNode && onUpdateMaxIterations(currentNode.node_id, tempMax)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && currentNode) {
+                    onUpdateMaxIterations(currentNode.node_id, tempMax);
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
                disabled={loading || currentNode?.node_state === 'IN_PROGRESS' || currentNode?.node_state === 'COMPLETED'}
              />
            </div>
@@ -266,6 +296,26 @@ const SadOverview: React.FC<SadOverviewProps> = ({
              >
                {loading ? <Spinner size="sm" /> : <span className="material-symbols-outlined">{currentNode?.node_state === 'PAUSED_HITL' ? 'refresh' : 'play_arrow'}</span>}
                {currentNode?.node_state === 'PAUSED_HITL' ? '다시 생성' : '생성 시작'}
+             </Button>
+           )}
+           
+           {currentNode?.node_state === 'IN_PROGRESS' && (
+             <Button 
+               onClick={() => handleStop(currentNode.node_id)} 
+               variant="danger"
+             >
+               <span className="material-symbols-outlined">stop</span>
+               중단 (Stop)
+             </Button>
+           )}
+
+           {currentNode?.node_state === 'PAUSED_STOPPED' && (
+             <Button 
+               onClick={() => handleResume(currentNode.node_id)} 
+               variant="primary"
+             >
+               <span className="material-symbols-outlined">settings_backup_restore</span>
+               다시 시작 준비 (Resume)
              </Button>
            )}
            

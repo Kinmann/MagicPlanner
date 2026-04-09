@@ -1,4 +1,4 @@
-export type NodeState = 'PENDING' | 'READY' | 'IN_PROGRESS' | 'COMPLETED' | 'PAUSED_HITL' | 'PAUSED_API_ERROR';
+export type NodeState = 'PENDING' | 'READY' | 'IN_PROGRESS' | 'COMPLETED' | 'PAUSED_HITL' | 'PAUSED_API_ERROR' | 'PAUSED_STOPPED';
 
 // v2: Pipeline Phase
 export type PipelinePhase = 'GENESIS_PRD' | 'SAD' | 'MODULE_GENERATION' | 'COMPLETED';
@@ -52,6 +52,7 @@ export interface Project {
 export interface GlobalContext {
   context_id: string;
   project_id: string;
+  iteration_id?: string;
   context_type: string;
   context_data_json: string;
   version: number;

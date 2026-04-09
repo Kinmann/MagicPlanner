@@ -14,6 +14,7 @@ pub enum NodeState {
     Completed,
     PausedHitl,
     PausedApiError,
+    PausedStopped,
 }
 
 impl ToString for NodeState {
@@ -25,6 +26,7 @@ impl ToString for NodeState {
             NodeState::Completed => "COMPLETED".to_string(),
             NodeState::PausedHitl => "PAUSED_HITL".to_string(),
             NodeState::PausedApiError => "PAUSED_API_ERROR".to_string(),
+            NodeState::PausedStopped => "PAUSED_STOPPED".to_string(),
         }
     }
 }
@@ -358,8 +360,8 @@ pub async fn run_pipeline(
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "Node not found".to_string())?;
 
-    if node.node_state != "READY" && node.node_state != "PAUSED_HITL" && node.node_state != "PAUSED_API_ERROR" {
-          return Err("현재 상태에서는 실행할 수 없습니다. (READY, PAUSED_HITL 또는 PAUSED_API_ERROR 필요)".to_string());
+    if node.node_state != "READY" && node.node_state != "PAUSED_HITL" && node.node_state != "PAUSED_API_ERROR" && node.node_state != "PAUSED_STOPPED" {
+          return Err("현재 상태에서는 실행할 수 없습니다. (READY, PAUSED_HITL, PAUSED_API_ERROR 또는 PAUSED_STOPPED 필요)".to_string());
     }
 
     let project = sqlx::query_as::<_, Project>(
@@ -388,10 +390,37 @@ pub async fn run_pipeline(
     let mut current_best_score = 0;
     let mut final_iteration_count = 0;
 
-    // 3. Best-of-N 루프 (Feedback Refinement 적용)
-    let mut loop_error = None;
+    // 2.5 [RETRY] 이전 회차 정보 가져오기 (컨텍스트 유지)
+    let latest_iter = sqlx::query_as::<_, GenerationIteration>(
+        "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY iteration_number DESC LIMIT 1"
+    )
+    .bind(&node.node_id)
+    .fetch_optional(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
     let mut previous_draft = String::new();
     let mut previous_feedback: Vec<String> = Vec::new();
+    let mut loop_error: Option<PipelineError> = None;
+
+    if let Some(it) = latest_iter {
+        println!(">>> Resuming from previous iteration context (Node: {})", node_type);
+        previous_draft = it.generated_draft_json;
+        
+        // 피드백 복원 (Critical Errors + Actionable Feedback)
+        if let Some(errors_json) = it.critical_errors_array {
+            if let Ok(errors) = serde_json::from_str::<Vec<String>>(&errors_json) {
+                previous_feedback.extend(errors);
+            }
+        }
+        if let Some(action_json) = it.actionable_feedback_text {
+            if let Ok(feedback) = serde_json::from_str::<Vec<String>>(&action_json) {
+                for f in feedback {
+                    previous_feedback.push(format!("보강 필요: {}", f));
+                }
+            }
+        }
+    }
 
     for i in 1..=max_iters {
         final_iteration_count = i;
@@ -407,6 +436,12 @@ pub async fn run_pipeline(
             }
         };
 
+        // [STOP CHECK] AI 호출 후 중단 체크
+        if is_node_stopped(&*pool, &node.node_id).await {
+            println!(">>> Pipeline stopped manually after generation (Node: {})", node.node_id);
+            break;
+        }
+
         println!(">>> Iteration {}: Draft generated, evaluating...", i);
         let _ = app_handle.emit("pipeline-status", format!("{} 품질 검증 중 (반복 {}/{})", node_type, i, max_iters));
         
@@ -420,6 +455,12 @@ pub async fn run_pipeline(
                 break;
             }
         };
+
+        // [STOP CHECK] 평가 후 및 저장 직전 중단 체크
+        if is_node_stopped(&*pool, &node.node_id).await {
+            println!(">>> Pipeline stopped manually before save (Node: {})", node.node_id);
+            break;
+        }
 
         // D. 결과 DB 기록 (ERD 준수)
         let iter_id = Uuid::new_v4().to_string();
@@ -1064,6 +1105,10 @@ pub async fn run_sad_global_pipeline(
     .await
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "SAD_Global node not found".to_string())?;
+    
+    if sad_node.node_state != "READY" && sad_node.node_state != "PAUSED_HITL" && sad_node.node_state != "PAUSED_API_ERROR" && sad_node.node_state != "PAUSED_STOPPED" {
+        return Err("현재 상태에서는 실행할 수 없습니다.".to_string());
+    }
 
     // 상태를 RUNNING으로 변경
     sqlx::query("UPDATE document_node SET node_state = 'RUNNING', updated_at = ? WHERE node_id = ?")
@@ -1083,6 +1128,28 @@ pub async fn run_sad_global_pipeline(
     let mut last_error = String::new();
     let mut last_feedback = String::new();
 
+    // [RETRY] 이전 회차 피드백 및 초안 가져오기
+    let latest_iter = sqlx::query_as::<_, GenerationIteration>(
+        "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY iteration_number DESC LIMIT 1"
+    )
+    .bind(&sad_node.node_id)
+    .fetch_optional(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let mut initial_stage_context = serde_json::json!({});
+    if let Some(it) = latest_iter {
+        println!(">>> Resuming SAD Global from previous iteration feedback");
+        if let Some(fb) = it.actionable_feedback_text {
+             if let Ok(fb_list) = serde_json::from_str::<Vec<String>>(&fb) {
+                 last_feedback = fb_list.join("\n");
+             }
+        }
+        if let Ok(prev_bundle) = serde_json::from_str::<serde_json::Value>(&it.generated_draft_json) {
+            initial_stage_context = prev_bundle;
+        }
+    }
+
     let resource_dir = app_handle.path().resource_dir().map_err(|e| e.to_string())?;
     let common_prompt = std::fs::read_to_string(resource_dir.join("prompts/generator/common.txt")).unwrap_or_else(|_| {
         println!("!!! Failed to load common.txt generator prompt");
@@ -1093,7 +1160,8 @@ pub async fn run_sad_global_pipeline(
     while current_iter < max_iters && !is_global_success {
         current_iter += 1;
         let global_types = vec!["sad_non_tech", "sad_tech_stack", "sad_core_erd", "sad_auth_rbac", "sad_interface_error"];
-        let mut stage_context_json = serde_json::json!({});
+        // 이전 회차의 번들이 있다면 초기값으로 사용, 없으면 빈 객체
+        let mut stage_context_json = initial_stage_context.clone();
 
         for ctx_type in global_types {
             let _ = app_handle.emit("pipeline-status", format!("SAD Stage 1 (Iter {}): {} 생성 중...", current_iter, ctx_type));
@@ -1116,6 +1184,12 @@ pub async fn run_sad_global_pipeline(
             }
             let prev_context_str = serde_json::to_string_pretty(&prev_decisions).unwrap_or_else(|_| "{}".to_string());
 
+            let prev_draft_str = if let Some(prev_val) = initial_stage_context.get(ctx_type) {
+                serde_json::to_string_pretty(prev_val).unwrap_or_else(|_| "{}".to_string())
+            } else {
+                "{}".to_string()
+            };
+
             let schema_obj = crate::schemas::get_schema_for_node(ctx_type);
             let resource_path = resource_dir.join(format!("prompts/generator/{}.txt", ctx_type));
             let type_prompt = std::fs::read_to_string(&resource_path).unwrap_or_else(|_| {
@@ -1125,8 +1199,8 @@ pub async fn run_sad_global_pipeline(
 
             let sys_prompt = format!("$COMMON_RULES\n{}\n\n$DOMAIN_SPECIFIC_RULE\n{}", common_prompt, type_prompt);
             let user_prompt = format!(
-                "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$PREVIOUS_ARCHITECTURAL_DECISIONS\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n위 정보를 기반으로 {}을(를) 작성하십시오.",
-                ctx_type, current_iter, genesis_prd_content, prev_context_str, last_feedback, ctx_type
+                "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$PREVIOUS_ARCHITECTURAL_DECISIONS\n{}\n\n$PREVIOUS_DRAFT\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n위 정보를 기반으로 {}을(를) 작성하십시오.",
+                ctx_type, current_iter, genesis_prd_content, prev_context_str, prev_draft_str, last_feedback, ctx_type
             );
 
             let result = call_gemini(&client, &api_key, &sys_prompt, &user_prompt, schema_obj).await;
@@ -1150,6 +1224,12 @@ pub async fn run_sad_global_pipeline(
             // 통합 객체에 삽입
             if let Some(obj) = stage_context_json.as_object_mut() {
                 obj.insert(ctx_type.to_string(), part_json);
+            }
+
+            // [STOP CHECK] 개별 파트 생성 후 중단 체크
+            if is_node_stopped(&*pool, &sad_node.node_id).await {
+                println!(">>> SAD Global stopped manually during part generation ({})", ctx_type);
+                return Ok("SAD global stopped manually".to_string());
             }
         }
 
@@ -1326,6 +1406,10 @@ pub async fn run_sad_module_pipeline(
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "SAD_Module node not found".to_string())?;
 
+    if sad_node.node_state != "READY" && sad_node.node_state != "PAUSED_HITL" && sad_node.node_state != "PAUSED_API_ERROR" && sad_node.node_state != "PAUSED_STOPPED" {
+        return Err("현재 상태에서는 실행할 수 없습니다.".to_string());
+    }
+
     sqlx::query("UPDATE document_node SET node_state = 'RUNNING', updated_at = ? WHERE node_id = ?")
         .bind(Utc::now().to_rfc3339())
         .bind(&sad_node.node_id)
@@ -1340,6 +1424,28 @@ pub async fn run_sad_module_pipeline(
     let mut current_iter = 0;
     let mut is_module_success = false;
     let mut last_feedback = String::new();
+
+    // [RETRY] 이전 회차 피드백 및 초안 가져오기
+    let latest_iter = sqlx::query_as::<_, GenerationIteration>(
+        "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY iteration_number DESC LIMIT 1"
+    )
+    .bind(&sad_node.node_id)
+    .fetch_optional(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let mut initial_stage_context = serde_json::json!({});
+    if let Some(it) = latest_iter {
+        println!(">>> Resuming SAD Module Split from previous iteration feedback");
+        if let Some(fb) = it.actionable_feedback_text {
+             if let Ok(fb_list) = serde_json::from_str::<Vec<String>>(&fb) {
+                 last_feedback = fb_list.join("\n");
+             }
+        }
+        if let Ok(prev_bundle) = serde_json::from_str::<serde_json::Value>(&it.generated_draft_json) {
+            initial_stage_context = prev_bundle;
+        }
+    }
     let mut last_error = String::new();
 
     let resource_dir = app_handle.path().resource_dir().map_err(|e| e.to_string())?;
@@ -1351,7 +1457,8 @@ pub async fn run_sad_module_pipeline(
     while current_iter < max_iters && !is_module_success {
         current_iter += 1;
         let module_types = vec!["sad_module_list", "sad_epic_mapping", "sad_module_deps"];
-        let mut stage_module_json = serde_json::json!({});
+        // 이전 회차 번들 유지
+        let mut stage_module_json = initial_stage_context.clone();
 
         for ctx_type in module_types {
             let _ = app_handle.emit("pipeline-status", format!("SAD Stage 2 (Iter {}): {} 생성 중...", current_iter, ctx_type));
@@ -1379,10 +1486,16 @@ pub async fn run_sad_module_pipeline(
             }
             let prev_context_str = serde_json::to_string_pretty(&prev_decisions).unwrap_or_else(|_| "{}".to_string());
 
+            let prev_draft_str = if let Some(prev_val) = initial_stage_context.get(ctx_type) {
+                serde_json::to_string_pretty(prev_val).unwrap_or_else(|_| "{}".to_string())
+            } else {
+                "{}".to_string()
+            };
+
             let sys_prompt = format!("$COMMON_RULES\n{}\n\n$DOMAIN_SPECIFIC_RULE\n{}", common_prompt, type_prompt);
             let user_prompt = format!(
-                "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$GLOBAL_CONTEXT\n{}\n\n$PREVIOUS_ARCHITECTURAL_DECISIONS\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n위 정보를 기반으로 {}을(를) 작성하십시오.",
-                ctx_type, current_iter, genesis_prd_content, global_context_str, prev_context_str, last_feedback, ctx_type
+                "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$GLOBAL_CONTEXT\n{}\n\n$PREVIOUS_ARCHITECTURAL_DECISIONS\n{}\n\n$PREVIOUS_DRAFT\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n위 정보를 기반으로 {}을(를) 작성하십시오.",
+                ctx_type, current_iter, genesis_prd_content, global_context_str, prev_context_str, prev_draft_str, last_feedback, ctx_type
             );
 
             let result = call_gemini(&client, &api_key, &sys_prompt, &user_prompt, schema_obj).await;
@@ -1406,6 +1519,12 @@ pub async fn run_sad_module_pipeline(
             // 통합 객체에 삽입
             if let Some(obj) = stage_module_json.as_object_mut() {
                 obj.insert(ctx_type.to_string(), part_json);
+            }
+
+            // [STOP CHECK] 개별 파트 생성 후 중단 체크
+            if is_node_stopped(&*pool, &sad_node.node_id).await {
+                println!(">>> SAD Module Split stopped manually during part generation ({})", ctx_type);
+                return Ok("SAD module split stopped manually".to_string());
             }
         }
 
@@ -1708,12 +1827,63 @@ pub async fn run_module_pipeline(
     .await
     .map_err(|e| e.to_string())?;
 
+    // 모듈 정보 조회 (추가)
+    let module = sqlx::query_as::<_, LocalModule>(
+        "SELECT module_id, project_id, module_name, module_description, core_responsibility, mapped_epics, dependency_spec, priority_order, module_state, display_order, created_at, updated_at FROM local_module WHERE module_id = ?"
+    )
+    .bind(&module_id)
+    .fetch_optional(&*pool)
+    .await
+    .map_err(|e| e.to_string())?
+    .ok_or_else(|| format!("Module not found for ID: {}", module_id))?;
+
+    let normalized_node_type = node_type.to_lowercase().replace(" ", "_");
     let mut global_ctx = serde_json::json!({});
+    let module_name = &module.module_name;
+
     for ctx in &contexts {
-        // [필터링] 사용자 요청에 따라 sad_auth_rbac, sad_core_erd만 명시적으로 주입
-        if ctx.context_type == "sad_auth_rbac" || ctx.context_type == "sad_core_erd" {
-            let parsed: serde_json::Value = serde_json::from_str(&ctx.context_data_json).unwrap_or(serde_json::json!(ctx.context_data_json));
-            global_ctx[&ctx.context_type] = parsed;
+        let is_required = match normalized_node_type.as_str() {
+            "prd" => matches!(ctx.context_type.as_str(), "sad_auth_rbac" | "sad_core_erd" | "sad_module_list" | "sad_epic_mapping" | "sad_module_deps"),
+            "fsd" => matches!(ctx.context_type.as_str(), "sad_auth_rbac" | "sad_core_erd" | "sad_interface_error" | "sad_non_tech" | "sad_module_list" | "sad_module_deps"),
+            "erd" => matches!(ctx.context_type.as_str(), "sad_tech_stack" | "sad_core_erd" | "sad_module_deps"),
+            "api_spec" => matches!(ctx.context_type.as_str(), "sad_auth_rbac" | "sad_interface_error" | "sad_module_deps"),
+            "user_flow" => matches!(ctx.context_type.as_str(), "sad_auth_rbac" | "sad_interface_error"),
+            "ia" => matches!(ctx.context_type.as_str(), "sad_auth_rbac" | "sad_interface_error"),
+            "wireframe" => matches!(ctx.context_type.as_str(), "sad_core_erd" | "sad_interface_error" | "sad_tech_stack"),
+            "tc" => matches!(ctx.context_type.as_str(), "sad_auth_rbac" | "sad_interface_error" | "sad_non_tech" | "sad_module_deps"),
+            _ => false,
+        };
+
+        if is_required {
+            let mut val: serde_json::Value = serde_json::from_str(&ctx.context_data_json).unwrap_or(serde_json::json!({}));
+            
+            // [특수 필터링] Stage 2 문서에서 해당 모듈 관련 정보만 추출
+            match ctx.context_type.as_str() {
+                "sad_module_list" => {
+                    if let Some(modules) = val.get_mut("modules").and_then(|m| m.as_array_mut()) {
+                        modules.retain(|m| m.get("module_name").and_then(|n| n.as_str()) == Some(module_name));
+                    }
+                },
+                "sad_epic_mapping" => {
+                    if let Some(mappings) = val.get_mut("mappings").and_then(|m| m.as_array_mut()) {
+                        mappings.retain(|m| {
+                            m.get("mapped_modules").and_then(|mm| mm.as_array())
+                             .map_or(false, |mm| mm.iter().any(|name| name.as_str() == Some(module_name)))
+                        });
+                    }
+                },
+                "sad_module_deps" => {
+                    if let Some(deps) = val.get_mut("dependencies").and_then(|d| d.as_array_mut()) {
+                        deps.retain(|d| {
+                            d.get("from_module").and_then(|n| n.as_str()) == Some(module_name) ||
+                            d.get("to_module").and_then(|n| n.as_str()) == Some(module_name)
+                        });
+                    }
+                },
+                _ => {} // 다른 타입은 전체 주입
+            }
+
+            global_ctx[&ctx.context_type] = val;
         }
     }
     let global_context_str = serde_json::to_string_pretty(&global_ctx).unwrap_or_default();
@@ -1739,7 +1909,7 @@ pub async fn run_module_pipeline(
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "Node not found in module".to_string())?;
 
-    if node.node_state != "READY" && node.node_state != "PAUSED_HITL" && node.node_state != "PAUSED_API_ERROR" {
+    if node.node_state != "READY" && node.node_state != "PAUSED_HITL" && node.node_state != "PAUSED_API_ERROR" && node.node_state != "PAUSED_STOPPED" {
         return Err("현재 상태에서는 실행할 수 없습니다.".to_string());
     }
 
@@ -1757,8 +1927,35 @@ pub async fn run_module_pipeline(
     let mut current_best_score = 0;
     let mut final_iteration_count = 0;
     let mut loop_error = None;
+
+    // [RETRY] 이전 회차 정보 가져오기
+    let latest_iter = sqlx::query_as::<_, GenerationIteration>(
+        "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY iteration_number DESC LIMIT 1"
+    )
+    .bind(&node.node_id)
+    .fetch_optional(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
     let mut previous_draft = String::new();
     let mut previous_feedback: Vec<String> = Vec::new();
+
+    if let Some(it) = latest_iter {
+        println!(">>> Resuming Module Node context: {}", node_type);
+        previous_draft = it.generated_draft_json;
+        if let Some(errs) = it.critical_errors_array {
+            if let Ok(elist) = serde_json::from_str::<Vec<String>>(&errs) {
+                previous_feedback.extend(elist);
+            }
+        }
+        if let Some(fbs) = it.actionable_feedback_text {
+            if let Ok(flist) = serde_json::from_str::<Vec<String>>(&fbs) {
+                for f in flist {
+                    previous_feedback.push(format!("보강 필요: {}", f));
+                }
+            }
+        }
+    }
 
     // 모듈 컨텍스트 구성
     let module_context = format!(
@@ -1787,6 +1984,12 @@ pub async fn run_module_pipeline(
             Err(e) => { loop_error = Some(e); break; }
         };
 
+        // [STOP CHECK] AI 호출 후 중단 체크
+        if is_node_stopped(&*pool, &node.node_id).await {
+            println!(">>> Module Pipeline stopped manually after generation (Node: {})", node.node_id);
+            break;
+        }
+
         let _ = app_handle.emit("pipeline-status", format!("[{}] {} 검증 중 (반복 {}/{})", module.module_name, node_type, i, max_iters));
         // 4. Draft 평가 (통합 컨텍스트 및 이전 피드백 주입)
         let eval_res = evaluate_draft(&app_handle, &client, &api_key, &node_type, &draft, None, &combined_context, &module_context, &previous_feedback, i).await;
@@ -1794,6 +1997,12 @@ pub async fn run_module_pipeline(
             Ok(e) => e,
             Err(e) => { loop_error = Some(e); break; }
         };
+
+        // [STOP CHECK] 평가 후 및 저장 직전 중단 체크
+        if is_node_stopped(&*pool, &node.node_id).await {
+            println!(">>> Module Pipeline stopped manually before save (Node: {})", node.node_id);
+            break;
+        }
 
         let iter_id = Uuid::new_v4().to_string();
         let errors_json = serde_json::to_string(&eval.critical_errors).unwrap_or_default();
@@ -1897,10 +2106,14 @@ async fn generate_draft_with_context(
         );
     }
 
-    if !previous_draft.is_empty() && !previous_feedback.is_empty() {
-        let feedback_text = previous_feedback.iter().map(|f| format!("- {}", f)).collect::<Vec<_>>().join("\n");
+    if !previous_draft.is_empty() {
+        let feedback_text = if previous_feedback.is_empty() {
+            "없음".to_string()
+        } else {
+            previous_feedback.iter().map(|f| format!("- {}", f)).collect::<Vec<_>>().join("\n")
+        };
         user_prompt = format!(
-            "{}\n\n이전 회차 결과물\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n위 피드백을 반영하여 새로운 결과물을 작성하십시오.",
+            "{}\n\n$PREVIOUS_DRAFT\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n위 피드백을 반영하여 기존 설계를 계승하고 보완하여 최신 결과물을 도출하십시오.",
             user_prompt, previous_draft, feedback_text
         );
     }
@@ -2000,4 +2213,57 @@ async fn trigger_module_next_nodes(app_handle: &tauri::AppHandle, module_id: &st
 
     let _ = app_handle.emit("nodes-updated", ());
     Ok(())
+}
+
+/// 파이프라인 수동 중단
+#[tauri::command]
+pub async fn stop_node_pipeline(
+    pool: tauri::State<'_, SqlitePool>,
+    node_id: String,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    sqlx::query("UPDATE document_node SET node_state = 'PAUSED_STOPPED', updated_at = ? WHERE node_id = ?")
+        .bind(Utc::now().to_rfc3339())
+        .bind(&node_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let _ = app_handle.emit("nodes-updated", ());
+    let _ = app_handle.emit("pipeline-status", "사용자에 의해 파이프라인이 중단되었습니다.");
+    println!(">>> Pipeline manually stopped for node: {}", node_id);
+    Ok(())
+}
+
+/// 중단된 파이프라인 재개 (READY 상태로 복구)
+#[tauri::command]
+pub async fn resume_node_pipeline(
+    pool: tauri::State<'_, SqlitePool>,
+    node_id: String,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    sqlx::query("UPDATE document_node SET node_state = 'READY', updated_at = ? WHERE node_id = ?")
+        .bind(Utc::now().to_rfc3339())
+        .bind(&node_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let _ = app_handle.emit("nodes-updated", ());
+    println!(">>> Pipeline resumed (set to READY) for node: {}", node_id);
+    Ok(())
+}
+
+/// 노드가 중단 상태인지 확인하는 내부 헬퍼
+async fn is_node_stopped(pool: &SqlitePool, node_id: &str) -> bool {
+    let state: Option<(String,)> = sqlx::query_as("SELECT node_state FROM document_node WHERE node_id = ?")
+        .bind(node_id)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or(None);
+    
+    if let Some((s,)) = state {
+        return s == "PAUSED_STOPPED";
+    }
+    false
 }

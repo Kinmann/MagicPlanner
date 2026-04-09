@@ -23,6 +23,15 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({ projectId, node, onAppr
   const [error, setError] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [showRaw, setShowRaw] = useState(false);
+  const [tempMax, setTempMax] = useState(node?.max_iterations || 10);
+
+  // node 정보가 외부에서 변경될 때 로컬 상태 동기화
+  React.useEffect(() => {
+    if (node) {
+      setTempMax(node.max_iterations);
+    }
+  }, [node?.node_id, node?.max_iterations]);
+
 
   // 모든 키를 snake_case로 정규화하는 헬퍼 함수
   const normalizeKeys = (obj: any): any => {
@@ -59,6 +68,26 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({ projectId, node, onAppr
       setStatusMsg(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleStop = async () => {
+    if (!node) return;
+    try {
+      await invoke('stop_node_pipeline', { nodeId: node.node_id });
+      setStatusMsg('중단 요청됨...');
+    } catch (err: any) {
+      setError(err.toString());
+    }
+  };
+
+  const handleResume = async () => {
+    if (!node) return;
+    try {
+      await invoke('resume_node_pipeline', { nodeId: node.node_id });
+      onRefresh();
+    } catch (err: any) {
+      setError(err.toString());
     }
   };
 
@@ -107,6 +136,7 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({ projectId, node, onAppr
 
   const isReady = node?.node_state === 'READY';
   const isPausedHitl = node?.node_state === 'PAUSED_HITL';
+  const isPausedStopped = node?.node_state === 'PAUSED_STOPPED';
   const isCompleted = node?.node_state === 'COMPLETED';
 
   return (
@@ -145,15 +175,32 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({ projectId, node, onAppr
           <label>Max Iterations:</label>
           <input 
             type="number" 
-            value={node?.max_iterations || 10} 
+            value={tempMax} 
             min="1" 
             max="20"
-            onChange={(e) => node && onUpdateMaxIterations(node.node_id, parseInt(e.target.value))}
+            onChange={(e) => setTempMax(parseInt(e.target.value) || 1)}
+            onBlur={() => node && onUpdateMaxIterations(node.node_id, tempMax)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && node) {
+                onUpdateMaxIterations(node.node_id, tempMax);
+                (e.target as HTMLInputElement).blur();
+              }
+            }}
           />
         </div>
-        {(isReady || node?.node_state === 'PAUSED_API_ERROR') && (
+        {(isReady || node?.node_state === 'PAUSED_API_ERROR') && !loading && (
           <Button onClick={handleRun} disabled={loading}>
-            {loading ? <><Spinner size="sm" /> 생성 중...</> : <><span className="material-symbols-outlined">play_arrow</span> Genesis PRD 생성</>}
+            <span className="material-symbols-outlined">play_arrow</span> Genesis PRD 생성
+          </Button>
+        )}
+        {loading && (
+          <Button onClick={handleStop} variant="danger">
+            <span className="material-symbols-outlined">stop</span> 생성 중단
+          </Button>
+        )}
+        {isPausedStopped && (
+          <Button onClick={handleResume} variant="primary">
+            <span className="material-symbols-outlined">settings_backup_restore</span> 다시 시작 준비 (Resume)
           </Button>
         )}
         {(isPausedHitl || isCompleted) && (

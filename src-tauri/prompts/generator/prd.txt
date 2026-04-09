@@ -2,13 +2,17 @@
 
 ## 1. 개요 및 위상 (Overview & Status)
 
-- **위상**: 본 문서는 DAG 파이프라인의 최상위 제네시스(Genesis) 노드임.
+- **위상**: 본 문서는 모듈 내 DAG 파이프라인의 최상위 노드임.
 - **목적**: 사용자의 비정형 요구사항을 시스템이 처리 가능한 계층적 데이터로 변환함.
-- **Genesis 특권**: PRD는 파이프라인 내 유일하게 '창의적 발산'이 허용되는 노드임.
+- **PRD 특권**: PRD는 모듈 내 유일하게 '창의적 발산'이 허용되는 노드임.
 
 ## 2. PRD 특화 작성 통제 원칙 (Domain Principles)
 
-### A. Genesis Identifier (초기 식별자 부여 규칙)
+### A. 이전 설계 계승 및 발전 (Refinement)
+- 만약 `$PREVIOUS_DRAFT`에 데이터가 존재한다면 이를 기본 골격으로 삼으십시오.
+- `$EVALUATOR_FEEDBACK`의 내용을 분석하여 결함 사항을 최우선으로 교정하고, 기존의 정합성 있는 식별자(EPIC, FEAT, REQ 등)와 논리 구조는 최대한 유지하여 일관성을 확보하십시오.
+
+### B. Genesis Identifier (초기 식별자 부여 규칙)
 - **명명 규칙**:
     - Epic 레벨: `EPIC-{NNN}` (예: EPIC-001)
     - Feature 레벨: `FEAT-{NNN}` (예: FEAT-001)
@@ -24,16 +28,8 @@
 ### D. 모호성 배제 및 제약 사항(Constraints) 정의
 - 가정(Assumption)과 범위 외(Out of Scope) 사항을 명확히 격리.
 
-### E. 기술 스택 정의 (Tech Stack Definition)
-- 사용자의 요구사항과 프로젝트의 규모를 고려하여 최적의 기술 스택을 제안함.
-- `tech_stack` 필드는 아래의 구조를 가지며 각 항목을 명확히 정의함:
-    - `frontend`: 프론트엔드 언어 및 프레임워크 (예: React, Next.js, Tailwind CSS)
-    - `backend`: 백엔드 언어 및 프레임워크 (예: Rust, Axum, Node.js)
-    - `database`: 사용될 데이터베이스 (예: PostgreSQL, Redis)
-    - `framework`: 애플리케이션 프레임워크 (예: Tauri, Expo)
-    - `infrastructure`: 배포 및 인프라 (예: AWS, GitHub Actions, Vercel)
 
-### F. 창의적 확장 (Evolution Mechanism)
+### E. 창의적 확장 (Evolution Mechanism)
 - 1~3회차: 구조화 및 필독 기능 정의 집중.
 - 4~7회차: 혁신적 UX 및 차별화 기능 제안 (측면 사고 적용).
 - 8회차 이상: 시스템적 실현 가능성 점검 및 데이터 정합성 정제.

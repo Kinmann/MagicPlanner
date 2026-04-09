@@ -7,7 +7,11 @@
 
 ## 2. ERD 특화 작성 통제 원칙 (Domain Principles)
 
-### A. 데이터 원자성 및 명명 규칙 (Data Atomicity & Naming)
+### A. 이전 설계 계승 및 발전 (Refinement)
+- 만약 `$PREVIOUS_DRAFT`에 데이터가 존재한다면 이를 기본 골격으로 삼으십시오.
+- `$EVALUATOR_FEEDBACK`의 내용을 분석하여 결함 사항을 최우선으로 교정하고, 기존의 정합성 있는 테이블 구조 및 관계는 최대한 유지하십시오.
+
+### B. 데이터 원자성 및 명명 규칙 (Data Atomicity & Naming)
 - FSD의 원자적 필드 명칭과 용도를 계승함.
 - **표기형식**: `table_name`, `column_name`은 모두 **영문 소문자 스네이크 케이스(snake_case)** 고수.
 
@@ -29,8 +33,10 @@
 - PK: `id` 또는 `{table_name}_id`.
 - FK: 참조 대상 PK 명칭과 동일하게 작성. `ON DELETE` 제약 조건(CASCADE, RESTRICT 등) 명시.
 
-### F. 기본 인덱싱 규칙
-- 오버엔지니어링 방지를 위해 PK, FK, Unique 필드(email 등)에만 `index_required` 명시.
+### G. 기술 스택 기반 물리 타입 매핑 (Tech Stack Alignment)
+- 주입된 `sad_tech_stack`의 `database` 정보를 확인하십시오.
+- 해당 제품군(예: SQLite, PostgreSQL 등)에서 최적으로 지원하는 데이터 타입을 우선 선택하십시오.
+- 글로벌 기술 스택에 위배되는 물리 데이터 구조 정의를 금지합니다.
 
 ## 3. 스키마 및 데이터 작성 규칙
 - **데이터 타입**: String, Integer, Boolean, DateTime, Float, JSON 등 범용 논리 타입 사용.

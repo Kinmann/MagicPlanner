@@ -262,6 +262,24 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
     }
   };
 
+  const handleStopNode = async (nodeId: string) => {
+    try {
+      await invoke('stop_node_pipeline', { nodeId });
+      fetchNodes();
+    } catch (err: any) {
+      setError(err.toString());
+    }
+  };
+
+  const handleResumeNode = async (nodeId: string) => {
+    try {
+      await invoke('resume_node_pipeline', { nodeId });
+      fetchNodes();
+    } catch (err: any) {
+      setError(err.toString());
+    }
+  };
+
   const handleViewNode = async (node: DocumentNode) => {
     setSelectedNodeId(node.node_id);
     setViewMode('CONTENT');
@@ -461,8 +479,10 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
                 {viewMode === 'BOARD' ? (
                   <motion.div key="board" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                     <PipelineBoard 
-                      nodes={selectedModuleId ? nodes.filter(n => n.module_id === selectedModuleId) : []} 
+                      nodes={selectedModuleId ? nodes.filter(n => n.node_id === selectedModuleId || n.module_id === selectedModuleId) : []} 
                       onRunNode={handleRunNode} 
+                      onStopNode={handleStopNode}
+                      onResumeNode={handleResumeNode}
                       onViewNode={handleViewNode}
                       onHITLAction={handleHITLAction}
                       onUpdateMaxIterations={handleUpdateMaxIterations}

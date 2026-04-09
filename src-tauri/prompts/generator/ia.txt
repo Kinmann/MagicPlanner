@@ -7,7 +7,11 @@
 
 ## 2. IA 특화 작성 통제 원칙 (Domain Principles)
 
-### A. 스크린 식별자 동기화 (Screen ID Synchronization)
+### A. 이전 설계 계승 및 발전 (Refinement)
+- 만약 `$PREVIOUS_DRAFT`에 데이터가 존재한다면 이를 기본 골격으로 삼으십시오.
+- `$EVALUATOR_FEEDBACK`의 내용을 분석하여 결함 사항을 최우선으로 교정하고, 기존의 정합성 있는 정보 구조는 최대한 유지하십시오.
+
+### B. 스크린 식별자 동기화 (Screen ID Synchronization)
 - **식별자 계승**: IA의 모든 화면에 User Flow의 `SCR-{NNN}` 1:1 매핑 필수.
 - **환각 통제**: User Flow에 없는 화면의 임의 창조 금지. 다중 호출되는 화면은 참조 경로(Path)만 다중 명시.
 

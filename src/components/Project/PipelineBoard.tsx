@@ -8,12 +8,16 @@ import './PipelineBoard.scss';
 interface PipelineBoardProps {
   nodes: DocumentNode[];
   onRunNode: (nodeType: string) => void;
+  onStopNode: (nodeId: string) => void;
+  onResumeNode: (nodeId: string) => void;
   onViewNode: (node: DocumentNode) => void;
   onHITLAction: (nodeId: string, action: 'APPROVE' | 'RETRY') => void;
   onUpdateMaxIterations: (nodeId: string, maxIterations: number) => void;
 }
 
-const PipelineBoard: React.FC<PipelineBoardProps> = ({ nodes, onRunNode, onViewNode, onHITLAction, onUpdateMaxIterations }) => {
+const PipelineBoard: React.FC<PipelineBoardProps> = ({ 
+  nodes, onRunNode, onStopNode, onResumeNode, onViewNode, onHITLAction, onUpdateMaxIterations 
+}) => {
   const [nodeDimensions, setNodeDimensions] = useState<Record<string, { width: number, height: number }>>({});
   
   const handleDimensionsChange = useCallback((nodeType: string, dimensions: { width: number, height: number }) => {
@@ -173,6 +177,8 @@ const PipelineBoard: React.FC<PipelineBoardProps> = ({ nodes, onRunNode, onViewN
                 <PipelineCard 
                   node={node} 
                   onRun={onRunNode} 
+                  onStop={onStopNode}
+                  onResume={onResumeNode}
                   onView={onViewNode} 
                   onHITLAction={onHITLAction}
                   onUpdateMaxIterations={onUpdateMaxIterations}

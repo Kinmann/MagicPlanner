@@ -30,6 +30,11 @@
   &.is-completed {
     border-color: rgba($status-completed, 0.3);
   }
+  
+  &.is-paused-stopped {
+    border-color: rgba($on-surface-variant, 0.3);
+    background: rgba($on-surface-variant, 0.02);
+  }
 
   // Ports
   .port {
@@ -120,6 +125,10 @@
 
   &.is-error, &.is-warning {
     .status-text { color: $status-error; }
+  }
+
+  &.is-paused-stopped {
+    .status-text { color: rgba($on-surface-variant, 0.5); }
   }
 
   // Body
@@ -286,11 +295,12 @@
     display: flex;
     gap: 0.5rem;
 
-    .hitl-actions {
+    .hitl-actions, .status-actions {
       display: flex;
       gap: 0.5rem;
       width: 100%;
       .btn {
+        flex: 1;
         &.is-pass { flex: 3; }
         &.is-retry { flex: 7; }
       }
@@ -338,6 +348,10 @@
         color: $on-surface-variant;
         border: 1px solid rgba($outline-variant, 0.1);
         &:hover { border-color: rgba($primary, 0.3); color: $primary; }
+        
+        &.is-stop {
+          &:hover { border-color: rgba($status-error, 0.5); color: $status-error; }
+        }
       }
     }
   }

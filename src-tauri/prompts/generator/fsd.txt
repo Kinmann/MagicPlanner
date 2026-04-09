@@ -6,7 +6,11 @@
 
 ## 2. FSD 특화 작성 통제 원칙 (Domain Principles)
 
-### A. 절대적 추적성 보장 (Absolute Traceability)
+### A. 이전 설계 계승 및 발전 (Refinement)
+- 만약 `$PREVIOUS_DRAFT`에 데이터가 존재한다면 이를 기본 골격으로 삼으십시오.
+- `$EVALUATOR_FEEDBACK`의 내용을 분석하여 결함 사항을 최우선으로 교정하고, 기존의 정합성 있는 식별자(FUNC-XXX 등)와 매핑 구조는 최대한 유지하여 일관성을 확보하십시오.
+
+### B. 절대적 추적성 보장 (Absolute Traceability)
 - **식별자 매핑**: PRD의 `REQ-{NNN}`을 1:1 또는 1:N으로 매핑 필수.
 - **FSD 식별자**: `FUNC-{NNN}` 형태 부여. `mapped_req_id` 필드 필수 포함.
 

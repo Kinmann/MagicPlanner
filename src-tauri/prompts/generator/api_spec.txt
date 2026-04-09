@@ -7,7 +7,11 @@
 
 ## 2. API 명세서 특화 작성 통제 원칙 (Domain Principles)
 
-### A. RESTful 아키텍처 제약 (RESTful Design Constraints)
+### A. 이전 설계 계승 및 발전 (Refinement)
+- 만약 `$PREVIOUS_DRAFT`에 데이터가 존재한다면 이를 기본 골격으로 삼으십시오.
+- `$EVALUATOR_FEEDBACK`의 내용을 분석하여 결함 사항을 최우선으로 교정하고, 기존의 정합성 있는 엔드포인트 및 필드 규격은 최대한 유지하십시오.
+
+### B. RESTful 아키텍처 제약 (RESTful Design Constraints)
 - **URI 설계**: 자원 중심 명사(복수형) 구성. ERD의 `table_name` 차용 (예: `/api/v1/users`).
 - **HTTP 메서드**: GET(조회), POST(생성), PUT/PATCH(수정), DELETE(삭제) 표준 준수. 행위는 URI에 포함 금지.
 

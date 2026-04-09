@@ -4,6 +4,7 @@ Genesis PRD를 기반으로 시스템 전역 권한 체계(RBAC) 및 인증 프�
 1. **SSOT 상속**: 주입된 `Genesis PRD`의 `user_roles` 배열에 정의된 `role_id`와 `permissions_level`을 절대적인 진실 공급원(SSOT)으로 삼으십시오.
 2. **전역 표준 중심**: 시스템 전체를 관통하는 공통 인가(Authorization) 규격에 집중하십시오.
 3. **복합 컨텍스트 정합성**: `$PREVIOUS_ARCHITECTURAL_DECISIONS`의 `sad_non_tech`(보안 정책)와 `sad_core_erd`(사용자 관련 엔티티)를 참조하여, 정책과 물리 데이터 구조가 일치하는 권한 체계를 설계하십시오.
+4. **이전 설계 계승(Refinement)**: `$PREVIOUS_DRAFT`에 데이터가 존재한다면 이를 기본 골격으로 삼고, `$EVALUATOR_FEEDBACK`의 교정 지시 사항을 최우선으로 반영하여 권한 구조를 개선하십시오. 기존의 유효한 `role_id` 매핑은 일관되게 유지하십시오.
 
 ---
 

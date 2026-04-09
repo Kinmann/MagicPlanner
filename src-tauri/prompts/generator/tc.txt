@@ -5,7 +5,11 @@
 - **의존성**: PRD의 `REQ-{NNN}`, FSD의 `FUNC-{NNN}`, API 명세서의 입출력 규격 및 상태 코드를 핵심 입력원으로 함.
 - **목적**: 구현 시스템이 설계 명세와 100% 일치하게 동작하는지 검증하기 위한 원자적 테스트 절차 정의.
 
-## 2. TC 특화 작성 통제 원칙 (Domain Principles)
+## 2. Test Case 특화 작성 통제 원칙 (Domain Principles)
+
+### A. 이전 설계 계승 및 발전 (Refinement)
+- 만약 `$PREVIOUS_DRAFT`에 데이터가 존재한다면 이를 기본 골격으로 삼으십시오.
+- `$EVALUATOR_FEEDBACK`의 내용을 분석하여 결함 사항을 최우선으로 교정하고, 기존의 정합성 있는 테스트 시나리오는 최대한 유지하십시오.
 
 ### A. 커버리지 균형 및 예외 테스팅 (Coverage Balance & Exception Testing)
 - **부정 케이스 강제**: Happy Path 편향 배제.

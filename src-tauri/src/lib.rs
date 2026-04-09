@@ -65,13 +65,15 @@ pub fn run() {
                     CREATE TABLE IF NOT EXISTS global_context (
                         context_id VARCHAR(36) PRIMARY KEY NOT NULL,
                         project_id VARCHAR(36) NOT NULL,
+                        iteration_id VARCHAR(36), -- Draft별 데이터 추적을 위해 추가
                         context_type VARCHAR(50) NOT NULL,
                         context_data_json TEXT NOT NULL,
                         version INTEGER NOT NULL DEFAULT 1,
                         created_at TIMESTAMP NOT NULL,
                         updated_at TIMESTAMP NOT NULL,
                         is_deleted BOOLEAN NOT NULL DEFAULT 0,
-                        FOREIGN KEY(project_id) REFERENCES project(project_id)
+                        FOREIGN KEY(project_id) REFERENCES project(project_id),
+                        FOREIGN KEY(iteration_id) REFERENCES generation_iteration(iteration_id)
                     );
 
                     -- 4. 로컬 모듈
@@ -142,6 +144,19 @@ pub fn run() {
                         FOREIGN KEY(node_id) REFERENCES document_node(node_id)
                     );
                 ").execute(&pool).await.map_err(|e| e.to_string())?;
+
+                // ============================================================
+                // v2 마이그레이션: 기존 테이블에 누락된 컬럼 추가
+                // ============================================================
+                // 1. project 테이블
+                let _ = sqlx::query("ALTER TABLE project ADD COLUMN pipeline_phase VARCHAR(30) NOT NULL DEFAULT 'GENESIS_PRD'").execute(&pool).await;
+                
+                // 2. global_context 테이블 (에러 발생 지점)
+                let _ = sqlx::query("ALTER TABLE global_context ADD COLUMN iteration_id VARCHAR(36)").execute(&pool).await;
+
+                // 3. document_node 테이블
+                let _ = sqlx::query("ALTER TABLE document_node ADD COLUMN module_id VARCHAR(36)").execute(&pool).await;
+                let _ = sqlx::query("ALTER TABLE document_node ADD COLUMN node_category VARCHAR(30) NOT NULL DEFAULT 'MODULE'").execute(&pool).await;
                 
                 Ok::<sqlx::SqlitePool, String>(pool)
             })?;

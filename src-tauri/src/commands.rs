@@ -93,6 +93,7 @@ pub struct GenerationIteration {
 pub struct GlobalContext {
     pub context_id: String,
     pub project_id: String,
+    pub iteration_id: Option<String>,
     pub context_type: String,
     pub context_data_json: String,
     pub version: i32,
@@ -798,7 +799,7 @@ async fn call_gemini(client: &Client, api_key: &str, sys_prompt: &str, user_prom
         "temperature": 0.7,
         "topP": 0.95,
         "topK": 40,
-        "maxOutputTokens": 8192,
+        "maxOutputTokens": 16384,
         "responseMimeType": "application/json"
     });
 
@@ -827,12 +828,19 @@ async fn call_gemini(client: &Client, api_key: &str, sys_prompt: &str, user_prom
     }
 
     let result: serde_json::Value = resp.json().await.map_err(|e: reqwest::Error| PipelineError::Internal(e.to_string()))?;
-    let text = result["candidates"][0]["content"]["parts"][0]["text"]
+    let raw_text = result["candidates"][0]["content"]["parts"][0]["text"]
         .as_str()
-        .ok_or_else(|| PipelineError::Internal("Empty response from Gemini".to_string()))?
-        .to_string();
+        .ok_or_else(|| PipelineError::Internal("Empty response from Gemini".to_string()))?;
 
-    Ok(text)
+    // 마크다운 백틱 및 불필요한 공백 제거
+    let cleaned_text = raw_text
+        .trim()
+        .trim_start_matches("```json")
+        .trim_start_matches("```")
+        .trim_end_matches("```")
+        .trim();
+
+    Ok(cleaned_text.to_string())
 }
 
 #[tauri::command]
@@ -883,9 +891,8 @@ pub async fn get_global_contexts(
     project_id: String,
 ) -> Result<Vec<GlobalContext>, String> {
     let contexts = sqlx::query_as::<_, GlobalContext>(
-        "SELECT t1.context_id, t1.project_id, t1.context_type, t1.context_data_json, t1.version, t1.created_at, t1.updated_at FROM global_context t1 INNER JOIN (SELECT context_type, MAX(created_at) as max_created FROM global_context WHERE project_id = ? AND is_deleted = 0 GROUP BY context_type) t2 ON t1.context_type = t2.context_type AND t1.created_at = t2.max_created WHERE t1.project_id = ? AND t1.is_deleted = 0"
+        "SELECT context_id, project_id, iteration_id, context_type, context_data_json, version, created_at, updated_at FROM global_context WHERE project_id = ? AND is_deleted = 0 ORDER BY created_at DESC"
     )
-    .bind(&project_id)
     .bind(&project_id)
     .fetch_all(&*pool)
     .await
@@ -1039,14 +1046,14 @@ pub async fn run_sad_global_pipeline(
     .ok_or_else(|| "Genesis PRD node not found".to_string())?;
 
     let genesis_prd_content = sqlx::query_as::<_, GenerationIteration>(
-        "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY calculated_score DESC LIMIT 1"
+        "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 AND json_extract(generated_draft_json, '$.metadata.status') = 'HUMAN_APPROVED' ORDER BY created_at DESC LIMIT 1"
     )
     .bind(&genesis_node.node_id)
     .fetch_optional(&*pool)
     .await
     .map_err(|e| e.to_string())?
     .map(|it| it.generated_draft_json)
-    .unwrap_or_default();
+    .ok_or_else(|| "확정된 Genesis PRD가 없습니다. PRD 단계에서 'Approve'를 먼저 완료해주세요.".to_string())?;
 
     // SAD_Global 노드 상태 조회
     let sad_node = sqlx::query_as::<_, DocumentNode>(
@@ -1085,46 +1092,75 @@ pub async fn run_sad_global_pipeline(
     // Stage 1: 글로벌 컨텍스트 5종 생성 및 평가 루프
     while current_iter < max_iters && !is_global_success {
         current_iter += 1;
-        let _ = app_handle.emit("pipeline-status", format!("SAD Stage 1 (Iteration {}/{}): 글로벌 컨텍스트 5종 생성 중...", current_iter, max_iters));
-
-        let global_types = vec!["sad_core_erd", "sad_auth_rbac", "sad_interface_error", "sad_tech_stack", "sad_non_tech"];
+        let global_types = vec!["sad_non_tech", "sad_tech_stack", "sad_core_erd", "sad_auth_rbac", "sad_interface_error"];
         let mut stage_context_json = serde_json::json!({});
 
-        for ctx_type in &global_types {
-            let schema_obj = crate::schemas::get_schema_for_node(ctx_type);
-            let resource_dir = app_handle.path().resource_dir().map_err(|e: tauri::Error| e.to_string())?;
-            let domain_prompt = std::fs::read_to_string(resource_dir.join(format!("prompts/generator/{}.txt", ctx_type))).unwrap_or_default();
+        for ctx_type in global_types {
+            let _ = app_handle.emit("pipeline-status", format!("SAD Stage 1 (Iter {}): {} 생성 중...", current_iter, ctx_type));
+            
+            // 의존성 데이터 추출
+            let dependencies = match ctx_type {
+                "sad_non_tech" => vec![],
+                "sad_tech_stack" => vec!["sad_non_tech"],
+                "sad_core_erd" => vec!["sad_tech_stack"],
+                "sad_auth_rbac" => vec!["sad_non_tech", "sad_core_erd"],
+                "sad_interface_error" => vec!["sad_tech_stack", "sad_auth_rbac"],
+                _ => vec![],
+            };
 
-            let sys_prompt = format!("$COMMON_RULES\n{}\n\n$DOMAIN_SPECIFIC_RULE\n{}", common_prompt, domain_prompt);
+            let mut prev_decisions = serde_json::Map::new();
+            for dep in dependencies {
+                if let Some(val) = stage_context_json.get(dep) {
+                    prev_decisions.insert(dep.to_string(), val.clone());
+                }
+            }
+            let prev_context_str = serde_json::to_string_pretty(&prev_decisions).unwrap_or_else(|_| "{}".to_string());
+
+            let schema_obj = crate::schemas::get_schema_for_node(ctx_type);
+            let resource_path = resource_dir.join(format!("prompts/generator/{}.txt", ctx_type));
+            let type_prompt = std::fs::read_to_string(&resource_path).unwrap_or_else(|_| {
+                println!("!!! Missing prompt: {:?}", resource_path);
+                String::new()
+            });
+
+            let sys_prompt = format!("$COMMON_RULES\n{}\n\n$DOMAIN_SPECIFIC_RULE\n{}", common_prompt, type_prompt);
             let user_prompt = format!(
-                "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n위 정보를 기반으로 {} 명세를 작성하십시오.",
-                ctx_type, current_iter, genesis_prd_content, last_feedback, ctx_type
+                "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$PREVIOUS_ARCHITECTURAL_DECISIONS\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n위 정보를 기반으로 {}을(를) 작성하십시오.",
+                ctx_type, current_iter, genesis_prd_content, prev_context_str, last_feedback, ctx_type
             );
 
             let result = call_gemini(&client, &api_key, &sys_prompt, &user_prompt, schema_obj).await;
-            match result {
+            let part_json = match result {
                 Ok(content) => {
-                    stage_context_json[ctx_type] = serde_json::from_str(&content).unwrap_or(serde_json::json!(content));
+                    serde_json::from_str::<serde_json::Value>(&content)
+                        .map_err(|e| format!("SAD Part ({}) 파싱 오류: {} - 원본: {}", ctx_type, e, content))?
                 }
                 Err(e) => {
                     let (code, msg) = match e {
-                        PipelineError::ApiError(c, m) => (c as i32, m),
-                        PipelineError::Internal(m) => (0, m),
+                        crate::commands::PipelineError::ApiError(c, m) => (c as i32, m),
+                        crate::commands::PipelineError::Internal(m) => (0, m),
                     };
                     sqlx::query("UPDATE document_node SET node_state = 'PAUSED_API_ERROR', api_error_code = ?, api_error_message = ?, updated_at = ? WHERE node_id = ?")
                     .bind(code).bind(&msg).bind(Utc::now().to_rfc3339()).bind(&sad_node.node_id)
                     .execute(&*pool).await.map_err(|e| e.to_string())?;
-                    return Err(format!("SAD Stage 1 생성 오류: {}", msg));
+                    return Err(format!("SAD Part ({}) 생성 오류: {}", ctx_type, msg));
                 }
+            };
+
+            // 통합 객체에 삽입
+            if let Some(obj) = stage_context_json.as_object_mut() {
+                obj.insert(ctx_type.to_string(), part_json);
             }
         }
 
         // 글로벌 컨텍스트 통합 평가
         let eval_schema = crate::schemas::get_evaluation_schema();
         let resource_dir = app_handle.path().resource_dir().map_err(|e: tauri::Error| e.to_string())?;
+        
+        let common_rubric = std::fs::read_to_string(resource_dir.join("prompts/evaluator/common.txt")).unwrap_or_else(|_| String::new());
         let eval_rubric = std::fs::read_to_string(resource_dir.join("prompts/evaluator/sad_global.txt")).unwrap_or_default();
         
-        let eval_sys_prompt = format!("$COMMON_RUBRIC\n$DOMAIN_RUBRIC\n{}", eval_rubric);
+        let eval_sys_prompt = format!("$COMMON_RUBRIC\n{}\n\n$DOMAIN_RUBRIC\n{}", common_rubric, eval_rubric);
         let eval_user_prompt = format!(
             "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$GENERATED_DOCUMENT\n{}\n\n$EVALUATOR_FEEDBACK\n{}",
             "SAD_Global", current_iter, genesis_prd_content, serde_json::to_string_pretty(&stage_context_json).unwrap_or_default(), last_feedback
@@ -1142,15 +1178,6 @@ pub async fn run_sad_global_pipeline(
                     if !is_pass && score < threshold {
                         let _ = app_handle.emit("pipeline-status", format!("SAD Stage 1 품질 미달이나 최대 횟수 도달로 강제 진행 (점수: {})", score));
                     }
-                    for (ctx_type, data) in stage_context_json.as_object().unwrap() {
-                        let ctx_id = Uuid::new_v4().to_string();
-                        let now = Utc::now().to_rfc3339();
-                        sqlx::query(
-                            "INSERT INTO global_context (context_id, project_id, context_type, context_data_json, version, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, 0)"
-                        )
-                        .bind(&ctx_id).bind(&project_id).bind(ctx_type).bind(data.to_string()).bind(current_iter).bind(&now).bind(&now)
-                        .execute(&*pool).await.map_err(|e| e.to_string())?;
-                    }
                     _all_context_json = stage_context_json.clone();
                     let _ = app_handle.emit("pipeline-status", format!("SAD Stage 1 통과 (점수: {})", score));
                 }
@@ -1158,6 +1185,19 @@ pub async fn run_sad_global_pipeline(
                 // [회차 저장] 모든 이터레이션 결과를 히스토리 테이블에 저장
                 let iter_id = Uuid::new_v4().to_string();
                 let now = Utc::now().to_rfc3339();
+
+                // 기계적 분할: 매 회차(Draft 포함)의 5종 컨텍스트를 각각 저장
+                let global_types = vec!["sad_core_erd", "sad_auth_rbac", "sad_interface_error", "sad_tech_stack", "sad_non_tech"];
+                for ctx_type in global_types {
+                    if let Some(data) = stage_context_json.get(ctx_type) {
+                        let ctx_id = Uuid::new_v4().to_string();
+                        sqlx::query(
+                            "INSERT INTO global_context (context_id, project_id, iteration_id, context_type, context_data_json, version, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)"
+                        )
+                        .bind(&ctx_id).bind(&project_id).bind(&iter_id).bind(ctx_type).bind(data.to_string()).bind(current_iter).bind(&now).bind(&now)
+                        .execute(&*pool).await.map_err(|e| e.to_string())?;
+                    }
+                }
                 let feedback_text = eval["feedback"].as_array()
                     .map(|arr| arr.iter().map(|v| v.as_str().unwrap_or("")).collect::<Vec<_>>().join("\n"))
                     .unwrap_or_default();
@@ -1250,14 +1290,14 @@ pub async fn run_sad_module_pipeline(
     .ok_or_else(|| "Genesis PRD node not found".to_string())?;
 
     let genesis_prd_content = sqlx::query_as::<_, GenerationIteration>(
-        "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY calculated_score DESC LIMIT 1"
+        "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 AND json_extract(generated_draft_json, '$.metadata.status') = 'HUMAN_APPROVED' ORDER BY created_at DESC LIMIT 1"
     )
     .bind(&genesis_node.node_id)
     .fetch_optional(&*pool)
     .await
     .map_err(|e| e.to_string())?
     .map(|it| it.generated_draft_json)
-    .unwrap_or_default();
+    .ok_or_else(|| "확정된 Genesis PRD가 없습니다. PRD 단계에서 'Approve'를 먼저 완료해주세요.".to_string())?;
 
     // 앞 단계인 SAD_Global의 결과(글로벌 컨텍스트) 조회
     let contexts = sqlx::query(
@@ -1310,42 +1350,72 @@ pub async fn run_sad_module_pipeline(
 
     while current_iter < max_iters && !is_module_success {
         current_iter += 1;
-        let _ = app_handle.emit("pipeline-status", format!("SAD Stage 2 (Iteration {}/{}): 모듈 분할 명세 3종 생성 중...", current_iter, max_iters));
-
         let module_types = vec!["sad_module_list", "sad_epic_mapping", "sad_module_deps"];
         let mut stage_module_json = serde_json::json!({});
 
-        for ctx_type in &module_types {
-            let schema_obj = crate::schemas::get_schema_for_node(ctx_type);
-            let resource_dir = app_handle.path().resource_dir().map_err(|e: tauri::Error| e.to_string())?;
-            let domain_prompt = std::fs::read_to_string(resource_dir.join(format!("prompts/generator/{}.txt", ctx_type))).unwrap_or_default();
+        for ctx_type in module_types {
+            let _ = app_handle.emit("pipeline-status", format!("SAD Stage 2 (Iter {}): {} 생성 중...", current_iter, ctx_type));
 
-            let sys_prompt = format!("$COMMON_RULES\n{}\n\n$DOMAIN_SPECIFIC_RULE\n{}", common_prompt, domain_prompt);
+            let schema_obj = crate::schemas::get_schema_for_node(ctx_type);
+            let resource_path = resource_dir.join(format!("prompts/generator/{}.txt", ctx_type));
+            let type_prompt = std::fs::read_to_string(&resource_path).unwrap_or_else(|_| {
+                println!("!!! Missing prompt: {:?}", resource_path);
+                String::new()
+            });
+
+            // 의존성 정의: 사용자 요청에 따라 순차적 주입
+            let dependencies = match ctx_type {
+                "sad_module_list" => vec![],
+                "sad_epic_mapping" => vec!["sad_module_list"],
+                "sad_module_deps" => vec!["sad_module_list", "sad_epic_mapping"],
+                _ => vec![],
+            };
+
+            let mut prev_decisions = serde_json::Map::new();
+            for dep in dependencies {
+                if let Some(val) = stage_module_json.get(dep) {
+                    prev_decisions.insert(dep.to_string(), val.clone());
+                }
+            }
+            let prev_context_str = serde_json::to_string_pretty(&prev_decisions).unwrap_or_else(|_| "{}".to_string());
+
+            let sys_prompt = format!("$COMMON_RULES\n{}\n\n$DOMAIN_SPECIFIC_RULE\n{}", common_prompt, type_prompt);
             let user_prompt = format!(
-                "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$GLOBAL_CONTEXT\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n위 정보를 기반으로 {} 명세를 작성하십시오.",
-                ctx_type, current_iter, genesis_prd_content, global_context_str, last_feedback, ctx_type
+                "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$GLOBAL_CONTEXT\n{}\n\n$PREVIOUS_ARCHITECTURAL_DECISIONS\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n위 정보를 기반으로 {}을(를) 작성하십시오.",
+                ctx_type, current_iter, genesis_prd_content, global_context_str, prev_context_str, last_feedback, ctx_type
             );
 
             let result = call_gemini(&client, &api_key, &sys_prompt, &user_prompt, schema_obj).await;
-            match result {
+            let part_json = match result {
                 Ok(content) => {
-                    stage_module_json[ctx_type] = serde_json::from_str(&content).unwrap_or(serde_json::json!(content));
+                    serde_json::from_str::<serde_json::Value>(&content)
+                        .map_err(|e| format!("SAD Part ({}) 파싱 오류: {} - 원본: {}", ctx_type, e, content))?
                 }
                 Err(e) => {
-                    let (_code, msg) = match e {
-                        PipelineError::ApiError(c, m) => (c as i32, m),
-                        PipelineError::Internal(m) => (0, m),
+                    let (code, msg) = match e {
+                        crate::commands::PipelineError::ApiError(c, m) => (c as i32, m),
+                        crate::commands::PipelineError::Internal(m) => (0, m),
                     };
-                    return Err(format!("SAD Stage 2 생성 오류: {}", msg));
+                    sqlx::query("UPDATE document_node SET node_state = 'PAUSED_API_ERROR', api_error_code = ?, api_error_message = ?, updated_at = ? WHERE node_id = ?")
+                    .bind(code).bind(&msg).bind(Utc::now().to_rfc3339()).bind(&sad_node.node_id)
+                    .execute(&*pool).await.map_err(|e| e.to_string())?;
+                    return Err(format!("SAD Part ({}) 생성 오류: {}", ctx_type, msg));
                 }
+            };
+
+            // 통합 객체에 삽입
+            if let Some(obj) = stage_module_json.as_object_mut() {
+                obj.insert(ctx_type.to_string(), part_json);
             }
         }
 
         let eval_schema = crate::schemas::get_evaluation_schema();
         let resource_dir = app_handle.path().resource_dir().map_err(|e: tauri::Error| e.to_string())?;
+        
+        let common_rubric = std::fs::read_to_string(resource_dir.join("prompts/evaluator/common.txt")).unwrap_or_else(|_| String::new());
         let eval_rubric = std::fs::read_to_string(resource_dir.join("prompts/evaluator/sad_module.txt")).unwrap_or_default();
         
-        let eval_sys_prompt = format!("$COMMON_RUBRIC\n$DOMAIN_RUBRIC\n{}", eval_rubric);
+        let eval_sys_prompt = format!("$COMMON_RUBRIC\n{}\n\n$DOMAIN_RUBRIC\n{}", common_rubric, eval_rubric);
         let eval_user_prompt = format!(
             "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$GLOBAL_CONTEXT\n{}\n\n$GENERATED_DOCUMENT\n{}\n\n$EVALUATOR_FEEDBACK\n{}",
             "SAD_Module", current_iter, genesis_prd_content, global_context_str, serde_json::to_string_pretty(&stage_module_json).unwrap_or_default(), last_feedback
@@ -1363,21 +1433,25 @@ pub async fn run_sad_module_pipeline(
                     if !is_pass && score < threshold {
                         let _ = app_handle.emit("pipeline-status", format!("SAD Stage 2 품질 미달이나 최대 횟수 도달로 강제 진행 (점수: {})", score));
                     }
-                    for (ctx_type, data) in stage_module_json.as_object().unwrap() {
-                        let ctx_id = Uuid::new_v4().to_string();
-                        let now = Utc::now().to_rfc3339();
-                        sqlx::query(
-                            "INSERT INTO global_context (context_id, project_id, context_type, context_data_json, version, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, 0)"
-                        )
-                        .bind(&ctx_id).bind(&project_id).bind(ctx_type).bind(data.to_string()).bind(current_iter).bind(&now).bind(&now)
-                        .execute(&*pool).await.map_err(|e| e.to_string())?;
-                    }
                     let _ = app_handle.emit("pipeline-status", format!("SAD Stage 2 통과 (점수: {})", score));
                 }
 
                 // [회차 저장] Stage 2 결과도 히스토리 테이블에 저장
                 let iter_id = Uuid::new_v4().to_string();
                 let now = Utc::now().to_rfc3339();
+
+                // 기계적 분할: 매 회차(Draft 포함)의 3종 컨텍스트를 각각 저장
+                let module_types = vec!["sad_module_list", "sad_epic_mapping", "sad_module_deps"];
+                for ctx_type in module_types {
+                    if let Some(data) = stage_module_json.get(ctx_type) {
+                        let ctx_id = Uuid::new_v4().to_string();
+                        sqlx::query(
+                            "INSERT INTO global_context (context_id, project_id, iteration_id, context_type, context_data_json, version, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)"
+                        )
+                        .bind(&ctx_id).bind(&project_id).bind(&iter_id).bind(ctx_type).bind(data.to_string()).bind(current_iter).bind(&now).bind(&now)
+                        .execute(&*pool).await.map_err(|e| e.to_string())?;
+                    }
+                }
                 let feedback_text = eval["feedback"].as_array()
                     .map(|arr| arr.iter().map(|v| v.as_str().unwrap_or("")).collect::<Vec<_>>().join("\n"))
                     .unwrap_or_default();
@@ -1555,9 +1629,9 @@ pub async fn confirm_sad_iteration(
             let data_str = if data.is_string() { data.as_str().unwrap().to_string() } else { data.to_string() };
             
             sqlx::query(
-                "INSERT INTO global_context (context_id, project_id, context_type, context_data_json, version, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, 0)"
+                "INSERT INTO global_context (context_id, project_id, iteration_id, context_type, context_data_json, version, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)"
             )
-            .bind(&ctx_id).bind(&project_id).bind(ctx_type).bind(data_str).bind(it_number).bind(&now).bind(&now)
+            .bind(&ctx_id).bind(&project_id).bind(None::<String>).bind(ctx_type).bind(data_str).bind(it_number).bind(&now).bind(&now)
             .execute(&mut *tx).await.map_err(|e| e.to_string())?;
         }
     }
@@ -1627,7 +1701,7 @@ pub async fn run_module_pipeline(
 ) -> Result<String, String> {
     // 글로벌 컨텍스트 수집
     let contexts = sqlx::query_as::<_, GlobalContext>(
-        "SELECT context_id, project_id, context_type, context_data_json, version, created_at, updated_at FROM global_context WHERE project_id = ? AND is_deleted = 0"
+        "SELECT context_id, project_id, iteration_id, context_type, context_data_json, version, created_at, updated_at FROM global_context WHERE project_id = ? AND is_deleted = 0"
     )
     .bind(&project_id)
     .fetch_all(&*pool)

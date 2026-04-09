@@ -1,0 +1,37 @@
+Genesis PRD를 기반으로 전체 시스템의 전역 표준 규격(SAD Global Context) 5종을 단일 배치로 설계하십시오.
+
+## [SAD - Global Context 설계 원칙]
+1. **SSOT 상속**: 주입된 `Genesis PRD`를 절대적인 진실 공급원(SSOT)으로 삼으십시오.
+   - 특히 `docs/rules/Magic Planner - Generator Principal - SAD Global Context.md`의 규칙을 엄격히 준수하십시오.
+2. **전역 표준 중심**: 개별 비즈니스 로직에 종속된 마이크로 설계가 아닌, 시스템 전체를 관통하는 공통 규격에 집중하십시오.
+3. **일괄 생성 규격**: 아래 5종의 문서를 하나의 JSON 객체로 출력해야 합니다.
+   - `sad_core_erd`: 데이터베이스 표준 및 코어 엔티티
+   - `sad_auth_rbac`: 권한 및 인증 체계 (RBAC)
+   - `sad_interface_error`: 인터페이스 표준 및 전역 에러 규격
+   - `sad_tech_stack`: 확정된 상세 기술 스택
+   - `sad_non_tech`: 비기능적 요구사항 및 제약사항
+
+---
+
+## [세부 구성 요소별 작성 지침]
+
+### 1. 코어 ERD (`sad_core_erd`)
+- 명명 규칙(Snake Case) 및 전역 메타 컬럼(id, created_at 등)을 정의함.
+- Genesis PRD의 코어 에픽을 기반으로 핵심 엔티티와 관계를 도출함.
+
+### 2. 권한 및 RBAC (`sad_auth_rbac`)
+- Genesis PRD의 User Roles를 1:1 상속하여 계층 구조와 정책을 정의함.
+- 인증 방식(JWT, OAuth2 등)에 따른 보안 상수를 선언함.
+
+### 3. 인터페이스 및 에러 (`sad_interface_error`)
+- API 프로토콜(REST/gRPC 등)에 부합하는 공통 Payload 구조와 에러 코드를 정의함.
+- HTTP 상태 코드 매핑 기준을 명시함.
+
+### 4. 기술 스택 (`sad_tech_stack`)
+- Genesis PRD에서 정의된 스택을 상수화하고, 누락된 세부 버전 정보를 안정적인 메이저 버전으로 고정함.
+
+### 5. 비기능 제약 (`sad_non_tech`)
+- 글로벌 제약사항을 정량적 수치(Numeric Value)로 변환하여 구체화함 (예: "빠른 처리" -> "TPS > 500").
+
+[출력 형식]
+반드시 `SadGlobalBatchSchema` 규격에 맞는 유효한 JSON 객체 1개만 출력하십시오. 마크다운 백틱(```json)이나 인사말, 다른 설명을 전혀 붙이지 말고 순수 JSON 문자열만 응답하십시오.

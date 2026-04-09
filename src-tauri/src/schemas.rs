@@ -384,6 +384,9 @@ pub fn get_schema_for_node(node_type: &str) -> Option<serde_json::Value> {
         "sad_module_list" => schemars::schema_for!(SadModuleListSchema),
         "sad_epic_mapping" => schemars::schema_for!(SadEpicMappingSchema),
         "sad_module_deps" => schemars::schema_for!(SadModuleDepsSchema),
+        // v2: SAD Batch
+        "sad_global_batch" => schemars::schema_for!(SadGlobalBatchSchema),
+        "sad_module_batch" => schemars::schema_for!(SadModuleBatchSchema),
         _ => return None,
     };
     
@@ -612,6 +615,26 @@ pub struct SadNonTechSchema {
     pub scalability_requirements: Vec<String>,
     pub budget_constraints: Vec<String>,
 }
+
+// v2: SAD Batch Wrapper Schemas
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct SadGlobalBatchSchema {
+    pub sad_core_erd: SadCoreErdSchema,
+    pub sad_auth_rbac: SadAuthRbacSchema,
+    pub sad_interface_error: SadInterfaceErrorSchema,
+    pub sad_tech_stack: SadTechStackSchema,
+    pub sad_non_tech: SadNonTechSchema,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct SadModuleBatchSchema {
+    pub sad_module_list: SadModuleListSchema,
+    pub sad_epic_mapping: SadEpicMappingSchema,
+    pub sad_module_deps: SadModuleDepsSchema,
+}
+
 
 // ============================================================
 // v2: SAD Module Split 3종

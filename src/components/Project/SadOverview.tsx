@@ -171,40 +171,36 @@ const SadOverview: React.FC<SadOverviewProps> = ({
   const displayContexts = (() => {
     // 1. Stage 1 데이터 결정
     let stage1Docs: any[] = [];
-    const globalIter = globalIters.find(it => it.iteration_id === selectedGlobalIterId);
-    if (!globalIter || selectedGlobalIterId === 'OFFICIAL') {
-      stage1Docs = contexts.filter(c => ['sad_core_erd', 'sad_auth_rbac', 'sad_interface_error', 'sad_tech_stack', 'sad_non_tech'].includes(c.context_type));
+    const stage1Types = ['sad_core_erd', 'sad_auth_rbac', 'sad_interface_error', 'sad_tech_stack', 'sad_non_tech'];
+    
+    if (selectedGlobalIterId === 'OFFICIAL') {
+      // 최신 공식(또는 마지막 회차) 컨텍스트 추출
+      const latestMap = new Map();
+      contexts.forEach(c => {
+        if (stage1Types.includes(c.context_type) && !latestMap.has(c.context_type)) {
+          latestMap.set(c.context_type, c);
+        }
+      });
+      stage1Docs = Array.from(latestMap.values());
     } else {
-      try {
-        const bundle = JSON.parse(globalIter.generated_draft_json);
-        stage1Docs = Object.entries(bundle)
-          .filter(([type]) => ['sad_core_erd', 'sad_auth_rbac', 'sad_interface_error', 'sad_tech_stack', 'sad_non_tech'].includes(type))
-          .map(([type, data]) => ({
-            context_id: `temp-${type}`,
-            context_type: type,
-            context_data_json: typeof data === 'string' ? data : JSON.stringify(data),
-            is_draft: true
-          }));
-      } catch { stage1Docs = []; }
+      // 선택된 이터레이션의 슬라이스만 표시
+      stage1Docs = contexts.filter(c => c.iteration_id === selectedGlobalIterId && stage1Types.includes(c.context_type));
     }
 
     // 2. Stage 2 데이터 결정
     let stage2Docs: any[] = [];
-    const moduleIter = moduleIters.find(it => it.iteration_id === selectedModuleIterId);
-    if (!moduleIter || selectedModuleIterId === 'OFFICIAL') {
-      stage2Docs = contexts.filter(c => ['sad_module_list', 'sad_epic_mapping', 'sad_module_deps'].includes(c.context_type));
+    const stage2Types = ['sad_module_list', 'sad_epic_mapping', 'sad_module_deps'];
+    
+    if (selectedModuleIterId === 'OFFICIAL') {
+      const latestMap = new Map();
+      contexts.forEach(c => {
+        if (stage2Types.includes(c.context_type) && !latestMap.has(c.context_type)) {
+          latestMap.set(c.context_type, c);
+        }
+      });
+      stage2Docs = Array.from(latestMap.values());
     } else {
-      try {
-        const bundle = JSON.parse(moduleIter.generated_draft_json);
-        stage2Docs = Object.entries(bundle)
-          .filter(([type]) => ['sad_module_list', 'sad_epic_mapping', 'sad_module_deps'].includes(type))
-          .map(([type, data]) => ({
-            context_id: `temp-${type}`,
-            context_type: type,
-            context_data_json: typeof data === 'string' ? data : JSON.stringify(data),
-            is_draft: true
-          }));
-      } catch { stage2Docs = []; }
+      stage2Docs = contexts.filter(c => c.iteration_id === selectedModuleIterId && stage2Types.includes(c.context_type));
     }
 
     return [...stage1Docs, ...stage2Docs];

@@ -8,41 +8,28 @@
 
 ---
 
-## 1. 공통 평가 지표 (Common Metrics) : 30점
-
-### Metric A: 스키마 및 포맷 엄격성 (10점)
-- 필수 Key 존재 여부, 데이터 타입 일치, JSON 문법 무결성 검증.
-- 위반 시 즉시 0점 처리.
-
-### Metric B: 식별자 추적성 및 데이터 정합성 (10점)
-- Genesis PRD의 EPIC-ID 전이 및 Global Context의 통신 규격 상속 여부 검증.
-- 환각, 누락, 변형 발견 시 건당 -5점.
-
-### Metric C: 결정론적 로직 및 실현 타당성 (10점)
-- 자가 모순, 모호한 부사/형용사 사용, 아키텍처 위반 검증.
-- 발견 시 건당 -5점.
-
 ---
 
-## 2. 도메인 특화 지표 (Domain Metrics) : 70점
+## 1. 도메인 특화 지표 (Domain Metrics) : 70점
 
-### Metric D: 추상화 계층 통제 (Abstraction Layer Control) (20점)
+### Metric D: 추상화 계층 통제 (Abstraction Layer Control) (15점)
 - 모듈 분할 과정에서 내부 동작 원리까지 개입하는 오버엔지니어링(Layer Bypass) 발생 여부를 검증합니다.
-- **감점**: 내부 로직 서술(함수 호출 순서, DB 쿼리 방식 등 Phase 3 영역 침범) 발견 시 **즉시 0점 처리**.
+- **감점 (즉시 0점 처리 -15점)**:
+    - **내부 로직 서술 (Internal Logic Description)**: 관계(What)가 아닌 구체적 함수 호출 순서, DB 쿼리 방식 등 마이크로 구현 로직(How)을 기술한 경우.
 
-### Metric E: 모듈 분할 및 에픽 완전 탐색 (Module Split & Epic Exhaustion) (25점)
-- 시스템을 독립적인 관점으로 분할하고 주입된 요구사항을 100% 매핑했는지 검증합니다.
-- **감점**:
-    - 고아 에픽 발생 (누락된 EPIC-XXX 식별자 존재): **-15점**.
-    - 식별자 규격 위반 (MOD-XXX 패턴 미준수) 건당 -5점.
-    - 책임 모호성 (단일 책임 원칙 SRP 위반) 건당 -5점.
+### Metric E: Bounded Context 응집도 및 에픽 완전 탐색 (Cohesion & Epic Exhaustion) (30점)
+- 시스템이 과적합 없이 거시적 관점으로 분할되었으며 요구사항을 100% 매핑했는지 검증합니다.
+- **감점 (건당 -5점 ~ -15점)**:
+    - **고아 에픽 발생 (Orphaned Epic)**: `$SOURCE_DOCUMENTS`의 에픽이 단 하나라도 누락된 경우 **-15점**.
+    - **ID 정합성 실패 (Module ID Inconsistency)**: `sad_epic_mapping`에서 사용된 `module_id`가 `sad_module_list`에 존재하지 않는 경우 **-10점** (예: 통합 전의 낡은 ID 사용).
+    - **나노 서비스 파편화 (Nano-Service Fragmentation)**: Bounded Context로 병합되지 않고 테이블/CRUD 단위로 잘게 쪼개진 경우 **-10점**.
 
 ### Metric F: 의존성 위상수학 검증 (Dependency Topological Verification) (25점)
 - 각 모듈 간의 연결망이 논리적으로 타당하며 런타임 결함 요소가 없는지 평가합니다.
-- **감점**:
-    - 순환 참조 (Circular Dependency, A->B->A 등) 존재 시: **-15점**.
-    - 통신 프로토콜 미지정 (글로벌 규격 미매핑) 건당 -5점.
-    - 미고립 모듈 (Inbound/Outbound 의존성 없는 고립 모듈) 건당 -5점.
+- **감점 (건당 -5점 ~ -15점)**:
+    - **양방향 및 순환 참조 (Bidirectional & Circular Dependency)**: `A <-> B` 또는 `A -> B -> A` 구조 발견 시 **-15점**.
+    - **미정의 모듈 참조 (Undefined Module Reference)**: `sad_module_deps`에서 참조된 모듈 ID가 `sad_module_list`에 없는 경우 **-10점**.
+    - **통신 프로토콜 미지정 (Protocol Undefined)**: 글로벌 규격을 준수하지 않고 통신 방식 Enum이 누락된 경우 **-5점**.
 
 ---
 

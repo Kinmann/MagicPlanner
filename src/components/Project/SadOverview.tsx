@@ -5,7 +5,6 @@ import { Store } from '@tauri-apps/plugin-store';
 import { GlobalContext, CONTEXT_TYPE_LABELS, DocumentNode, GenerationIteration } from '../../types/project';
 import Button from '../common/Button';
 import BaseModal from '../common/BaseModal';
-import Spinner from '../common/Spinner';
 import SadSpecRenderer from './SadSpecRenderer';
 import './SadOverview.scss';
 
@@ -83,7 +82,7 @@ const SadOverview: React.FC<SadOverviewProps> = ({
   const isModuleDone = moduleNode?.node_state === 'COMPLETED';
 
   // Internal Logic: If stage 2 is started, stage 1 is locked.
-  const isModuleStarted = moduleNode && moduleNode.node_state !== 'READY' && moduleNode.node_state !== 'PENDING';
+  const isModuleStarted = Boolean(moduleNode && moduleNode.node_state !== 'READY' && moduleNode.node_state !== 'PENDING');
   const isStage1Locked = isLocked || isModuleStarted;
   const isCurrentStageLocked = activeStage === 'GLOBAL' ? isStage1Locked : isLocked;
 

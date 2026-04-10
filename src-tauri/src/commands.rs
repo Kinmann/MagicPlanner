@@ -390,8 +390,8 @@ pub async fn run_pipeline(
     let max_iters = node.max_iterations;
     let threshold = node.threshold_score;
     let mut current_best_content = String::new();
-    let mut current_best_score = 0;
-    let mut final_iteration_count = 0;
+    let mut current_best_score = node.current_best_score;
+    let mut final_iteration_count = node.current_iteration;
 
     // 2.5 [RETRY] 이전 회차 정보 가져오기 (컨텍스트 유지)
     let latest_iter = sqlx::query_as::<_, GenerationIteration>(
@@ -487,7 +487,7 @@ pub async fn run_pipeline(
         .bind(i)
         .bind(&draft)
         .bind(eval.score)
-        .bind(eval.is_pass)
+        .bind(false)
         .bind(errors_json)
         .bind(feedback_json)
         .bind(Utc::now().to_rfc3339())
@@ -1336,7 +1336,7 @@ pub async fn run_sad_global_pipeline(
                 .bind(current_iter)
                 .bind(stage_context_json.to_string())
                 .bind(score)
-                .bind(is_pass)
+                .bind(false)
                 .bind(&critical_errors_text)
                 .bind(&feedback_text)
                 .bind(&now)
@@ -1644,7 +1644,7 @@ pub async fn run_sad_module_pipeline(
                 .bind(current_iter)
                 .bind(combined_bundle.to_string())
                 .bind(score)
-                .bind(is_pass)
+                .bind(false)
                 .bind(&critical_errors_text)
                 .bind(&feedback_text)
                 .bind(&now)
@@ -2102,7 +2102,7 @@ pub async fn run_module_pipeline(
         sqlx::query(
             "INSERT INTO generation_iteration (iteration_id, node_id, iteration_number, generated_draft_json, calculated_score, is_pass, critical_errors_array, actionable_feedback_text, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"
         )
-        .bind(iter_id).bind(&node.node_id).bind(i).bind(&draft).bind(eval.score).bind(eval.is_pass)
+        .bind(iter_id).bind(&node.node_id).bind(i).bind(&draft).bind(eval.score).bind(false)
         .bind(errors_json).bind(feedback_json).bind(Utc::now().to_rfc3339()).bind(Utc::now().to_rfc3339())
         .execute(&*pool).await.map_err(|e| e.to_string())?;
 

@@ -28,7 +28,7 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
   const [loading, setLoading] = useState(false);
   const [content, setContent] = useState<any>(null);
   const [iterations, setIterations] = useState<any[]>([]);
-  const [selectedIdx, setSelectedIdx] = useState(0);
+  const [selectedIdx, setSelectedIdx] = useState(-1);
   const [error, setError] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [showRawView, setShowRawView] = useState(false);
@@ -66,6 +66,13 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
       const store = await Store.load('settings.json');
       const apiKeyValue = await store.get<{ value: string }>('gemini_api_key');
       if (!apiKeyValue?.value) throw new Error('API 키가 설정되지 않았습니다.');
+
+      // max_iterations가 변경된 경우 먼저 DB 업데이트 후 실행
+      if (node && tempMax !== node.max_iterations) {
+        onUpdateMaxIterations(node.node_id, tempMax);
+        // DB 반영 대기 (짧은 딜레이)
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
 
       await invoke<string>('run_genesis_prd_pipeline', {
         projectId,
@@ -124,10 +131,21 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
         projectId, 
         iterationId: it.iteration_id 
       });
-      // 데이터 새로고침
+      // 데이터 새로고침 후 confirmed 항목으로 포커스 이동
       const iters = await invoke<any[]>('get_node_iterations', { nodeId: node?.node_id });
       if (iters) {
-        setIterations(iters.sort((a, b) => (b.calculated_score || 0) - (a.calculated_score || 0)));
+        const sorted = [...iters].sort((a, b) => (b.calculated_score || 0) - (a.calculated_score || 0));
+        setIterations(sorted);
+        // is_pass=true인 유일한 항목을 선택
+        const passIdx = sorted.findIndex((i: any) => i.is_pass);
+        setSelectedIdx(passIdx >= 0 ? passIdx : -1);
+        if (passIdx >= 0) {
+          let rawData = sorted[passIdx].generated_draft_json;
+          if (typeof rawData === 'string') {
+            try { rawData = JSON.parse(rawData); } catch {}
+          }
+          setContent(normalizeKeys(rawData));
+        }
       }
     } catch (e: any) {
       setError(e.toString());
@@ -143,12 +161,24 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
       if (iters && iters.length > 0) {
         const sorted = [...iters].sort((a, b) => (b.calculated_score || 0) - (a.calculated_score || 0));
         setIterations(sorted);
-        setSelectedIdx(0);
-        let rawData = sorted[0].generated_draft_json;
-        if (typeof rawData === 'string') {
-          try { rawData = JSON.parse(rawData); } catch {}
+
+        // confirmed(is_pass=true) 항목이 있으면 그것을 선택, 없으면 선택 안 함
+        const passIdx = sorted.findIndex((it: any) => it.is_pass);
+        if (passIdx >= 0) {
+          setSelectedIdx(passIdx);
+          let rawData = sorted[passIdx].generated_draft_json;
+          if (typeof rawData === 'string') {
+            try { rawData = JSON.parse(rawData); } catch {}
+          }
+          setContent(normalizeKeys(rawData));
+        } else {
+          setSelectedIdx(-1);
+          setContent(null);
         }
-        setContent(normalizeKeys(rawData));
+      } else {
+        setIterations([]);
+        setSelectedIdx(-1);
+        setContent(null);
       }
     } catch {}
   };

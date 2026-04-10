@@ -110,6 +110,7 @@ pub fn run() {
                         api_error_message TEXT,
                         created_at TIMESTAMP NOT NULL,
                         updated_at TIMESTAMP NOT NULL,
+                        last_action TEXT,
                         is_deleted BOOLEAN NOT NULL,
                         FOREIGN KEY(project_id) REFERENCES project(project_id),
                         FOREIGN KEY(module_id) REFERENCES local_module(module_id)
@@ -151,12 +152,80 @@ pub fn run() {
                 // 1. project 테이블
                 let _ = sqlx::query("ALTER TABLE project ADD COLUMN pipeline_phase VARCHAR(30) NOT NULL DEFAULT 'GENESIS_PRD'").execute(&pool).await;
                 
-                // 2. global_context 테이블 (에러 발생 지점)
+                // 2. global_context 테이블
                 let _ = sqlx::query("ALTER TABLE global_context ADD COLUMN iteration_id VARCHAR(36)").execute(&pool).await;
 
                 // 3. document_node 테이블
                 let _ = sqlx::query("ALTER TABLE document_node ADD COLUMN module_id VARCHAR(36)").execute(&pool).await;
                 let _ = sqlx::query("ALTER TABLE document_node ADD COLUMN node_category VARCHAR(30) NOT NULL DEFAULT 'MODULE'").execute(&pool).await;
+                
+                // last_action 컬럼 추가 시도
+                match sqlx::query("ALTER TABLE document_node ADD COLUMN last_action TEXT").execute(&pool).await {
+                    Ok(_) => println!(">>> Migration: last_action column added to document_node"),
+                    Err(e) => {
+                        if e.to_string().contains("duplicate column name") {
+                            println!(">>> Migration: last_action column already exists");
+                        } else {
+                            println!(">>> Migration Error: Failed to add last_action column: {}", e);
+                        }
+                    }
+                }
+
+                // ============================================================
+                // [HOTFIX] SAD/PRD 중복 번호 및 아이콘 오표시 긴급 보정
+                // ============================================================
+                println!(">>> Running DB Data Cleanup...");
+                let _ = sqlx::query("
+                    -- 1. 이터레이션 번호 재부여 (생성순)
+                    UPDATE generation_iteration
+                    SET iteration_number = (
+                        SELECT new_num 
+                        FROM (
+                            SELECT iteration_id, row_number() OVER (PARTITION BY node_id ORDER BY created_at ASC) as new_num
+                            FROM generation_iteration
+                        ) AS Ranked
+                        WHERE Ranked.iteration_id = generation_iteration.iteration_id
+                    );
+                ").execute(&pool).await;
+
+                let _ = sqlx::query("
+                    -- 2. 모든 is_pass 초기화 후 최고점 리비전만 1로 설정
+                    UPDATE generation_iteration SET is_pass = 0;
+                ").execute(&pool).await;
+
+                let _ = sqlx::query("
+                    UPDATE generation_iteration 
+                    SET is_pass = 1
+                    WHERE iteration_id IN (
+                        SELECT iteration_id FROM (
+                            SELECT iteration_id, row_number() OVER (PARTITION BY node_id ORDER BY calculated_score DESC, created_at DESC) as rank
+                            FROM generation_iteration
+                        ) WHERE rank = 1
+                    );
+                ").execute(&pool).await;
+
+                let _ = sqlx::query("
+                    -- 3. 노드 테이블의 current_iteration 동기화
+                    UPDATE document_node
+                    SET current_iteration = (
+                        SELECT COUNT(*) 
+                        FROM generation_iteration 
+                        WHERE generation_iteration.node_id = document_node.node_id 
+                        AND is_deleted = 0
+                    );
+                ").execute(&pool).await;
+
+                let _ = sqlx::query("
+                    -- 4. 확정된 문서(global_context)의 버전을 이터레이션 번호와 동기화
+                    UPDATE global_context
+                    SET version = (
+                        SELECT iteration_number 
+                        FROM generation_iteration 
+                        WHERE generation_iteration.iteration_id = global_context.iteration_id
+                    )
+                    WHERE iteration_id IS NOT NULL;
+                ").execute(&pool).await;
+                println!(">>> DB Data Cleanup Completed.");
                 
                 Ok::<sqlx::SqlitePool, String>(pool)
             })?;

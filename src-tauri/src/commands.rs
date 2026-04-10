@@ -59,6 +59,7 @@ pub struct DocumentNode {
     #[sqlx(default)]
     pub module_id: Option<String>,
     pub target_node_type: String,
+    #[sqlx(default)]
     pub node_category: String,
     pub node_state: String,
     pub current_iteration: i32,
@@ -69,6 +70,8 @@ pub struct DocumentNode {
     pub api_error_message: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    #[sqlx(default)]
+    pub last_action: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
@@ -422,11 +425,16 @@ pub async fn run_pipeline(
         }
     }
 
-    for i in 1..=max_iters {
+    let start_iter = node.current_iteration + 1;
+    for i in start_iter..=max_iters {
         final_iteration_count = i;
         println!(">>> Iteration {}/{} starting for {}", i, max_iters, node_type);
         let _ = app_handle.emit("pipeline-status", format!("{} 생성 중 (반복 {}/{})", node_type, i, max_iters));
         
+        sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
+            .bind("문서 생성 중...").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
+            .execute(&*pool).await.map_err(|e| e.to_string())?;
+
         let draft_res = generate_draft(&app_handle, &client, &api_key, &node_type, &project.raw_input_text, &previous_draft, &previous_feedback, i).await;
         let draft = match draft_res {
             Ok(d) => d,
@@ -445,6 +453,10 @@ pub async fn run_pipeline(
         println!(">>> Iteration {}: Draft generated, evaluating...", i);
         let _ = app_handle.emit("pipeline-status", format!("{} 품질 검증 중 (반복 {}/{})", node_type, i, max_iters));
         
+        sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
+            .bind("품질 검증 중...").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
+            .execute(&*pool).await.map_err(|e| e.to_string())?;
+
         let input_text_for_eval = if node_type == "Genesis_PRD" { Some(project.raw_input_text.clone()) } else { None };
         let empty_feedback = Vec::new(); // run_pipeline에서는 개별 피드백 추적 안 하므로 빈 값 전달
         let eval_res = evaluate_draft(&app_handle, &client, &api_key, &node_type, &draft, input_text_for_eval, "", "", &empty_feedback, i).await;
@@ -1122,7 +1134,7 @@ pub async fn run_sad_global_pipeline(
     let max_iters = sad_node.max_iterations.max(1);
     let threshold = sad_node.threshold_score;
 
-    let mut current_iter = 0;
+    let mut current_iter = sad_node.current_iteration;
     let mut is_global_success = false;
     let mut _all_context_json = serde_json::json!({});
     let mut last_error = String::new();
@@ -1165,6 +1177,10 @@ pub async fn run_sad_global_pipeline(
 
         for ctx_type in global_types {
             let _ = app_handle.emit("pipeline-status", format!("SAD Stage 1 (Iter {}): {} 생성 중...", current_iter, ctx_type));
+
+            sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
+                .bind(format!("{} 생성 중...", ctx_type)).bind(Utc::now().to_rfc3339()).bind(&sad_node.node_id)
+                .execute(&*pool).await.map_err(|e| e.to_string())?;
             
             // 의존성 데이터 추출
             let dependencies = match ctx_type {
@@ -1246,6 +1262,10 @@ pub async fn run_sad_global_pipeline(
             "SAD_Global", current_iter, genesis_prd_content, serde_json::to_string_pretty(&stage_context_json).unwrap_or_default(), last_feedback
         );
 
+        sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
+            .bind("통합 품질 검증 중...").bind(Utc::now().to_rfc3339()).bind(&sad_node.node_id)
+            .execute(&*pool).await.map_err(|e| e.to_string())?;
+
         let eval_result = call_gemini(&client, &api_key, &eval_sys_prompt, &eval_user_prompt, Some(eval_schema)).await;
         match eval_result {
             Ok(eval_json) => {
@@ -1266,24 +1286,15 @@ pub async fn run_sad_global_pipeline(
                 let iter_id = Uuid::new_v4().to_string();
                 let now = Utc::now().to_rfc3339();
 
-                // 기계적 분할: 매 회차(Draft 포함)의 5종 컨텍스트를 각각 저장
-                let global_types = vec!["sad_core_erd", "sad_auth_rbac", "sad_interface_error", "sad_tech_stack", "sad_non_tech"];
-                for ctx_type in global_types {
-                    if let Some(data) = stage_context_json.get(ctx_type) {
-                        let ctx_id = Uuid::new_v4().to_string();
-                        sqlx::query(
-                            "INSERT INTO global_context (context_id, project_id, iteration_id, context_type, context_data_json, version, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)"
-                        )
-                        .bind(&ctx_id).bind(&project_id).bind(&iter_id).bind(ctx_type).bind(data.to_string()).bind(current_iter).bind(&now).bind(&now)
-                        .execute(&*pool).await.map_err(|e| e.to_string())?;
-                    }
-                }
                 let feedback_text = eval["feedback"].as_array()
                     .map(|arr| arr.iter().map(|v| v.as_str().unwrap_or("")).collect::<Vec<_>>().join("\n"))
                     .unwrap_or_default();
                 let critical_errors_text = eval["critical_errors"].as_array()
                     .map(|arr| arr.iter().map(|v| v.as_str().unwrap_or("")).collect::<Vec<_>>().join("\n"))
                     .unwrap_or_default();
+
+                // 트랜잭션 사용: 부모(generation_iteration) 먼저 저장 후 자식(global_context) 저장
+                let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
                 sqlx::query(
                     "INSERT INTO generation_iteration (iteration_id, node_id, iteration_number, generated_draft_json, calculated_score, is_pass, critical_errors_array, actionable_feedback_text, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"
@@ -1298,7 +1309,22 @@ pub async fn run_sad_global_pipeline(
                 .bind(&feedback_text)
                 .bind(&now)
                 .bind(&now)
-                .execute(&*pool).await.map_err(|e| e.to_string())?;
+                .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+
+                // 기계적 분할: 매 회차(Draft 포함)의 5종 컨텍스트를 각각 저장
+                let global_types = vec!["sad_core_erd", "sad_auth_rbac", "sad_interface_error", "sad_tech_stack", "sad_non_tech"];
+                for ctx_type in global_types {
+                    if let Some(data) = stage_context_json.get(ctx_type) {
+                        let ctx_id = Uuid::new_v4().to_string();
+                        sqlx::query(
+                            "INSERT INTO global_context (context_id, project_id, iteration_id, context_type, context_data_json, version, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)"
+                        )
+                        .bind(&ctx_id).bind(&project_id).bind(&iter_id).bind(ctx_type).bind(data.to_string()).bind(current_iter).bind(&now).bind(&now)
+                        .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+                    }
+                }
+
+                tx.commit().await.map_err(|e| e.to_string())?;
 
                 // [피드백 업데이트] 다음 회차를 위해 피드백 저장
                 last_feedback = feedback_text.clone();
@@ -1319,7 +1345,8 @@ pub async fn run_sad_global_pipeline(
     }
 
     // SAD_Global 노드 완료 처리 및 SAD_Module 노드 활성화(READY)
-    sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', current_best_score = 100, updated_at = ? WHERE node_id = ?")
+    sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', current_iteration = ?, current_best_score = 100, updated_at = ? WHERE node_id = ?")
+        .bind(current_iter)
         .bind(Utc::now().to_rfc3339())
         .bind(&sad_node.node_id)
         .execute(&*pool)
@@ -1421,7 +1448,7 @@ pub async fn run_sad_module_pipeline(
     let max_iters = sad_node.max_iterations.max(1);
     let threshold = sad_node.threshold_score;
 
-    let mut current_iter = 0;
+    let mut current_iter = sad_node.current_iteration;
     let mut is_module_success = false;
     let mut last_feedback = String::new();
 
@@ -1559,18 +1586,6 @@ pub async fn run_sad_module_pipeline(
                 let iter_id = Uuid::new_v4().to_string();
                 let now = Utc::now().to_rfc3339();
 
-                // 기계적 분할: 매 회차(Draft 포함)의 3종 컨텍스트를 각각 저장
-                let module_types = vec!["sad_module_list", "sad_epic_mapping", "sad_module_deps"];
-                for ctx_type in module_types {
-                    if let Some(data) = stage_module_json.get(ctx_type) {
-                        let ctx_id = Uuid::new_v4().to_string();
-                        sqlx::query(
-                            "INSERT INTO global_context (context_id, project_id, iteration_id, context_type, context_data_json, version, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)"
-                        )
-                        .bind(&ctx_id).bind(&project_id).bind(&iter_id).bind(ctx_type).bind(data.to_string()).bind(current_iter).bind(&now).bind(&now)
-                        .execute(&*pool).await.map_err(|e| e.to_string())?;
-                    }
-                }
                 let feedback_text = eval["feedback"].as_array()
                     .map(|arr| arr.iter().map(|v| v.as_str().unwrap_or("")).collect::<Vec<_>>().join("\n"))
                     .unwrap_or_default();
@@ -1586,6 +1601,9 @@ pub async fn run_sad_module_pipeline(
                     }
                 }
 
+                // 트랜잭션 사용: 부모(generation_iteration) 먼저 저장 후 자식(global_context) 저장
+                let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
                 sqlx::query(
                     "INSERT INTO generation_iteration (iteration_id, node_id, iteration_number, generated_draft_json, calculated_score, is_pass, critical_errors_array, actionable_feedback_text, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"
                 )
@@ -1599,7 +1617,22 @@ pub async fn run_sad_module_pipeline(
                 .bind(&feedback_text)
                 .bind(&now)
                 .bind(&now)
-                .execute(&*pool).await.map_err(|e| e.to_string())?;
+                .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+
+                // 기계적 분할: 매 회차(Draft 포함)의 3종 컨텍스트를 각각 저장
+                let module_types = vec!["sad_module_list", "sad_epic_mapping", "sad_module_deps"];
+                for ctx_type in module_types {
+                    if let Some(data) = stage_module_json.get(ctx_type) {
+                        let ctx_id = Uuid::new_v4().to_string();
+                        sqlx::query(
+                            "INSERT INTO global_context (context_id, project_id, iteration_id, context_type, context_data_json, version, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)"
+                        )
+                        .bind(&ctx_id).bind(&project_id).bind(&iter_id).bind(ctx_type).bind(data.to_string()).bind(current_iter).bind(&now).bind(&now)
+                        .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+                    }
+                }
+
+                tx.commit().await.map_err(|e| e.to_string())?;
 
                 // [피드백 업데이트] 다음 회차를 위해 저장
                 last_feedback = feedback_text.clone();
@@ -1619,7 +1652,8 @@ pub async fn run_sad_module_pipeline(
         return Err(format!("SAD 모듈 분할 생성 불가: {}", last_error));
     }
 
-    sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', current_best_score = 100, updated_at = ? WHERE node_id = ?")
+    sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', current_iteration = ?, current_best_score = 100, updated_at = ? WHERE node_id = ?")
+    .bind(current_iter)
     .bind(Utc::now().to_rfc3339())
     .bind(&sad_node.node_id)
     .execute(&*pool)
@@ -1741,6 +1775,21 @@ pub async fn confirm_sad_iteration(
         .await
         .map_err(|e| e.to_string())?;
 
+    // 4-1. 해당 노드의 모든 이터레이션 is_pass 초기화 후 현재 회차만 1로 설정
+    sqlx::query("UPDATE generation_iteration SET is_pass = 0, updated_at = ? WHERE node_id = ?")
+        .bind(&now)
+        .bind(&iteration.node_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    sqlx::query("UPDATE generation_iteration SET is_pass = 1, updated_at = ? WHERE iteration_id = ?")
+        .bind(&now)
+        .bind(&iteration_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
     // 5. 새 컨텍스트 삽입
     if let Some(obj) = bundle.as_object() {
         for (ctx_type, data) in obj {
@@ -1750,7 +1799,7 @@ pub async fn confirm_sad_iteration(
             sqlx::query(
                 "INSERT INTO global_context (context_id, project_id, iteration_id, context_type, context_data_json, version, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)"
             )
-            .bind(&ctx_id).bind(&project_id).bind(None::<String>).bind(ctx_type).bind(data_str).bind(it_number).bind(&now).bind(&now)
+            .bind(&ctx_id).bind(&project_id).bind(&iteration_id).bind(ctx_type).bind(data_str).bind(it_number).bind(&now).bind(&now)
             .execute(&mut *tx).await.map_err(|e| e.to_string())?;
         }
     }
@@ -1973,9 +2022,14 @@ pub async fn run_module_pipeline(
         global_context_str, module_context
     );
 
-    for i in 1..=max_iters {
+    let start_iter = node.current_iteration + 1;
+    for i in start_iter..=max_iters {
         final_iteration_count = i;
         let _ = app_handle.emit("pipeline-status", format!("[{}] {} 생성 중 (반복 {}/{})", module.module_name, node_type, i, max_iters));
+
+        sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
+            .bind("문서 생성 중...").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
+            .execute(&*pool).await.map_err(|e| e.to_string())?;
 
         // 3. Draft 생성 (원본 아이디어 제외, 통합 컨텍스트 주입)
         let draft_res = generate_draft_with_context(&app_handle, &client, &api_key, &node_type, "", &previous_draft, &previous_feedback, &combined_context, i).await;
@@ -1991,6 +2045,11 @@ pub async fn run_module_pipeline(
         }
 
         let _ = app_handle.emit("pipeline-status", format!("[{}] {} 검증 중 (반복 {}/{})", module.module_name, node_type, i, max_iters));
+        
+        sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
+            .bind("품질 검증 중...").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
+            .execute(&*pool).await.map_err(|e| e.to_string())?;
+
         // 4. Draft 평가 (통합 컨텍스트 및 이전 피드백 주입)
         let eval_res = evaluate_draft(&app_handle, &client, &api_key, &node_type, &draft, None, &combined_context, &module_context, &previous_feedback, i).await;
         let eval = match eval_res {

@@ -1,0 +1,263 @@
+@use "../../styles/mixins" as *;
+
+.sad-spec-renderer {
+  width: 100%;
+  color: $on-surface;
+
+  // 1. Common Table Styles
+  .spec-table-container {
+    width: 100%;
+    overflow-x: auto;
+    border-radius: $radius-lg;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba($outline-variant, 0.1);
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+
+      th {
+        background: rgba($surface-container-highest, 0.5);
+        color: $primary;
+        padding: 0.75rem 1rem;
+        text-align: left;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-size: 0.7rem;
+        border-bottom: 1px solid rgba($outline-variant, 0.2);
+      }
+
+      td {
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid rgba($outline-variant, 0.1);
+        color: rgba($on-surface, 0.9);
+        vertical-align: top;
+      }
+
+      tr:last-child td {
+        border-bottom: none;
+      }
+
+      tr:hover td {
+        background: rgba($primary, 0.03);
+      }
+    }
+  }
+
+  // 2. Tech Category Grid (from Genesis PRD)
+  .tech-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.25rem;
+
+    .tech-category {
+      background: rgba($surface-container-low, 0.4);
+      border: 1px solid rgba($outline-variant, 0.1);
+      border-radius: $radius-xl;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      transition: all 0.3s ease;
+
+      &:hover {
+        background: rgba($surface-container-low, 0.6);
+        border-color: rgba($primary, 0.2);
+        transform: translateY(-2px);
+      }
+
+      .category-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        color: $primary;
+
+        .material-symbols-outlined { font-size: 1.25rem; }
+        .name { font-weight: 800; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; }
+      }
+
+      .category-body {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+
+        .category-main {
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+          .label { font-size: 0.65rem; color: rgba($on-surface, 0.5); font-weight: 700; text-transform: uppercase; }
+          .value { font-size: 0.95rem; font-weight: 700; color: $on-surface; }
+        }
+
+        .category-subs {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 0.75rem;
+          padding-top: 0.75rem;
+          border-top: 1px solid rgba(255,255,255,0.05);
+
+          .sub-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+            .label { font-size: 0.6rem; color: rgba($on-surface, 0.4); font-weight: 600; text-transform: uppercase; }
+            .value { font-size: 0.75rem; font-weight: 700; color: rgba($on-surface, 0.8); }
+          }
+        }
+      }
+    }
+  }
+
+  // 3. Card/Chip Styles (Persona/Module style)
+  .chips-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0.75rem;
+
+    .v-chip {
+      background: rgba($surface-container-high, 0.5);
+      border: 1px solid rgba($outline-variant, 0.2);
+      border-radius: $radius-lg;
+      padding: 0.75rem 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      transition: all 0.2s ease;
+
+      &:hover {
+        background: rgba($surface-container-highest, 0.8);
+        border-color: $primary;
+      }
+
+      .icon {
+        width: 32px;
+        height: 32px;
+        border-radius: $radius-md;
+        background: rgba($primary, 0.1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: $primary;
+        .material-symbols-outlined { font-size: 1.125rem; }
+      }
+
+      .chip-info {
+        display: flex;
+        flex-direction: column;
+        .name { font-size: 0.8rem; font-weight: 700; color: $on-surface; }
+        .sub { font-size: 0.65rem; color: rgba($on-surface, 0.5); font-family: $font-mono; }
+      }
+
+      &--admin .icon { background: rgba($error, 0.1); color: $error; }
+      &--manager .icon { background: rgba($tertiary, 0.1); color: $tertiary; }
+    }
+  }
+
+  // 4. List items
+  .spec-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+
+    li {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+
+      &:last-child { border-bottom: none; }
+
+      .bullet {
+        margin-top: 0.25rem;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: $primary;
+        flex-shrink: 0;
+        opacity: 0.6;
+      }
+
+      .text {
+        color: rgba($on-surface, 0.8);
+        b { color: $primary; font-weight: 700; }
+      }
+    }
+  }
+
+  // 5. Epic Mapping Card
+  .epic-map-card {
+    background: rgba($surface-container-low, 0.3);
+    border: 1px solid rgba($outline-variant, 0.1);
+    border-radius: $radius-xl;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+
+    .epic-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+
+      .epic-id {
+        font-size: 0.65rem;
+        font-family: $font-mono;
+        background: rgba($primary, 0.1);
+        color: $primary;
+        padding: 0.15rem 0.45rem;
+        border-radius: $radius-sm;
+      }
+      .epic-title {
+        font-size: 0.9rem;
+        font-weight: 800;
+      }
+    }
+
+    .module-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      
+      .mod-tag {
+        font-size: 0.7rem;
+        font-weight: 700;
+        background: rgba($surface-container-highest, 0.6);
+        border: 1px solid rgba($outline-variant, 0.2);
+        color: rgba($on-surface, 0.7);
+        padding: 0.25rem 0.75rem;
+        border-radius: $radius-full;
+        transition: all 0.2s ease;
+
+        &:hover {
+          background: $primary;
+          color: $on-primary;
+          border-color: transparent;
+        }
+      }
+    }
+  }
+
+  // Utility Badges
+  .badge {
+    font-size: 0.6rem;
+    font-weight: 800;
+    padding: 0.15rem 0.5rem;
+    border-radius: $radius-sm;
+    text-transform: uppercase;
+    background: rgba($on-surface, 0.1);
+    color: rgba($on-surface, 0.6);
+
+    &--primary { background: rgba($primary, 0.15); color: $primary; }
+    &--success { background: rgba($status-completed, 0.15); color: $status-completed; }
+    &--warning { background: rgba($tertiary, 0.15); color: $tertiary; }
+  }
+}

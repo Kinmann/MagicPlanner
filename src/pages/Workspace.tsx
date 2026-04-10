@@ -16,6 +16,7 @@ import Spinner from '../components/common/Spinner';
 import CriticalErrorModal from '../components/Project/CriticalErrorModal';
 import HitlWarningModal from '../components/Project/HitlWarningModal';
 import { convertToMarkdown } from '../utils/markdownConverter';
+import { formatNodeTitle } from '../utils/formatters';
 import "./Workspace.scss";
 
 interface WorkspaceProps {
@@ -452,6 +453,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
                 projectId={projectId}
                 globalNode={nodes.find(n => n.target_node_type === 'SAD_Global') || null}
                 moduleNode={nodes.find(n => n.target_node_type === 'SAD_Module') || null}
+                isApproved={currentPhase === 'MODULE_GENERATION' || currentPhase === 'COMPLETED'}
                 onModulesCreated={() => { fetchProject(); fetchModules(); fetchNodes(); }}
                 onRefresh={() => { fetchProject(); fetchNodes(); }}
                 onUpdateMaxIterations={handleUpdateMaxIterations}
@@ -480,6 +482,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
                   <motion.div key="board" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                     <PipelineBoard 
                       nodes={selectedModuleId ? nodes.filter(n => n.node_id === selectedModuleId || n.module_id === selectedModuleId) : []} 
+                      modules={modules}
                       onRunNode={handleRunNode} 
                       onStopNode={handleStopNode}
                       onResumeNode={handleResumeNode}
@@ -605,28 +608,44 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
         </header>
 
         <div className="log-container custom-scrollbar">
-          {statusMessage ? (
-            <div className="log-item">
-              <div className="log-meta">
-                <span className="time">NOW</span>
-                <span className="source">[Orchestrator]</span>
-              </div>
-              <p className="message">{statusMessage}</p>
-            </div>
-          ) : (
+          
+          {/* Node Activity Feed: Sorted by recent updates */}
+          {nodes
+            .filter(n => ['IN_PROGRESS', 'COMPLETED', 'PAUSED_HITL', 'PAUSED_API_ERROR', 'PAUSED_STOPPED'].includes(n.node_state))
+            .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+            .map(n => {
+              const status = n.node_state;
+              const isWorking = status === 'IN_PROGRESS';
+              const isDone = status === 'COMPLETED';
+              const isIssue = ['PAUSED_API_ERROR', 'PAUSED_HITL', 'PAUSED_STOPPED'].includes(status);
+
+              return (
+                <div 
+                  key={`log-${n.node_id}`} 
+                  className={`log-item ${isWorking ? 'log-item--working' : isDone ? 'log-item--success' : 'log-item--warning'}`}
+                >
+                  <div className="log-meta">
+                    <span className="time">
+                      {isWorking ? 'WORKING' : isDone ? 'DONE' : 'PAUSED'}
+                    </span>
+                    <span className="source">{formatNodeTitle(n, modules)}</span>
+                  </div>
+                  <p className="message">
+                    {isWorking 
+                      ? `${n.last_action || 'Synthesizing...'} (Iteration ${n.current_iteration}/${n.max_iterations})`
+                      : isDone
+                        ? `Synthesis complete. Score: ${n.current_best_score}`
+                        : status === 'PAUSED_API_ERROR' ? 'Paused due to API Error' : 'Paused for Human-in-the-loop'
+                    }
+                  </p>
+                </div>
+              );
+            })
+          }
+
+          {nodes.filter(n => ['IN_PROGRESS', 'COMPLETED', 'PAUSED_HITL', 'PAUSED_API_ERROR', 'PAUSED_STOPPED'].includes(n.node_state)).length === 0 && (
              <div className="log-placeholder">Waiting for pipeline events...</div>
           )}
-          
-          {/* Example completed logs for flavor */}
-          {nodes.filter(n => n.node_state === 'COMPLETED').map(n => (
-            <div key={`log-${n.node_id}`} className="log-item log-item--success">
-              <div className="log-meta">
-                <span className="time">DONE</span>
-                <span className="source">[{n.target_node_type}]</span>
-              </div>
-              <p className="message">Synthesis complete. Score: {n.current_best_score}</p>
-            </div>
-          ))}
         </div>
         
         {/* Stats Mini Panel */}

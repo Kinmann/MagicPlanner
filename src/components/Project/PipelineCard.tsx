@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { DocumentNode } from '../../types/project';
+import { DocumentNode, LocalModule } from '../../types/project';
+import { formatNodeTitle } from '../../utils/formatters';
 import './PipelineCard.scss';
 
 interface PipelineCardProps {
   node: DocumentNode;
+  modules: LocalModule[];
   onRun: (nodeType: string) => void;
   onStop: (nodeId: string) => void;
   onResume: (nodeId: string) => void;
@@ -15,6 +17,7 @@ interface PipelineCardProps {
 
 const PipelineCard: React.FC<PipelineCardProps> = ({ 
   node, 
+  modules,
   onRun, 
   onStop,
   onResume,
@@ -106,7 +109,7 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
             <span className="material-symbols-outlined">{nodeConfig.icon}</span>
           </div>
           <span className="node-label">
-            {node.target_node_type} Node
+            {formatNodeTitle(node, modules)}
           </span>
         </div>
         <div className="status-indicator">

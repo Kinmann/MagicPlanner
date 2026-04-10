@@ -21,6 +21,7 @@ export interface DocumentNode {
   api_error_message?: string;
   created_at: string;
   updated_at: string;
+  last_action?: string;
 }
 
 export interface GenerationIteration {

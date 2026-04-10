@@ -15,34 +15,36 @@ const PhaseProgressBar: React.FC<PhaseProgressBarProps> = ({ currentPhase, activ
   const viewingPhase = activePhase || currentPhase;
 
   return (
-    <div className="phase-progress-bar">
+    <nav className="phase-progress-bar">
       {PHASES.map((phase, idx) => {
         const isCompleted = idx < currentIdx;
         const isCurrent = idx === currentIdx;
         const isActive = phase === viewingPhase;
-        
+        const isLocked = idx > currentIdx && phase !== 'COMPLETED';
+
+        let icon = 'circle';
+        if (isCompleted) icon = 'check_circle';
+        else if (isCurrent) icon = 'radio_button_checked';
+        else if (phase === 'COMPLETED') icon = 'lock';
+
         return (
           <React.Fragment key={phase}>
             <div 
-              className={`phase-step ${isCompleted ? 'completed' : ''} ${isCurrent ? 'current' : ''} ${isActive ? 'active' : ''}`}
+              className={`phase-item ${isActive ? 'active' : ''} ${isLocked ? 'locked' : ''}`}
               onClick={() => onPhaseClick?.(phase)}
             >
-              <div className="phase-dot">
-                {isCompleted ? (
-                  <span className="material-symbols-outlined">check</span>
-                ) : (
-                  <span className="phase-number">{idx + 1}</span>
-                )}
-              </div>
-              <span className="phase-label">{PHASE_LABELS[phase]}</span>
+              <span className={`material-symbols-outlined icon ${isCompleted || isCurrent ? 'filled' : ''}`}>
+                {icon}
+              </span>
+              <span className="label">{PHASE_LABELS[phase]}</span>
             </div>
             {idx < PHASES.length - 1 && (
-              <div className={`phase-connector ${idx < currentIdx ? 'completed' : ''}`} />
+              <div className="phase-spacer" />
             )}
           </React.Fragment>
         );
       })}
-    </div>
+    </nav>
   );
 };
 

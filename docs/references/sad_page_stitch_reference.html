@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Magic Planner - Software Architecture</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-error-container": "#ffdad6",
+                        "outline": "#958da1",
+                        "surface-container-low": "#131b2e",
+                        "surface-container-highest": "#2d3449",
+                        "surface-container": "#171f33",
+                        "tertiary-fixed": "#ffdcc6",
+                        "secondary-fixed": "#eaddff",
+                        "on-surface-variant": "#ccc3d8",
+                        "surface-tint": "#d2bbff",
+                        "on-tertiary-container": "#ffe0cd",
+                        "primary-fixed-dim": "#d2bbff",
+                        "on-tertiary-fixed": "#301400",
+                        "secondary": "#d2bbff",
+                        "on-secondary": "#3b1e6f",
+                        "surface-bright": "#31394d",
+                        "on-primary": "#3f008e",
+                        "on-secondary-fixed": "#25005a",
+                        "surface": "#0b1326",
+                        "primary-container": "#7c3aed",
+                        "inverse-surface": "#dae2fd",
+                        "tertiary": "#ffb784",
+                        "primary": "#d2bbff",
+                        "on-secondary-container": "#c3a6ff",
+                        "primary-fixed": "#eaddff",
+                        "on-tertiary": "#4f2500",
+                        "on-background": "#dae2fd",
+                        "on-primary-container": "#ede0ff",
+                        "tertiary-container": "#a15100",
+                        "secondary-container": "#523787",
+                        "surface-dim": "#0b1326",
+                        "inverse-primary": "#732ee4",
+                        "error-container": "#93000a",
+                        "on-primary-fixed": "#25005a",
+                        "on-primary-fixed-variant": "#5a00c6",
+                        "on-secondary-fixed-variant": "#523787",
+                        "surface-container-lowest": "#060e20",
+                        "secondary-fixed-dim": "#d2bbff",
+                        "tertiary-fixed-dim": "#ffb784",
+                        "surface-container-high": "#222a3d",
+                        "surface-variant": "#2d3449",
+                        "background": "#0b1326",
+                        "inverse-on-surface": "#283044",
+                        "on-tertiary-fixed-variant": "#713700",
+                        "error": "#ffb4ab",
+                        "on-error": "#690005",
+                        "outline-variant": "#4a4455",
+                        "on-surface": "#dae2fd"
+                    },
+                    fontFamily: {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"],
+                        "mono": ["JetBrains Mono", "monospace"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glow-primary {
+            box-shadow: 0 0 20px rgba(124, 58, 237, 0.25);
+        }
+        .glass-panel {
+            background: rgba(23, 31, 51, 0.6);
+            backdrop-filter: blur(20px);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.1);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #2d3449;
+            border-radius: 10px;
+        }
+        .code-container {
+            font-family: 'JetBrains Mono', 'ui-monospace', monospace;
+        }
+        .grid-lines {
+            background-image: linear-gradient(to right, rgba(149, 141, 161, 0.05) 1px, transparent 1px),
+                              linear-gradient(to bottom, rgba(149, 141, 161, 0.05) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+        /* Modal Animation */
+        #intelligence-modal:not(.hidden) {
+            display: flex;
+            animation: fadeIn 0.2s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary-container selection:text-on-primary-container overflow-hidden">
+<div class="flex h-screen w-screen grid-lines">
+<!-- Left Side Nav Component -->
+<aside class="hidden md:flex flex-col h-screen py-6 px-4 bg-[#060e20] w-20 flex-shrink-0 z-50 border-r border-outline-variant/10">
+<div class="flex flex-col items-center gap-8">
+<div class="w-10 h-10 bg-gradient-to-br from-primary-container to-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined text-on-primary text-xl" data-icon="auto_awesome">auto_awesome</span>
+</div>
+<nav class="flex flex-col gap-6">
+<a class="w-12 h-12 flex items-center justify-center rounded-xl transition-all text-on-surface-variant hover:bg-surface-container-highest" href="#" title="Input Phase">
+<span class="material-symbols-outlined" data-icon="input">input</span>
+</a>
+<a class="w-12 h-12 flex items-center justify-center rounded-xl transition-all bg-primary-container/20 text-primary" href="#" title="Monitoring">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+</a>
+<a class="w-12 h-12 flex items-center justify-center rounded-xl transition-all text-on-surface-variant hover:bg-surface-container-highest" href="#" title="Archive">
+<span class="material-symbols-outlined" data-icon="archive">archive</span>
+</a>
+<a class="w-12 h-12 flex items-center justify-center rounded-xl transition-all text-on-surface-variant hover:bg-surface-container-highest" href="#" title="Settings">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</a>
+</nav>
+</div>
+<div class="mt-auto flex flex-col items-center gap-6">
+<div class="w-10 h-10 rounded-full border-2 border-primary/30 p-0.5">
+<img alt="User" class="w-full h-full rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuADr1h26-REK8hpi71N9f26M39ksarIfafcfu0oja121ly9YAGNTlPnUF8dS1R9UEm72cKlJxynlKkVKoXeMYKpIpwiKn82I0zIf7Cgo7qsH5tHvamHUaZ0JGxp2DszlPhmsX-pHzRQ9PSvxTSmYGsicChGV07vBi6r7kMBFE48Q-jRsTjOlZQS4Zlv7rs0cua7NPVScUB0t4BLFxp4pSKf2TGPw7z_yMOXe8hvQC6ksAWt50rnMQAfwuZt8UQn2fmTswASmocIGfA"/>
+</div>
+</div>
+</aside>
+<div class="flex-1 flex flex-col min-w-0 bg-transparent relative">
+<!-- Top Header -->
+<header class="h-14 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-md z-40 flex items-center justify-between px-6">
+<div class="flex items-center gap-4">
+<span class="text-sm font-bold text-on-surface/50 tracking-widest uppercase">Orchestrator</span>
+<div class="h-4 w-px bg-outline-variant/30"></div>
+<div class="flex items-center gap-2">
+<span class="text-on-surface font-bold">Software Architecture Pipeline</span>
+<span class="px-2 py-0.5 bg-primary/10 text-primary text-[10px] rounded font-bold uppercase tracking-tighter">Running</span>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex items-center bg-surface-container-low rounded-lg p-1 border border-outline-variant/10">
+<button class="px-3 py-1 text-xs font-bold text-on-surface-variant hover:text-on-surface">Canvas</button>
+<button class="px-3 py-1 text-xs font-bold text-on-surface bg-surface-container-highest rounded shadow-sm">Data</button>
+</div>
+<button class="bg-primary text-on-primary text-xs font-bold px-4 py-2 rounded-lg flex items-center gap-2 shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined text-sm" data-icon="play_arrow">play_arrow</span>
+                    Deploy
+                </button>
+</div>
+</header>
+<div class="flex-1 flex flex-col overflow-hidden relative">
+<!-- Intelligence Report Popup (Hidden by default) -->
+<div class="hidden absolute top-4 right-6 w-[450px] z-[60] flex flex-col gap-4" id="intelligence-modal">
+<div class="bg-surface-container-highest border border-outline-variant/20 rounded-2xl p-6 shadow-2xl glass-panel">
+<div class="flex items-center justify-between mb-6">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" data-icon="psychology">psychology</span>
+<span class="text-[10px] font-black uppercase tracking-[0.2em]">Guidance &amp; Intelligence</span>
+</div>
+<button class="text-on-surface-variant hover:text-on-surface" onclick="document.getElementById('intelligence-modal').classList.add('hidden')">
+<span class="material-symbols-outlined text-sm" data-icon="close">close</span>
+</button>
+</div>
+<div class="space-y-4">
+<!-- AI RECOMMENDATION -->
+<div class="bg-primary/10 border border-primary/20 rounded-xl p-4">
+<h3 class="text-[10px] font-black text-primary uppercase mb-2">AI Recommendation</h3>
+<p class="text-xs text-on-surface/80 leading-relaxed">
+                                Refine the `sad_core_erd` to focus on macro-level conceptual entities. Remove physical DB details like data types to improve abstraction score.
+                            </p>
+</div>
+<!-- PRIORITY REFINEMENTS -->
+<div class="bg-tertiary/10 border border-tertiary/20 rounded-xl p-4">
+<h3 class="text-[10px] font-black text-tertiary uppercase mb-2">Priority Refinements</h3>
+<p class="text-xs text-on-surface/80 leading-relaxed">
+                                Micro-Design Intrusion: Physical table/column details violate abstraction layer control. This reduces Metric D score significantly.
+                            </p>
+</div>
+</div>
+</div>
+</div>
+<!-- Main Content Area Scrollable -->
+<div class="flex-1 overflow-y-auto custom-scrollbar p-6 lg:p-10 space-y-10">
+<!-- Header Section -->
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+<div class="space-y-1">
+<h2 class="text-4xl font-black text-on-surface tracking-tight">Software Architecture</h2>
+<p class="text-on-surface-variant">Global Context &amp; Module Split 설계 단계입니다.</p>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex flex-col gap-1 items-end">
+<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Retry Counter</span>
+<div class="flex items-center gap-2 bg-surface-container-high rounded-lg px-4 py-2 border border-outline-variant/20">
+<span class="text-xs font-bold text-on-surface-variant">MAX RE-TRIES</span>
+<span class="text-xl font-black text-primary">1</span>
+</div>
+</div>
+<div class="h-16 w-px bg-outline-variant/20"></div>
+<div class="space-y-2">
+<div class="flex items-center gap-2 group">
+<div class="w-5 h-5 rounded-full bg-[#10B981] flex items-center justify-center">
+<span class="material-symbols-outlined text-white text-[12px] font-bold" data-icon="check">check</span>
+</div>
+<div class="flex-1 flex justify-between gap-8 items-center bg-surface-container-high px-4 py-2 rounded border border-outline-variant/20">
+<div>
+<p class="text-[10px] font-bold text-on-surface-variant uppercase leading-none">Stage 1:</p>
+<p class="text-xs font-bold text-on-surface">Global Context</p>
+</div>
+<span class="px-2 py-0.5 bg-[#10B981]/20 text-[#10B981] text-[10px] font-black rounded">COMPLETED</span>
+</div>
+</div>
+<div class="flex items-center gap-2 group">
+<div class="w-5 h-5 rounded-full bg-[#10B981] flex items-center justify-center">
+<span class="material-symbols-outlined text-white text-[12px] font-bold" data-icon="check">check</span>
+</div>
+<div class="flex-1 flex justify-between gap-8 items-center bg-surface-container-high px-4 py-2 rounded border border-outline-variant/20">
+<div>
+<p class="text-[10px] font-bold text-on-surface-variant uppercase leading-none">Stage 2:</p>
+<p class="text-xs font-bold text-on-surface">Module Split</p>
+</div>
+<span class="px-2 py-0.5 bg-[#10B981]/20 text-[#10B981] text-[10px] font-black rounded">COMPLETED</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Horizontal Revisions Selector -->
+<div class="space-y-3">
+<div class="flex items-center gap-2 px-1">
+<span class="material-symbols-outlined text-sm text-on-surface-variant" data-icon="history">history</span>
+<span class="text-[10px] font-black text-on-surface-variant uppercase tracking-[0.2em]">Revision History</span>
+</div>
+<div class="flex items-center gap-3 overflow-x-auto custom-scrollbar pb-2">
+<button class="flex-shrink-0 px-4 py-2 rounded-full border border-outline-variant/20 bg-surface-container-high hover:bg-surface-container-highest transition-colors flex flex-col items-center min-w-[120px]">
+<span class="text-[10px] font-black text-on-surface tracking-tighter uppercase">Official</span>
+<span class="text-[9px] text-on-surface-variant">Archived</span>
+</button>
+<button class="flex-shrink-0 px-4 py-2 rounded-full border border-outline-variant/20 bg-surface-container-high hover:bg-surface-container-highest transition-colors flex flex-col items-center min-w-[120px]">
+<span class="text-[10px] font-black text-on-surface tracking-tighter uppercase">Draft #1</span>
+<span class="text-[9px] text-on-surface-variant">25 pts</span>
+</button>
+<button class="flex-shrink-0 px-4 py-2 rounded-full border border-outline-variant/20 bg-surface-container-high hover:bg-surface-container-highest transition-colors flex flex-col items-center min-w-[120px]">
+<span class="text-[10px] font-black text-on-surface tracking-tighter uppercase">Draft #2</span>
+<span class="text-[9px] text-on-surface-variant">30 pts</span>
+</button>
+<button class="flex-shrink-0 px-4 py-2 rounded-full bg-primary border border-primary/20 shadow-lg shadow-primary/20 flex flex-col items-center min-w-[120px]">
+<span class="text-[10px] font-black text-on-primary tracking-tighter uppercase">Current</span>
+<span class="text-[9px] text-on-primary/80 font-bold">80 pts</span>
+</button>
+</div>
+</div>
+<!-- Technical Specifications Section -->
+<section class="space-y-6">
+<div class="flex items-center justify-between border-b border-outline-variant/10 pb-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-surface-variant text-base" data-icon="terminal">terminal</span>
+<span class="text-[10px] font-black uppercase tracking-[0.2em] text-on-surface">Technical Specifications</span>
+</div>
+<!-- AI Guidance Trigger Button -->
+<button class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-all group" onclick="document.getElementById('intelligence-modal').classList.toggle('hidden')">
+<span class="material-symbols-outlined text-lg group-hover:rotate-12 transition-transform" data-icon="auto_awesome">auto_awesome</span>
+<span class="text-[10px] font-black uppercase tracking-wider">AI Intelligence Guidance</span>
+</button>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+<!-- Core ERD Card -->
+<div class="space-y-4">
+<div class="flex items-center justify-between px-2">
+<span class="text-xs font-bold text-on-surface/60">Schema &amp; Data Models</span>
+<span class="text-[10px] font-bold text-primary/50 uppercase tracking-tighter">ERD_V2.JSON</span>
+</div>
+<div class="bg-surface-container-high rounded-xl border border-outline-variant/10 overflow-hidden flex flex-col">
+<div class="flex items-center justify-between p-4 border-b border-outline-variant/10 bg-surface-container-highest/30">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-surface-variant text-lg" data-icon="schema">schema</span>
+<span class="text-xs font-bold text-on-surface">Core ERD</span>
+</div>
+<button class="w-8 h-8 rounded bg-surface-container-highest flex items-center justify-center hover:bg-primary/20 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="fullscreen">fullscreen</span>
+</button>
+</div>
+<div class="flex-1 flex flex-col md:flex-row bg-[#060e20] min-h-[350px]">
+<!-- Visual Preview -->
+<div class="flex-1 p-8 flex items-center justify-center border-b md:border-b-0 md:border-r border-outline-variant/10">
+<div class="text-center space-y-4">
+<div class="relative inline-block">
+<div class="absolute inset-0 bg-primary/20 blur-xl rounded-full"></div>
+<span class="material-symbols-outlined text-5xl text-primary relative" data-icon="hub">hub</span>
+</div>
+<p class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Visualizing Entity Graph...</p>
+</div>
+</div>
+<!-- Entity Details List -->
+<div class="w-full md:w-56 p-4 space-y-4 bg-surface-container-low/30 overflow-y-auto max-h-[350px] custom-scrollbar">
+<h4 class="text-[10px] font-black text-on-surface-variant uppercase tracking-widest">Primary Entities</h4>
+<div class="space-y-3">
+<div class="p-2 rounded bg-surface-container-high/40 border border-outline-variant/10">
+<div class="flex items-center justify-between">
+<span class="text-xs font-bold text-on-surface">User</span>
+<span class="text-[8px] px-1 bg-primary/20 text-primary rounded">Base</span>
+</div>
+<p class="text-[9px] text-on-surface-variant mt-1">1:N with Projects</p>
+</div>
+<div class="p-2 rounded bg-surface-container-high/40 border border-outline-variant/10">
+<div class="flex items-center justify-between">
+<span class="text-xs font-bold text-on-surface">Project</span>
+<span class="text-[8px] px-1 bg-secondary/20 text-secondary rounded">Container</span>
+</div>
+<p class="text-[9px] text-on-surface-variant mt-1">1:N with Tasks</p>
+</div>
+<div class="p-2 rounded bg-surface-container-high/40 border border-outline-variant/10">
+<div class="flex items-center justify-between">
+<span class="text-xs font-bold text-on-surface">Task</span>
+<span class="text-[8px] px-1 bg-tertiary/20 text-tertiary rounded">Atomic</span>
+</div>
+<p class="text-[9px] text-on-surface-variant mt-1">N:N with Labels</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Auth & RBAC Card -->
+<div class="space-y-4">
+<div class="flex items-center justify-between px-2">
+<span class="text-xs font-bold text-on-surface/60">Security &amp; Governance</span>
+<span class="text-[10px] font-bold text-primary/50 uppercase tracking-tighter">RBAC_POLICY.JSON</span>
+</div>
+<div class="bg-surface-container-high rounded-xl border border-outline-variant/10 overflow-hidden shadow-xl flex flex-col">
+<div class="flex items-center justify-between p-4 border-b border-outline-variant/10 bg-surface-container-highest/30">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-surface-variant text-lg" data-icon="shield">shield</span>
+<span class="text-xs font-bold text-on-surface">Auth &amp; RBAC</span>
+</div>
+<div class="flex gap-2">
+<button class="w-8 h-8 rounded bg-surface-container-highest flex items-center justify-center hover:bg-primary/20 hover:text-primary transition-colors" title="Copy to Clipboard">
+<span class="material-symbols-outlined text-sm" data-icon="content_copy">content_copy</span>
+</button>
+</div>
+</div>
+<div class="p-6 bg-[#060e20] code-container overflow-x-auto min-h-[350px] custom-scrollbar">
+<pre class="text-[12px] leading-6 font-mono selection:bg-primary/30"><code>{
+  <span class="text-primary/70">"version"</span>: <span class="text-secondary">"2.1.0"</span>,
+  <span class="text-primary/70">"auth_method"</span>: <span class="text-secondary">"OAuth 2.0 + OpenID"</span>,
+  <span class="text-primary/70">"access_policies"</span>: [
+    <span class="text-secondary">"개인정보보호법 준수"</span>,
+    <span class="text-secondary">"GDPR 준수"</span>,
+    <span class="text-secondary">"SOC2 Compliance"</span>
+  ],
+  <span class="text-primary/70">"roles"</span>: [
+    {
+      <span class="text-primary/70">"role"</span>: <span class="text-tertiary">"ROLE_ADMIN"</span>,
+      <span class="text-primary/70">"permission_scopes"</span>: [
+        { <span class="text-primary/70">"resource"</span>: <span class="text-secondary">"users"</span>, <span class="text-primary/70">"actions"</span>: [<span class="text-secondary">"*"</span>] },
+        { <span class="text-primary/70">"resource"</span>: <span class="text-secondary">"system"</span>, <span class="text-primary/70">"actions"</span>: [<span class="text-secondary">"config"</span>, <span class="text-secondary">"reboot"</span>] },
+        { <span class="text-primary/70">"resource"</span>: <span class="text-secondary">"logs"</span>, <span class="text-primary/70">"actions"</span>: [<span class="text-secondary">"read"</span>, <span class="text-secondary">"export"</span>] }
+      ]
+    },
+    {
+      <span class="text-primary/70">"role"</span>: <span class="text-tertiary">"ROLE_EDITOR"</span>,
+      <span class="text-primary/70">"permission_scopes"</span>: [
+        { <span class="text-primary/70">"resource"</span>: <span class="text-secondary">"projects"</span>, <span class="text-primary/70">"actions"</span>: [<span class="text-secondary">"write"</span>, <span class="text-secondary">"delete"</span>] }
+      ]
+    }
+  ]
+}</code></pre>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</div>
+</div>
+<!-- Orchestration Sidebar (Right) -->
+<aside class="w-80 h-screen bg-[#060e20] border-l border-outline-variant/10 z-50 flex flex-col">
+<div class="p-6 border-b border-outline-variant/10">
+<h3 class="text-sm font-bold uppercase tracking-widest text-on-surface mb-1">Live Activity</h3>
+<p class="text-[10px] text-on-surface-variant">Streaming 8 parallel agent logs</p>
+</div>
+<div class="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 font-mono">
+<div class="space-y-2">
+<div class="flex items-center gap-2">
+<span class="text-[9px] text-on-surface-variant/40">14:42:01</span>
+<span class="text-[10px] font-bold text-primary">[FlowDesigner]</span>
+</div>
+<div class="pl-4 border-l border-primary/20">
+<p class="text-[11px] text-on-surface leading-relaxed">
+<span class="text-primary">thought:</span> User journey for "Enterprise SSO" has excessive redirection steps.
+                    </p>
+<p class="text-[11px] text-primary/60 mt-1 italic">
+                        &gt; calling tool: search_best_practices(query: "SSO UX")
+                    </p>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex items-center gap-2">
+<span class="text-[9px] text-on-surface-variant/40">14:41:55</span>
+<span class="text-[10px] font-bold text-error">[DB-Architect]</span>
+</div>
+<div class="pl-4 border-l border-error/20">
+<p class="text-[11px] text-on-error-container">
+<span class="text-error font-bold">error:</span> Detected circular dependency in relationship.
+                    </p>
+<div class="mt-2 flex gap-2">
+<button class="px-2 py-0.5 bg-error/10 text-error text-[9px] rounded border border-error/20 uppercase font-black">Fix</button>
+</div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex items-center gap-2">
+<span class="text-[9px] text-on-surface-variant/40">14:41:40</span>
+<span class="text-[10px] font-bold text-[#10B981]">[Architect-Prime]</span>
+</div>
+<div class="pl-4 border-l border-[#10B981]/20">
+<p class="text-[11px] text-on-surface leading-relaxed">
+                        Exporting site map to <span class="text-[#10B981]">architecture_v2.md</span>
+</p>
+</div>
+</div>
+</div>
+<div class="p-6 bg-surface-container-low border-t border-outline-variant/10">
+<div class="grid grid-cols-2 gap-4">
+<div>
+<span class="text-[9px] font-bold text-on-surface-variant uppercase tracking-tighter">GPU Load</span>
+<div class="flex items-end gap-1">
+<span class="text-lg font-black text-on-surface">88</span>
+<span class="text-[10px] pb-1">%</span>
+</div>
+</div>
+<div>
+<span class="text-[9px] font-bold text-on-surface-variant uppercase tracking-tighter">Inference</span>
+<div class="flex items-end gap-1">
+<span class="text-lg font-black text-on-surface">1.2</span>
+<span class="text-[10px] pb-1">k/s</span>
+</div>
+</div>
+</div>
+<div class="mt-4 pt-4 border-t border-outline-variant/5">
+<div class="h-10 w-full bg-surface-container-lowest rounded relative overflow-hidden flex items-center justify-center">
+<div class="absolute inset-0 flex items-end gap-[1px]">
+<div class="bg-primary/40 h-[20%] w-full"></div>
+<div class="bg-primary/40 h-[40%] w-full"></div>
+<div class="bg-primary/60 h-[70%] w-full"></div>
+<div class="bg-primary/40 h-[50%] w-full"></div>
+<div class="bg-primary/40 h-[30%] w-full"></div>
+<div class="bg-primary/80 h-[90%] w-full"></div>
+<div class="bg-primary/40 h-[40%] w-full"></div>
+</div>
+<span class="relative z-10 text-[9px] font-bold text-primary/80 uppercase">Resource Flux</span>
+</div>
+</div>
+</div>
+</aside>
+</div>
+</body></html>

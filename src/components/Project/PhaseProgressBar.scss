@@ -1,96 +1,89 @@
+@import '../../styles/_variables.scss';
+
 .phase-progress-bar {
   display: flex;
   align-items: center;
-  gap: 0;
-  padding: 12px 24px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  margin-bottom: 20px;
-}
+  justify-content: space-between;
+  background: rgba($surface-container-low, 0.5);
+  padding: 0.35rem 0.75rem;
+  border-radius: $radius-full;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px);
+  margin-bottom: 2rem;
+  box-shadow: 
+    0 4px 20px rgba(0, 0, 0, 0.2),
+    inset 0 1px 1px rgba(255, 255, 255, 0.05);
 
-.phase-step {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  transition: transform 0.2s ease;
-
-  &:hover {
-    transform: translateY(-2px);
-    .phase-label {
-      color: #fff;
-      text-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
+  .phase-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 1.5rem;
+    border-radius: $radius-full;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    color: rgba($on-surface, 0.4);
+    
+    .icon {
+      font-size: 1.15rem;
+      transition: all 0.3s ease;
+      
+      &.filled {
+        font-variation-settings: 'FILL' 1;
+      }
     }
-    .phase-dot {
-      border-color: rgba(255, 255, 255, 0.5);
-      background: rgba(255, 255, 255, 0.15);
+
+    .label {
+      font-size: 0.7rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    &:hover:not(.locked) {
+      background: rgba(255, 255, 255, 0.05);
+      color: rgba($on-surface, 0.8);
+    }
+
+    &.active {
+      background: rgba($primary, 0.15);
+      color: $primary;
+      border: 1px solid rgba($primary, 0.3);
+      box-shadow: 0 0 15px rgba($primary, 0.2);
+
+      .icon {
+        color: $primary;
+        filter: drop-shadow(0 0 5px rgba($primary, 0.5));
+      }
+
+      .label {
+        color: $primary;
+        text-shadow: 0 0 10px rgba($primary, 0.3);
+      }
+    }
+
+    &.locked {
+      cursor: not-allowed;
+      opacity: 0.4;
+      filter: grayscale(1);
     }
   }
 
-  &:active {
-    transform: translateY(0);
-    opacity: 0.8;
-  }
-
-  &.completed {
-    .phase-dot {
-      background: rgba(74, 222, 128, 0.15);
-      border-color: #4ade80;
-    }
-    .phase-label {
-      color: rgba(74, 222, 128, 0.8);
-    }
-    &:hover .phase-label {
-      color: #4ade80;
-    }
-  }
-
-  &.current {
-    .phase-dot {
-      background: rgba(139, 92, 246, 0.25);
-      border-color: #8b5cf6;
-      box-shadow: 0 0 12px rgba(139, 92, 246, 0.4);
-      animation: pulseDot 2s ease-in-out infinite;
-    }
-    .phase-number {
-      color: #c4b5fd;
-      font-weight: 700;
-    }
-    .phase-label {
-      color: #c4b5fd;
-      font-weight: 600;
+  .phase-spacer {
+    flex: 1;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 0 1rem;
+    
+    &::after {
+      content: '';
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba($primary, 0.2), transparent);
+      opacity: 0;
+      transition: opacity 0.5s ease;
     }
   }
-
-  &.active:not(.current) {
-    .phase-dot {
-      border-color: #fff;
-      background: rgba(255, 255, 255, 0.2);
-    }
-    .phase-label {
-      color: #fff;
-      font-weight: 600;
-    }
-  }
-}
-
-.phase-connector {
-  flex: 1;
-  height: 2px;
-  min-width: 24px;
-  max-width: 60px;
-  background: rgba(255, 255, 255, 0.1);
-  margin: 0 8px;
-  border-radius: 2px;
-  transition: background 0.3s ease;
-
-  &.completed {
-    background: linear-gradient(90deg, #4ade80, #22d3ee);
-  }
-}
-
-@keyframes pulseDot {
-  0%, 100% { box-shadow: 0 0 12px rgba(139, 92, 246, 0.3); }
-  50% { box-shadow: 0 0 20px rgba(139, 92, 246, 0.6); }
 }

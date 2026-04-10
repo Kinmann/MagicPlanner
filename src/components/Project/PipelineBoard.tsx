@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, useMotionValue } from 'framer-motion';
-import { DocumentNode } from '../../types/project';
+import { DocumentNode, LocalModule } from '../../types/project';
 import PipelineCard from './PipelineCard';
 import Spinner from '../common/Spinner';
 import './PipelineBoard.scss';
 
 interface PipelineBoardProps {
   nodes: DocumentNode[];
+  modules: LocalModule[];
   onRunNode: (nodeType: string) => void;
   onStopNode: (nodeId: string) => void;
   onResumeNode: (nodeId: string) => void;
@@ -16,7 +17,7 @@ interface PipelineBoardProps {
 }
 
 const PipelineBoard: React.FC<PipelineBoardProps> = ({ 
-  nodes, onRunNode, onStopNode, onResumeNode, onViewNode, onHITLAction, onUpdateMaxIterations 
+  nodes, modules, onRunNode, onStopNode, onResumeNode, onViewNode, onHITLAction, onUpdateMaxIterations 
 }) => {
   const [nodeDimensions, setNodeDimensions] = useState<Record<string, { width: number, height: number }>>({});
   
@@ -176,6 +177,7 @@ const PipelineBoard: React.FC<PipelineBoardProps> = ({
               >
                 <PipelineCard 
                   node={node} 
+                  modules={modules}
                   onRun={onRunNode} 
                   onStop={onStopNode}
                   onResume={onResumeNode}

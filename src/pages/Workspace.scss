@@ -149,7 +149,7 @@
 
 // v2: Phase Progress Bar spacing
 .phase-progress-bar {
-  margin: 0 16px;
+  margin: 0 24px;
   flex-shrink: 0;
 }
 
@@ -461,9 +461,33 @@
       .message { font-size: 0.75rem; color: $on-surface; line-height: 1.5; font-family: $font-mono; }
 
       &--success {
-        border-left-color: rgba($status-completed, 0.3);
+        border-left-color: rgba($status-completed, 0.4);
         .source { color: $status-completed; }
       }
+
+      &--working {
+        border-left-color: rgba($primary, 0.6);
+        .source { color: $primary; }
+        .time { 
+          color: $primary; 
+          animation: blink 2s infinite;
+        }
+      }
+
+      &--warning {
+        border-left-color: rgba($tertiary, 0.6);
+        .source { color: $tertiary; }
+      }
+
+      &--info {
+        border-left-color: rgba($secondary, 0.4);
+        .source { color: $secondary; }
+      }
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
     }
 
     .log-placeholder {

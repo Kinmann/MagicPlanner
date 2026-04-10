@@ -363,8 +363,8 @@ pub async fn run_pipeline(
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "Node not found".to_string())?;
 
-    if node.node_state != "READY" && node.node_state != "PAUSED_HITL" && node.node_state != "PAUSED_API_ERROR" && node.node_state != "PAUSED_STOPPED" {
-          return Err("현재 상태에서는 실행할 수 없습니다. (READY, PAUSED_HITL, PAUSED_API_ERROR 또는 PAUSED_STOPPED 필요)".to_string());
+    if node.node_state != "READY" && node.node_state != "PAUSED_HITL" && node.node_state != "PAUSED_API_ERROR" && node.node_state != "PAUSED_STOPPED" && node.node_state != "COMPLETED" {
+          return Err("현재 상태에서는 실행할 수 없습니다. (READY, PAUSED_HITL, PAUSED_API_ERROR, PAUSED_STOPPED 또는 COMPLETED 필요)".to_string());
     }
 
     let project = sqlx::query_as::<_, Project>(
@@ -968,6 +968,38 @@ pub async fn run_genesis_prd_pipeline(
 
 /// Genesis PRD HITL 승인 → SAD 페이즈로 전환 + SAD 노드 생성
 #[tauri::command]
+pub async fn confirm_genesis_prd_iteration(
+    _app_handle: tauri::AppHandle,
+    pool: tauri::State<'_, SqlitePool>,
+    project_id: String,
+    iteration_id: String,
+) -> Result<(), String> {
+    println!(">>> Confirming Genesis PRD iteration: {} for project: {}", iteration_id, project_id);
+    let now = Utc::now().to_rfc3339();
+
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
+    // 1. 해당 노드의 모든 이터레이션 is_pass 초기화
+    sqlx::query("UPDATE generation_iteration SET is_pass = 0, updated_at = ? WHERE node_id = (SELECT node_id FROM document_node WHERE project_id = ? AND target_node_type = 'Genesis_PRD')")
+        .bind(&now)
+        .bind(&project_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 2. 선택된 이터레이션만 is_pass = 1 설정
+    sqlx::query("UPDATE generation_iteration SET is_pass = 1, updated_at = ? WHERE iteration_id = ?")
+        .bind(&now)
+        .bind(&iteration_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn approve_genesis_prd(
     pool: tauri::State<'_, SqlitePool>,
     project_id: String,
@@ -997,7 +1029,7 @@ pub async fn approve_genesis_prd(
     .ok_or_else(|| "Genesis PRD node not found".to_string())?;
 
     let latest_it = sqlx::query_as::<_, GenerationIteration>(
-        "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY calculated_score DESC LIMIT 1"
+        "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY is_pass DESC, calculated_score DESC LIMIT 1"
     )
     .bind(&genesis_node.node_id)
     .fetch_optional(&*pool)
@@ -1118,7 +1150,7 @@ pub async fn run_sad_global_pipeline(
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "SAD_Global node not found".to_string())?;
     
-    if sad_node.node_state != "READY" && sad_node.node_state != "PAUSED_HITL" && sad_node.node_state != "PAUSED_API_ERROR" && sad_node.node_state != "PAUSED_STOPPED" {
+    if sad_node.node_state != "READY" && sad_node.node_state != "PAUSED_HITL" && sad_node.node_state != "PAUSED_API_ERROR" && sad_node.node_state != "PAUSED_STOPPED" && sad_node.node_state != "COMPLETED" {
         return Err("현재 상태에서는 실행할 수 없습니다.".to_string());
     }
 
@@ -1433,7 +1465,7 @@ pub async fn run_sad_module_pipeline(
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "SAD_Module node not found".to_string())?;
 
-    if sad_node.node_state != "READY" && sad_node.node_state != "PAUSED_HITL" && sad_node.node_state != "PAUSED_API_ERROR" && sad_node.node_state != "PAUSED_STOPPED" {
+    if sad_node.node_state != "READY" && sad_node.node_state != "PAUSED_HITL" && sad_node.node_state != "PAUSED_API_ERROR" && sad_node.node_state != "PAUSED_STOPPED" && sad_node.node_state != "COMPLETED" {
         return Err("현재 상태에서는 실행할 수 없습니다.".to_string());
     }
 
@@ -1958,8 +1990,8 @@ pub async fn run_module_pipeline(
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "Node not found in module".to_string())?;
 
-    if node.node_state != "READY" && node.node_state != "PAUSED_HITL" && node.node_state != "PAUSED_API_ERROR" && node.node_state != "PAUSED_STOPPED" {
-        return Err("현재 상태에서는 실행할 수 없습니다.".to_string());
+    if node.node_state != "READY" && node.node_state != "PAUSED_HITL" && node.node_state != "PAUSED_API_ERROR" && node.node_state != "PAUSED_STOPPED" && node.node_state != "COMPLETED" {
+        return Err("현재 상태에서는 실행할 수 없습니다. (READY, PAUSED_HITL, PAUSED_API_ERROR, PAUSED_STOPPED 또는 COMPLETED 필요)".to_string());
     }
 
 

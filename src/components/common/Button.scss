@@ -105,11 +105,18 @@
     .btn__text {
       visibility: hidden;
     }
-    .btn__spinner {
+    
+    .btn__spinner-overlay {
       position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn__spinner {
+      // transform center is not needed here as parent is flex-center
+      // and translate would conflict with spin animation
     }
   }
 }

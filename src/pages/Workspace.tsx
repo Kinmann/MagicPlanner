@@ -436,6 +436,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
               <GenesisPrdView
                 projectId={projectId}
                 node={nodes.find(n => n.target_node_type === 'Genesis_PRD') || null}
+                isLocked={currentPhase !== 'GENESIS_PRD'}
                 onApprove={async () => {
                   setLoading(true);
                   await Promise.all([fetchProject(), fetchNodes()]);
@@ -454,6 +455,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
                 globalNode={nodes.find(n => n.target_node_type === 'SAD_Global') || null}
                 moduleNode={nodes.find(n => n.target_node_type === 'SAD_Module') || null}
                 isApproved={currentPhase === 'MODULE_GENERATION' || currentPhase === 'COMPLETED'}
+                isLocked={currentPhase === 'MODULE_GENERATION' || currentPhase === 'COMPLETED'}
                 onModulesCreated={() => { fetchProject(); fetchModules(); fetchNodes(); }}
                 onRefresh={() => { fetchProject(); fetchNodes(); }}
                 onUpdateMaxIterations={handleUpdateMaxIterations}
@@ -617,7 +619,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
               const status = n.node_state;
               const isWorking = status === 'IN_PROGRESS';
               const isDone = status === 'COMPLETED';
-              const isIssue = ['PAUSED_API_ERROR', 'PAUSED_HITL', 'PAUSED_STOPPED'].includes(status);
+
 
               return (
                 <div 

@@ -13,6 +13,7 @@ interface PipelineCardProps {
   onHITLAction: (nodeId: string, action: 'APPROVE' | 'RETRY') => void;
   onUpdateMaxIterations: (nodeId: string, maxIterations: number) => void;
   onDimensionsChange?: (nodeType: string, dimensions: { width: number, height: number }) => void;
+  isLocked?: boolean;
 }
 
 const PipelineCard: React.FC<PipelineCardProps> = ({ 
@@ -24,7 +25,8 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
   onView, 
   onHITLAction, 
   onUpdateMaxIterations,
-  onDimensionsChange 
+  onDimensionsChange,
+  isLocked = false
 }) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [isEditingMax, setIsEditingMax] = useState(false);
@@ -146,7 +148,7 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
                 ) : (
                   <>
                     <span className="value">{node.current_iteration} / {node.max_iterations}</span>
-                    {['PENDING', 'READY', 'PAUSED_HITL', 'PAUSED_API_ERROR'].includes(node.node_state) && (
+                    {['PENDING', 'READY', 'PAUSED_HITL', 'PAUSED_API_ERROR'].includes(node.node_state) && !isLocked && (
                       <button 
                         className="edit-btn" 
                         onClick={(e) => {
@@ -181,6 +183,8 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
         {node.node_state === 'READY' && (
           <button 
             className="btn btn-primary" 
+            disabled={isLocked}
+            title={isLocked ? "다음 노드가 진행 중이므로 실행할 수 없습니다." : ""}
             onClick={(e) => {
               e.stopPropagation();
               onRun(node.target_node_type);
@@ -193,6 +197,8 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
         {node.node_state === 'PAUSED_STOPPED' && (
           <button 
             className="btn btn-primary" 
+            disabled={isLocked}
+            title={isLocked ? "다음 노드가 진행 중이므로 재개할 수 없습니다." : ""}
             onClick={(e) => {
               e.stopPropagation();
               onResume(node.node_id);
@@ -206,6 +212,8 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
           <div className="hitl-actions">
             <button 
               className="btn btn-ghost is-pass" 
+              disabled={isLocked}
+              title={isLocked ? "다음 노드가 진행 중이므로 승인할 수 없습니다." : ""}
               onClick={(e) => {
                 e.stopPropagation();
                 onHITLAction(node.node_id, 'APPROVE');
@@ -215,6 +223,8 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
             </button>
             <button 
               className="btn btn-primary is-retry" 
+              disabled={isLocked}
+              title={isLocked ? "다음 노드가 진행 중이므로 재생성할 수 없습니다." : ""}
               onClick={(e) => {
                 e.stopPropagation();
                 onHITLAction(node.node_id, 'RETRY');

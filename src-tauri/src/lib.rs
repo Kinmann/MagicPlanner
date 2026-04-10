@@ -257,6 +257,7 @@ pub fn run() {
             commands::create_local_modules,
             commands::run_module_pipeline,
             commands::confirm_sad_iteration,
+            commands::confirm_genesis_prd_iteration,
             commands::stop_node_pipeline,
             commands::resume_node_pipeline,
         ])

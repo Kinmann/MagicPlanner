@@ -14,9 +14,17 @@ interface GenesisPrdViewProps {
   onApprove: () => void;
   onRefresh: () => void;
   onUpdateMaxIterations: (nodeId: string, maxIterations: number) => void;
+  isLocked?: boolean;
 }
 
-const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({ projectId, node, onApprove, onRefresh, onUpdateMaxIterations }) => {
+const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({ 
+  projectId, 
+  node, 
+  onApprove, 
+  onRefresh, 
+  onUpdateMaxIterations, 
+  isLocked = false 
+}) => {
   const [loading, setLoading] = useState(false);
   const [content, setContent] = useState<any>(null);
   const [iterations, setIterations] = useState<any[]>([]);
@@ -101,6 +109,28 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({ projectId, node, onAppr
       onApprove();
     } catch (err: any) {
       setError(err.toString());
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmIteration = async (idx: number) => {
+    const it = iterations[idx];
+    if (!it) return;
+    
+    setLoading(true);
+    try {
+      await invoke('confirm_genesis_prd_iteration', { 
+        projectId, 
+        iterationId: it.iteration_id 
+      });
+      // 데이터 새로고침
+      const iters = await invoke<any[]>('get_node_iterations', { nodeId: node?.node_id });
+      if (iters) {
+        setIterations(iters.sort((a, b) => (b.calculated_score || 0) - (a.calculated_score || 0)));
+      }
+    } catch (e: any) {
+      setError(e.toString());
     } finally {
       setLoading(false);
     }
@@ -213,21 +243,27 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({ projectId, node, onAppr
 
         <div className="header-controls">
           <div className="iteration-field">
-            <label>Max Iterations</label>
-            <input 
-              type="number" 
-              value={tempMax} 
-              min="1" 
-              max="20"
-              onChange={(e) => setTempMax(parseInt(e.target.value) || 1)}
-              onBlur={() => node && onUpdateMaxIterations(node.node_id, tempMax)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && node) {
-                  onUpdateMaxIterations(node.node_id, tempMax);
-                  (e.target as HTMLInputElement).blur();
-                }
-              }}
-            />
+            <span className="label">ITERATION</span>
+            <div className="iteration-control-group">
+              <span className="current-count">{node?.current_iteration || 0}</span>
+              <span className="separator">/</span>
+              <input 
+                type="number" 
+                value={tempMax} 
+                min="1" 
+                max="20"
+                onChange={(e) => setTempMax(parseInt(e.target.value) || 1)}
+                onBlur={() => node && !isLocked && onUpdateMaxIterations(node.node_id, tempMax)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && node && !isLocked) {
+                    onUpdateMaxIterations(node.node_id, tempMax);
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
+                disabled={loading || isLocked}
+                title={isLocked ? "다음 단계가 진행 중이므로 수정할 수 없습니다." : ""}
+              />
+            </div>
           </div>
           <div className="button-group">
             {error && (
@@ -236,40 +272,50 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({ projectId, node, onAppr
               </div>
             )}
             
-            {(isReady || node?.node_state === 'PAUSED_API_ERROR') && !loading && (
-              <Button onClick={handleRun} disabled={loading} variant="primary">
-                <span className="material-symbols-outlined">auto_fix</span>
-                생성 시작
+            {(isReady || node?.node_state === 'PAUSED_API_ERROR' || isPausedHitl || isCompleted || node?.node_state === 'IN_PROGRESS') && (
+              <Button 
+                onClick={handleRun} 
+                disabled={loading || isLocked || node?.node_state === 'IN_PROGRESS'} 
+                variant={(isPausedHitl || isCompleted) ? "secondary" : "primary"}
+                isLoading={loading || node?.node_state === 'IN_PROGRESS'}
+                leftIcon={<span className="material-symbols-outlined">auto_fix</span>}
+                title={isLocked ? "다음 단계가 진행 중이므로 새로운 생성을 시작할 수 없습니다." : ""}
+              >
+                {(loading || node?.node_state === 'IN_PROGRESS') ? '진행 중' : ((isPausedHitl || isCompleted) ? 'Regenerate' : '생성 시작')}
               </Button>
             )}
-            
+
             {(isPausedHitl || isCompleted) && (
-              <>
-                <Button onClick={handleRun} disabled={loading} variant="secondary">
-                  Regenerate
-                </Button>
-                <Button 
-                  onClick={handleApprove} 
-                  disabled={loading} 
-                  variant="primary" 
-                  className="proceed-btn"
-                  rightIcon={<span className="material-symbols-outlined">arrow_forward</span>}
-                >
-                  Proceed to SAD
-                </Button>
-              </>
+              <Button 
+                onClick={handleApprove} 
+                disabled={loading || isLocked} 
+                variant="primary" 
+                className="proceed-btn"
+                rightIcon={<span className="material-symbols-outlined">arrow_forward</span>}
+                title={isLocked ? "이미 다음 단계로 진행되었습니다." : ""}
+              >
+                Proceed to SAD
+              </Button>
             )}
 
             {isPausedStopped && (
-              <Button onClick={handleResume} variant="primary">
+              <Button 
+                onClick={handleResume} 
+                disabled={loading || isLocked}
+                variant="primary"
+                title={isLocked ? "다음 단계가 진행 중이므로 재개할 수 없습니다." : ""}
+              >
                 Resume Pipeline
               </Button>
             )}
 
-            {loading && (
-              <Button onClick={handleStop} variant="danger">
-                <Spinner size="sm" />
-                Stop
+            {(loading || node?.node_state === 'IN_PROGRESS') && (
+              <Button 
+                onClick={handleStop} 
+                variant="danger"
+                leftIcon={<span className="material-symbols-outlined">stop</span>}
+              >
+                중단
               </Button>
             )}
           </div>
@@ -284,27 +330,52 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({ projectId, node, onAppr
         </div>
       )}
 
-      {/* v2: Relocated Draft Selection (Full Width) */}
+      {/* v2: Modernized Revision History (Matching SAD) */}
       {iterations.length > 0 && (
-        <div className="genesis-header-tabs">
-          <div className="tabs-scroll">
+        <div className="revisions-horizontal">
+          <div className="revisions-header">
+            <div className="left">
+              <span className="material-symbols-outlined">history</span>
+              <span>Revision History</span>
+            </div>
+            <button className="raw-toggle" onClick={() => setShowRawView(!showRawView)}>
+              <span className="material-symbols-outlined">
+                {showRawView ? 'dashboard' : 'code'}
+              </span>
+              {showRawView ? 'Visual' : 'RAW SPEC'}
+            </button>
+          </div>
+          <div className="revisions-list custom-scrollbar">
             {iterations.map((it, idx) => (
-              <button 
-                key={idx} 
-                className={`tab ${selectedIdx === idx ? 'active' : ''}`}
+              <div 
+                key={it.iteration_id} 
+                className={`revision-btn ${selectedIdx === idx ? 'active' : ''} ${it.is_pass ? 'confirmed' : ''}`}
                 onClick={() => selectIteration(idx)}
               >
-                <span className="material-symbols-outlined">description</span>
-                Draft #{idx + 1} ({it.calculated_score}pts)
-              </button>
+                <span className="iter-num">
+                  Draft #{it.iteration_number}
+                </span>
+                {it.is_pass && (
+                  <span className="material-symbols-outlined selected-icon">check_circle</span>
+                )}
+                <span className="iter-meta">{it.calculated_score}</span>
+              </div>
             ))}
           </div>
-          <button className="raw-toggle" onClick={() => setShowRawView(!showRawView)}>
-            <span className="material-symbols-outlined">
-              {showRawView ? 'dashboard' : 'code'}
-            </span>
-            {showRawView ? 'Visual' : 'RAW SPEC'}
-          </button>
+
+          {/* Draft 확정 버튼 하단 배치 */}
+          {iterations[selectedIdx] && !iterations[selectedIdx].is_pass && (
+            <div className="revisions-action" style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '0.5rem', paddingRight: '0.25rem' }}>
+              <Button
+                onClick={() => handleConfirmIteration(selectedIdx)}
+                disabled={loading || isLocked}
+                variant="secondary"
+                leftIcon={<span className="material-symbols-outlined">check_circle</span>}
+              >
+                Draft 확정
+              </Button>
+            </div>
+          )}
         </div>
       )}
 

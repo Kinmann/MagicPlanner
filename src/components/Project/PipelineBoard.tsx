@@ -70,6 +70,16 @@ const PipelineBoard: React.FC<PipelineBoardProps> = ({
   // Helper to get node by type
   const getNode = (type: string) => nodes.find(n => n.target_node_type === type);
 
+  // Helper to check if node is locked (Successor started)
+  const isNodeLocked = (type: string, currentNode?: DocumentNode) => {
+    if (!currentNode) return false;
+    const successors = connections.filter(c => c.from === type).map(c => c.to);
+    return successors.some(targetType => {
+      const targetNode = nodes.find(n => n.target_node_type === targetType && n.module_id === currentNode.module_id);
+      return targetNode && targetNode.node_state !== 'READY' && targetNode.node_state !== 'PENDING';
+    });
+  };
+
   // Helper to draw bezier path
   const renderConnection = (fromType: string, toType: string, index: number) => {
     const fromPos = nodePositions[fromType];
@@ -178,6 +188,7 @@ const PipelineBoard: React.FC<PipelineBoardProps> = ({
                 <PipelineCard 
                   node={node} 
                   modules={modules}
+                  isLocked={isNodeLocked(type, node)}
                   onRun={onRunNode} 
                   onStop={onStopNode}
                   onResume={onResumeNode}

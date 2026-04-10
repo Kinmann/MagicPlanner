@@ -34,7 +34,11 @@ const Button: React.FC<ButtonProps> = ({
       disabled={disabled || isLoading} 
       {...props}
     >
-      {isLoading && <span className="btn__spinner material-symbols-outlined animate-spin">progress_activity</span>}
+      {isLoading && (
+        <span className="btn__spinner-overlay">
+          <span className="btn__spinner material-symbols-outlined animate-spin">progress_activity</span>
+        </span>
+      )}
       {!isLoading && leftIcon && <span className="btn__icon btn__icon--left">{leftIcon}</span>}
       <span className="btn__text">{children}</span>
       {!isLoading && rightIcon && <span className="btn__icon btn__icon--right">{rightIcon}</span>}

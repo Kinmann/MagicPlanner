@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
 import { Store } from '@tauri-apps/plugin-store';
 import { GlobalContext, CONTEXT_TYPE_LABELS, DocumentNode, GenerationIteration } from '../../types/project';
@@ -17,24 +17,26 @@ interface SadOverviewProps {
   onModulesCreated: () => void;
   onRefresh: () => void;
   onUpdateMaxIterations: (nodeId: string, maxIterations: number) => void;
+  isLocked?: boolean;
 }
 
-const SadOverview: React.FC<SadOverviewProps> = ({ 
-  projectId, 
-  globalNode, 
-  moduleNode, 
+const SadOverview: React.FC<SadOverviewProps> = ({
+  projectId,
+  globalNode,
+  moduleNode,
   isApproved = false,
-  onModulesCreated, 
-  onRefresh, 
-  onUpdateMaxIterations 
+  onModulesCreated,
+  onRefresh,
+  onUpdateMaxIterations,
+  isLocked = false
 }) => {
   const [contexts, setContexts] = useState<GlobalContext[]>([]);
   const [globalIters, setGlobalIters] = useState<GenerationIteration[]>([]);
   const [moduleIters, setModuleIters] = useState<GenerationIteration[]>([]);
-  
+
   const [selectedGlobalIterId, setSelectedGlobalIterId] = useState<string | null>(null);
   const [selectedModuleIterId, setSelectedModuleIterId] = useState<string | null>(null);
-  
+
   const [activeStage, setActiveStage] = useState<'GLOBAL' | 'MODULE'>('GLOBAL');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +51,7 @@ const SadOverview: React.FC<SadOverviewProps> = ({
     try {
       const result = await invoke<GlobalContext[]>('get_global_contexts', { projectId });
       setContexts(result);
-    } catch {}
+    } catch { }
   };
 
   const fetchIterations = async () => {
@@ -62,10 +64,10 @@ const SadOverview: React.FC<SadOverviewProps> = ({
           setSelectedGlobalIterId(passIter.iteration_id);
         }
       }
-      
+
       const contextList = await invoke<GlobalContext[]>('get_global_contexts', { projectId });
       setContexts(contextList);
-      
+
       if (moduleNode?.node_id) {
         const result = await invoke<GenerationIteration[]>('get_node_iterations', { nodeId: moduleNode.node_id });
         setModuleIters(result);
@@ -74,18 +76,24 @@ const SadOverview: React.FC<SadOverviewProps> = ({
           setSelectedModuleIterId(passIter.iteration_id);
         }
       }
-    } catch {}
+    } catch { }
   };
-  
+
   const isGlobalDone = globalNode?.node_state === 'COMPLETED';
   const isModuleDone = moduleNode?.node_state === 'COMPLETED';
+
+  // Internal Logic: If stage 2 is started, stage 1 is locked.
+  const isModuleStarted = moduleNode && moduleNode.node_state !== 'READY' && moduleNode.node_state !== 'PENDING';
+  const isStage1Locked = isLocked || isModuleStarted;
+  const isCurrentStageLocked = activeStage === 'GLOBAL' ? isStage1Locked : isLocked;
+
   const currentIters = activeStage === 'GLOBAL' ? globalIters : moduleIters;
   const currentSelectedIterId = activeStage === 'GLOBAL' ? selectedGlobalIterId : selectedModuleIterId;
   const currentNode = activeStage === 'GLOBAL' ? globalNode : moduleNode;
   const activeIteration = currentIters.find(it => it.iteration_id === currentSelectedIterId);
 
-  useEffect(() => { 
-    fetchContexts(); 
+  useEffect(() => {
+    fetchContexts();
     fetchIterations();
   }, [projectId, globalNode?.node_id, moduleNode?.node_id]);
 
@@ -108,10 +116,10 @@ const SadOverview: React.FC<SadOverviewProps> = ({
       const store = await Store.load('settings.json');
       const apiKeyValue = await store.get<{ value: string }>('gemini_api_key');
       if (!apiKeyValue?.value) throw new Error('API 키가 설정되지 않았습니다.');
-      
+
       const cmd = stage === 'GLOBAL' ? 'run_sad_global_pipeline' : 'run_sad_module_pipeline';
       await invoke(cmd, { projectId, apiKey: apiKeyValue.value });
-      
+
       await fetchContexts();
       await fetchIterations();
       onRefresh();
@@ -160,12 +168,12 @@ const SadOverview: React.FC<SadOverviewProps> = ({
     setLoading(true);
     setError(null);
     try {
-      const moduleListCtx = contexts.find(c => c.context_type === 'sad_module_list' && !c.iteration_id);
+      const moduleListCtx = contexts.find(c => c.context_type === 'sad_module_list' && c.iteration_id);
       if (!moduleListCtx) throw new Error('확정된 모듈 목록이 존재하지 않습니다.');
-      
+
       let parsed: any;
       try { parsed = JSON.parse(moduleListCtx.context_data_json); } catch { throw new Error('모듈 목록 JSON 파싱 실패'); }
-      
+
       const modulesData = (parsed.modules || []).map((m: any, idx: number) => ({
         name: m.module_name,
         description: m.description,
@@ -197,19 +205,11 @@ const SadOverview: React.FC<SadOverviewProps> = ({
   };
 
   const displayContexts = (() => {
-    let stage1Docs: any[] = [];
     const stage1Types = ['sad_core_erd', 'sad_auth_rbac', 'sad_interface_error', 'sad_tech_stack', 'sad_non_tech'];
-    
+    let stage1Docs: any[] = contexts.filter(c => c.iteration_id === selectedGlobalIterId && stage1Types.includes(c.context_type));
+
     const globalIter = globalIters.find(it => it.iteration_id === selectedGlobalIterId);
-    if (globalIter?.is_pass) {
-      const officialMap = new Map();
-      contexts.forEach(c => {
-        if (stage1Types.includes(c.context_type) && !c.iteration_id) {
-          officialMap.set(c.context_type, c);
-        }
-      });
-      stage1Docs = Array.from(officialMap.values());
-    } else if (globalIter && globalIter.generated_draft_json) {
+    if (stage1Docs.length === 0 && globalIter && globalIter.generated_draft_json) {
       try {
         const parsed = JSON.parse(globalIter.generated_draft_json);
         stage1Docs = stage1Types.filter(type => parsed[type]).map(type => ({
@@ -218,28 +218,16 @@ const SadOverview: React.FC<SadOverviewProps> = ({
           iteration_id: globalIter.iteration_id,
           context_type: type,
           context_data_json: typeof parsed[type] === 'string' ? parsed[type] : JSON.stringify(parsed[type]),
-          is_draft: true
+          is_draft: !globalIter.is_pass
         }));
-      } catch(e) {
-        stage1Docs = contexts.filter(c => c.iteration_id === selectedGlobalIterId && stage1Types.includes(c.context_type));
-      }
-    } else {
-      stage1Docs = contexts.filter(c => c.iteration_id === selectedGlobalIterId && stage1Types.includes(c.context_type));
+      } catch (e) {}
     }
 
-    let stage2Docs: any[] = [];
     const stage2Types = ['sad_module_list', 'sad_epic_mapping', 'sad_module_deps'];
-    
+    let stage2Docs: any[] = contexts.filter(c => c.iteration_id === selectedModuleIterId && stage2Types.includes(c.context_type));
+
     const moduleIter = moduleIters.find(it => it.iteration_id === selectedModuleIterId);
-    if (moduleIter?.is_pass) {
-      const officialMap = new Map();
-      contexts.forEach(c => {
-        if (stage2Types.includes(c.context_type) && !c.iteration_id) {
-          officialMap.set(c.context_type, c);
-        }
-      });
-      stage2Docs = Array.from(officialMap.values());
-    } else if (moduleIter && moduleIter.generated_draft_json) {
+    if (stage2Docs.length === 0 && moduleIter && moduleIter.generated_draft_json) {
       try {
         const parsed = JSON.parse(moduleIter.generated_draft_json);
         stage2Docs = stage2Types.filter(type => parsed[type]).map(type => ({
@@ -248,13 +236,9 @@ const SadOverview: React.FC<SadOverviewProps> = ({
           iteration_id: moduleIter.iteration_id,
           context_type: type,
           context_data_json: typeof parsed[type] === 'string' ? parsed[type] : JSON.stringify(parsed[type]),
-          is_draft: true
+          is_draft: !moduleIter.is_pass
         }));
-      } catch(e) {
-        stage2Docs = contexts.filter(c => c.iteration_id === selectedModuleIterId && stage2Types.includes(c.context_type));
-      }
-    } else {
-      stage2Docs = contexts.filter(c => c.iteration_id === selectedModuleIterId && stage2Types.includes(c.context_type));
+      } catch (e) {}
     }
 
     return activeStage === 'GLOBAL' ? stage1Docs : stage2Docs;
@@ -268,42 +252,96 @@ const SadOverview: React.FC<SadOverviewProps> = ({
         <div className="header-info">
           <h1>Software Architecture</h1>
           <p className="description">Global Context & Module Split 설계 단계입니다.</p>
-          
-          <div className="header-actions-row">
+
+          <div className="header-controls">
             <div className="iteration-field">
-              <label>Max Re-tries</label>
-              <input 
-                type="number" 
-                min="1" 
-                max="20" 
-                value={tempMax} 
-                onChange={(e) => setTempMax(parseInt(e.target.value) || 1)}
-                onFocus={() => setIsMaxFocused(true)}
-                onBlur={() => {
-                  setIsMaxFocused(false);
-                  if (currentNode) onUpdateMaxIterations(currentNode.node_id, tempMax);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && currentNode) {
-                    onUpdateMaxIterations(currentNode.node_id, tempMax);
-                    (e.target as HTMLInputElement).blur();
-                  }
-                }}
-                disabled={loading || currentNode?.node_state === 'IN_PROGRESS' || currentNode?.node_state === 'COMPLETED'}
-              />
+              <span className="label">ITERATION</span>
+              <div className="iteration-control-group">
+                <span className="current-count">{currentNode?.current_iteration || 0}</span>
+                <span className="separator">/</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="20"
+                  value={tempMax}
+                  onChange={(e) => setTempMax(parseInt(e.target.value) || 1)}
+                  onFocus={() => setIsMaxFocused(true)}
+                  onBlur={() => {
+                    setIsMaxFocused(false);
+                    if (currentNode && !isCurrentStageLocked) onUpdateMaxIterations(currentNode.node_id, tempMax);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && currentNode && !isCurrentStageLocked) {
+                      onUpdateMaxIterations(currentNode.node_id, tempMax);
+                      (e.target as HTMLInputElement).blur();
+                    }
+                  }}
+                  disabled={loading || currentNode?.node_state === 'IN_PROGRESS' || isCurrentStageLocked}
+                  title={isCurrentStageLocked ? (activeStage === 'GLOBAL' && isModuleStarted ? "모듈 분리 단계가 이미 시작되어 수정할 수 없습니다." : "다음 단계가 진행 중이므로 수정할 수 없습니다.") : ""}
+                />
+              </div>
             </div>
 
-            {activeStage === 'MODULE' && (isModuleDone || isApproved) && (
-               <Button 
-                 onClick={handleCreateModules} 
-                 disabled={loading || isApproved} 
-                 variant="primary" 
-                 className="approve-btn"
-                 leftIcon={<span className="material-symbols-outlined">{isApproved ? 'verified' : 'rocket_launch'}</span>}
-               >
-                 {isApproved ? '승인 완료' : '설계 승인'}
-               </Button>
-            )}
+            <div className="button-group">
+              <Button
+                onClick={() => handleRunStage(activeStage)}
+                disabled={loading || currentNode?.node_state === 'IN_PROGRESS' || (activeStage === 'MODULE' && !isGlobalDone) || isCurrentStageLocked}
+                variant={(currentNode?.node_state === 'PAUSED_HITL' || currentNode?.node_state === 'COMPLETED') ? 'ghost' : 'primary'}
+                className="proceed-btn"
+                isLoading={loading || currentNode?.node_state === 'IN_PROGRESS'}
+                leftIcon={<span className="material-symbols-outlined">auto_awesome</span>}
+                title={isCurrentStageLocked ? (activeStage === 'GLOBAL' && isModuleStarted ? "모듈 분리 단계가 이미 시작되었습니다." : "다음 단계가 진행 중입니다.") : ""}
+              >
+                {(loading || currentNode?.node_state === 'IN_PROGRESS') ? '진행 중' : ((currentNode?.node_state === 'PAUSED_HITL' || currentNode?.node_state === 'COMPLETED') ? '재생성' : '생성 시작')}
+              </Button>
+
+              {currentNode?.node_state === 'IN_PROGRESS' && (
+                <Button
+                  onClick={() => handleStop(currentNode.node_id)}
+                  variant="danger"
+                  leftIcon={<span className="material-symbols-outlined">stop</span>}
+                >
+                  중단
+                </Button>
+              )}
+
+              {currentNode?.node_state === 'PAUSED_STOPPED' && (
+                <Button
+                  onClick={() => handleResume(currentNode.node_id)}
+                  disabled={loading || isCurrentStageLocked}
+                  variant="primary"
+                  leftIcon={<span className="material-symbols-outlined">settings_backup_restore</span>}
+                  title={isCurrentStageLocked ? "다음 단계가 진행 중이므로 재개할 수 없습니다." : ""}
+                >
+                  재개
+                </Button>
+              )}
+
+              {currentNode?.node_state === 'PAUSED_HITL' && currentSelectedIterId !== 'OFFICIAL' && (
+                <Button
+                  onClick={() => handleConfirmIteration(activeStage)}
+                  disabled={loading || isCurrentStageLocked}
+                  variant="secondary"
+                  leftIcon={<span className="material-symbols-outlined">check_circle</span>}
+                  title={isCurrentStageLocked ? "이미 다음 단계로 진행되었습니다." : ""}
+                >
+                  Draft 확정
+                </Button>
+              )}
+
+              {activeStage === 'MODULE' && (isModuleDone || isApproved) && (
+                <Button
+                  onClick={handleCreateModules}
+                  disabled={loading || isApproved || isLocked}
+                  variant="primary"
+                  className="approve-btn"
+                  leftIcon={<span className="material-symbols-outlined">{isApproved ? 'verified' : 'rocket_launch'}</span>}
+                  title={isLocked ? "이미 다음 단계로 진행되었습니다." : ""}
+                >
+                  {isApproved ? '승인 완료' : '설계 승인'}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -328,50 +366,8 @@ const SadOverview: React.FC<SadOverviewProps> = ({
               )}
             </button>
           </div>
+        </div>
 
-          <div className="header-controls">
-           <div className="button-group">
-             {currentNode?.node_state !== 'IN_PROGRESS' && currentNode?.node_state !== 'COMPLETED' && (
-               <Button 
-                 onClick={() => handleRunStage(activeStage)} 
-                 disabled={loading || (activeStage === 'MODULE' && !isGlobalDone)}
-                 variant={currentNode?.node_state === 'PAUSED_HITL' ? 'ghost' : 'primary'}
-                 className="proceed-btn"
-               >
-                 {loading ? <Spinner size="sm" /> : <span className="material-symbols-outlined btn__icon">{currentNode?.node_state === 'PAUSED_HITL' ? 'refresh' : 'play_arrow'}</span>}
-                 {currentNode?.node_state === 'PAUSED_HITL' ? '재생성' : '생성 시작'}
-               </Button>
-             )}
-             
-             {currentNode?.node_state === 'IN_PROGRESS' && (
-               <Button 
-                 onClick={() => handleStop(currentNode.node_id)} 
-                 variant="danger"
-               >
-                 <span className="material-symbols-outlined">stop</span>
-                 중단
-               </Button>
-             )}
-
-             {currentNode?.node_state === 'PAUSED_STOPPED' && (
-               <Button 
-                 onClick={() => handleResume(currentNode.node_id)} 
-                 variant="primary"
-               >
-                 <span className="material-symbols-outlined">settings_backup_restore</span>
-                 재개
-               </Button>
-             )}
-             
-             {currentNode?.node_state === 'PAUSED_HITL' && currentSelectedIterId !== 'OFFICIAL' && (
-               <Button onClick={() => handleConfirmIteration(activeStage)} disabled={loading} variant="secondary">
-                 <span className="material-symbols-outlined">check_circle</span>
-                 Draft 확정
-               </Button>
-             )}
-            </div>
-         </div>
-       </div>
       </div>
 
       {error && (
@@ -389,7 +385,7 @@ const SadOverview: React.FC<SadOverviewProps> = ({
         <div className="revisions-list custom-scrollbar">
           {currentIters.map((it) => {
             const isOfficial = !!it.is_pass || contexts.some(ctx => ctx.iteration_id === it.iteration_id);
-            
+
             return (
               <button
                 key={it.iteration_id}
@@ -437,21 +433,21 @@ const SadOverview: React.FC<SadOverviewProps> = ({
           {activeIteration && (
             <div className="intelligence-feedback">
               {activeIteration.actionable_feedback_text && (
-                 <div className="feedback-card feedback-card--info">
-                   <h3 className="feedback-title">AI Recommendation</h3>
-                   <p className="feedback-body">{activeIteration.actionable_feedback_text}</p>
-                 </div>
+                <div className="feedback-card feedback-card--info">
+                  <h3 className="feedback-title">AI Recommendation</h3>
+                  <p className="feedback-body">{activeIteration.actionable_feedback_text}</p>
+                </div>
               )}
               {activeIteration.critical_errors_array && (
-                 <div className="feedback-card feedback-card--error">
-                   <h3 className="feedback-title">Priority Refinements</h3>
-                   <p className="feedback-body">{(() => {
-                     try {
-                       const parsed = JSON.parse(activeIteration.critical_errors_array);
-                       return Array.isArray(parsed) ? parsed.join(', ') : activeIteration.critical_errors_array;
-                     } catch { return activeIteration.critical_errors_array; }
-                   })()}</p>
-                 </div>
+                <div className="feedback-card feedback-card--error">
+                  <h3 className="feedback-title">Priority Refinements</h3>
+                  <p className="feedback-body">{(() => {
+                    try {
+                      const parsed = JSON.parse(activeIteration.critical_errors_array);
+                      return Array.isArray(parsed) ? parsed.join(', ') : activeIteration.critical_errors_array;
+                    } catch { return activeIteration.critical_errors_array; }
+                  })()}</p>
+                </div>
               )}
             </div>
           )}
@@ -477,7 +473,7 @@ const SadOverview: React.FC<SadOverviewProps> = ({
                     <span className="name">{CONTEXT_TYPE_LABELS[ctx.context_type] || ctx.context_type}</span>
                   </div>
                   <div className="actions-group">
-                    <button 
+                    <button
                       className={`action-btn json-toggle ${showRawJsonMap[ctx.context_id] ? 'active' : ''}`}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -487,7 +483,7 @@ const SadOverview: React.FC<SadOverviewProps> = ({
                     >
                       <span className="material-symbols-outlined">code</span>
                     </button>
-                    <button 
+                    <button
                       className="action-btn expand-btn"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -501,9 +497,9 @@ const SadOverview: React.FC<SadOverviewProps> = ({
                   </div>
                 </div>
                 <div className="card-content-wrapper custom-scrollbar">
-                  <SadSpecRenderer 
-                    type={ctx.context_type} 
-                    data={ctx.context_data_json} 
+                  <SadSpecRenderer
+                    type={ctx.context_type}
+                    data={ctx.context_data_json}
                     isRaw={showRawJsonMap[ctx.context_id]}
                   />
                 </div>

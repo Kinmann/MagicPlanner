@@ -290,6 +290,65 @@
         gap: 0.5rem;
       }
 
+      .right {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+
+        .ai-guidance-btn {
+          width: 32px;
+          height: 32px;
+          padding: 0;
+          min-width: unset;
+          border-radius: $radius-lg;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
+          .btn__icon {
+            margin: 0;
+            font-size: 1rem;
+          }
+
+          .btn__text {
+            display: none;
+          }
+        }
+      }
+
+      .raw-spec-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.4rem 1rem;
+        background: rgba($primary, 0.05);
+        border: 1px solid rgba($primary, 0.1);
+        border-radius: $radius-md;
+        color: $primary;
+        font-size: 0.75rem;
+        font-weight: 800;
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+        .material-symbols-outlined {
+          font-size: 1rem;
+          color: inherit;
+        }
+
+        &:hover {
+          background: rgba($primary, 0.1);
+          border-color: rgba($primary, 0.2);
+          transform: translateY(-1px);
+        }
+
+        &.active {
+          background: $primary;
+          color: $on-primary;
+          border-color: $primary;
+          box-shadow: 0 4px 15px rgba($primary, 0.3);
+        }
+      }
+
       .material-symbols-outlined {
         font-size: 0.875rem;
         color: $on-surface-variant;
@@ -434,26 +493,6 @@
         display: flex;
         align-items: center;
         gap: 0.75rem;
-
-        .ai-guidance-btn {
-          width: 50px;
-          height: 50px;
-          padding: 0;
-          min-width: unset;
-          border-radius: $radius-lg;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-
-          .btn__icon {
-            margin: 0;
-            font-size: 1.1rem;
-          }
-
-          .btn__text {
-            display: none;
-          }
-        }
       }
     }
 
@@ -707,4 +746,97 @@
   &--completed { background: rgba($status-completed, 0.1); color: $status-completed; border: 1px solid rgba($status-completed, 0.2); }
   &--paused-hitl { background: rgba($primary, 0.15); color: $primary; border: 1px solid $primary; }
   &--paused-stopped { background: rgba($on-surface-variant, 0.1); color: $on-surface-variant; border: 1px solid rgba($on-surface-variant, 0.2); }
+}
+
+.genesis-json-overlay {
+  position: fixed;
+  top: 2rem;
+  bottom: 2rem;
+  left: 5rem; // Workspace sidebar width
+  right: 20rem; // Workspace log sidebar width
+  background: $surface;
+  z-index: 2500;
+  display: flex;
+  flex-direction: column;
+  border-radius: $radius-xl;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.6);
+  animation: slideInWorkspace 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+
+  .overlay-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+
+    h3 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 800;
+      background: $primary-gradient;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .close-btn {
+      background: rgba($error, 0.1);
+      border: 1px solid rgba($error, 0.2);
+      color: $error;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+
+      &:hover {
+        background: $error;
+        color: $on-error;
+        transform: rotate(90deg);
+      }
+    }
+  }
+
+  .code-window {
+    flex: 1;
+    margin: 1.5rem;
+    background: rgba($surface-container-lowest, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: $radius-xl;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+
+    .code-content {
+      padding: 2rem;
+      overflow-y: auto;
+      overflow-x: hidden;
+      font-family: $font-mono;
+      font-size: 0.9rem;
+      line-height: 1.7;
+      word-break: break-word;
+      @include custom-scrollbar;
+
+      pre { 
+        margin: 0; 
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      
+      .token-key { color: $secondary; font-weight: 600; }
+      .token-string { color: $tertiary; }
+      .token-number { color: #ffb4ab; }
+      .token-boolean { color: $primary; font-weight: 700; }
+      .token-null { color: $on-surface-variant; font-style: italic; }
+      .json-array, .json-object { margin-left: 0.5rem; }
+    }
+  }
+}
+
+@keyframes slideInWorkspace {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
 }

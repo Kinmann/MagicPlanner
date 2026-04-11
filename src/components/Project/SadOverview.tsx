@@ -44,6 +44,7 @@ const SadOverview: React.FC<SadOverviewProps> = ({
   const [tempMax, setTempMax] = useState(10);
   const [isMaxFocused, setIsMaxFocused] = useState(false);
   const [isAiGuidanceOpen, setIsAiGuidanceOpen] = useState(false);
+  const [showRawView, setShowRawView] = useState(false);
 
 
   const fetchContexts = async () => {
@@ -248,6 +249,63 @@ const SadOverview: React.FC<SadOverviewProps> = ({
 
   const stage2Types = ['sad_module_list', 'sad_epic_mapping', 'sad_module_deps'];
 
+  const normalizeKeys = (obj: any): any => {
+    if (Array.isArray(obj)) return obj.map(normalizeKeys);
+    if (obj !== null && typeof obj === 'object') {
+      return Object.keys(obj).reduce((acc: any, key) => {
+        const snakeKey = key.replace(/([A-Z])/g, "_$1").toLowerCase();
+        acc[snakeKey] = normalizeKeys(obj[key]);
+        return acc;
+      }, {});
+    }
+    return obj;
+  };
+
+  const renderJson = (val: any, level = 0): React.ReactNode => {
+    if (val === null) return <span className="token-null">null</span>;
+    if (typeof val === 'string') return <span className="token-string">"{val}"</span>;
+    if (typeof val === 'number') return <span className="token-number">{val}</span>;
+    if (typeof val === 'boolean') return <span className="token-boolean">{val.toString()}</span>;
+
+    const indent = '  '.repeat(level);
+    const nextIndent = '  '.repeat(level + 1);
+
+    if (Array.isArray(val)) {
+      if (val.length === 0) return '[]';
+      return (
+        <span className="json-array">
+          {"[\n"}
+          {val.map((item, i) => (
+            <React.Fragment key={i}>
+              {nextIndent}{renderJson(item, level + 1)}
+              {i < val.length - 1 ? ",\n" : "\n"}
+            </React.Fragment>
+          ))}
+          {indent}{"]"}
+        </span>
+      );
+    }
+
+    if (typeof val === 'object') {
+      const keys = Object.keys(val);
+      if (keys.length === 0) return '{}';
+      return (
+        <span className="json-object">
+          {"{\n"}
+          {keys.map((key, i) => (
+            <React.Fragment key={key}>
+              {nextIndent}<span className="token-key">"{key}"</span>: {renderJson(val[key], level + 1)}
+              {i < keys.length - 1 ? ",\n" : "\n"}
+            </React.Fragment>
+          ))}
+          {indent}{"}"}
+        </span>
+      );
+    }
+
+    return String(val);
+  };
+
   return (
     <div className="sad-overview">
       <div className="sad-overview__header-row">
@@ -374,6 +432,27 @@ const SadOverview: React.FC<SadOverviewProps> = ({
             <span className="material-symbols-outlined">history</span>
             <span>Revision History</span>
           </div>
+          <div className="right">
+            {activeIteration && (
+              <Button
+                variant="primary"
+                onClick={() => setIsAiGuidanceOpen(true)}
+                className="ai-guidance-btn"
+                leftIcon={<span className="material-symbols-outlined">auto_awesome</span>}
+                title="AI Guidance"
+              >
+              </Button>
+            )}
+            <button
+              className={`raw-spec-btn ${showRawView ? 'active' : ''}`}
+              onClick={() => setShowRawView(!showRawView)}
+            >
+              <span className="material-symbols-outlined">
+                {showRawView ? 'account_tree' : 'data_object'}
+              </span>
+              {showRawView ? 'Visual' : 'RAW SPEC'}
+            </button>
+          </div>
         </div>
         <div className="revisions-list custom-scrollbar">
           {currentIters.map((it) => {
@@ -405,16 +484,6 @@ const SadOverview: React.FC<SadOverviewProps> = ({
             <h6>Technical Specifications</h6>
           </div>
           <div className="tech-specs-header__actions">
-            {activeIteration && (
-              <Button
-                variant="primary"
-                onClick={() => setIsAiGuidanceOpen(true)}
-                className="ai-guidance-btn"
-                leftIcon={<span className="material-symbols-outlined">auto_awesome</span>}
-                title="AI Guidance"
-              >
-              </Button>
-            )}
 
             {currentNode?.node_state === 'PAUSED_HITL' && !(activeIteration?.is_pass === 1 || activeIteration?.is_pass === true) && (
               <Button
@@ -520,6 +589,28 @@ const SadOverview: React.FC<SadOverviewProps> = ({
           )}
         </div>
       </section>
+
+      {showRawView && activeIteration && (
+        <div className="genesis-json-overlay">
+          <div className="overlay-header">
+            <h3>SPECIFICATION SOURCE: Draft #{activeIteration.iteration_number}</h3>
+            <button className="close-btn" onClick={() => setShowRawView(false)}>
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          </div>
+          <div className="code-window">
+            <div className="code-content custom-scrollbar">
+              <pre>
+                {activeIteration.generated_draft_json ? (
+                  renderJson(normalizeKeys(JSON.parse(activeIteration.generated_draft_json)))
+                ) : (
+                  <span className="token-null">No data available for this revision.</span>
+                )}
+              </pre>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

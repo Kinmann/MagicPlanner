@@ -13,6 +13,8 @@ import ModuleTree from '../components/Project/ModuleTree';
 import Button from '../components/common/Button';
 import Header from "../components/layout/Header";
 import Spinner from '../components/common/Spinner';
+import BaseModal from '../components/common/BaseModal';
+import SadSpecRenderer from '../components/Project/SadSpecRenderer';
 import CriticalErrorModal from '../components/Project/CriticalErrorModal';
 import HitlWarningModal from '../components/Project/HitlWarningModal';
 import { convertToMarkdown } from '../utils/markdownConverter';
@@ -35,19 +37,21 @@ const renderJson = (val: any, indent = 0): React.ReactNode => {
   if (Array.isArray(val)) {
     if (val.length === 0) return <span className="token-bracket">[]</span>;
     return (
-      <>
+      <div className="json-array">
         <span className="token-bracket">[</span>
-        {val.map((item, i) => (
-          <div key={i}>
-            <span className="indent" style={{ marginLeft: `${(indent + 1) * 2}ch` }}></span>
-            {renderJson(item, indent + 1)}
-            {i < val.length - 1 && ","}
-          </div>
-        ))}
+        <div className="json-items">
+          {val.map((item, i) => (
+            <div key={i} className="json-item">
+              <span className="indent" style={{ marginLeft: `${(indent + 1) * 2}ch` }}></span>
+              {renderJson(item, indent + 1)}
+              {i < val.length - 1 && ","}
+            </div>
+          ))}
+        </div>
         <div style={{ marginLeft: `${indent * 2}ch` }}>
           <span className="token-bracket">]</span>
         </div>
-      </>
+      </div>
     );
   }
   
@@ -55,23 +59,232 @@ const renderJson = (val: any, indent = 0): React.ReactNode => {
     const keys = Object.keys(val);
     if (keys.length === 0) return <span className="token-bracket">{"{}"}</span>;
     return (
-      <>
+      <div className="json-object">
         <span className="token-bracket">{"{"}</span>
-        {keys.map((key, i) => (
-          <div key={key}>
-            <span className="indent" style={{ marginLeft: `${(indent + 1) * 2}ch` }}></span>
-            <span className="token-key">"{key}"</span>: {renderJson(val[key], indent + 1)}
-            {i < keys.length - 1 && ","}
-          </div>
-        ))}
+        <div className="json-items">
+          {keys.map((key, i) => (
+            <div key={key} className="json-item">
+              <span className="indent" style={{ marginLeft: `${(indent + 1) * 2}ch` }}></span>
+              <span className="token-property">"{key}"</span>: {renderJson(val[key], indent + 1)}
+              {i < keys.length - 1 && ","}
+            </div>
+          ))}
+        </div>
         <div style={{ marginLeft: `${indent * 2}ch` }}>
           <span className="token-bracket">{"}"}</span>
         </div>
-      </>
+      </div>
     );
   }
-  
   return String(val);
+};
+
+const PrdBentoRenderer = ({ content }: { content: any }) => {
+  return (
+    <div className="visual-view">
+      <div className="genesis-prd-view__bento-grid">
+        {/* Business Context (col-span-8) */}
+        <div className="bento-card bento-card--overview intent-strip-primary">
+          <div className="card-header">
+            <h2 className="card-title">
+              <span className="material-symbols-outlined icon">business_center</span>
+              Business Strategy
+            </h2>
+          </div>
+          <div className="card-body">
+            <div className="overview-content">
+              <div className="info-group">
+                <h3>Product Goal</h3>
+                <p>{content.business_context?.product_goal || 'Goal not defined'}</p>
+              </div>
+              <div className="info-group">
+                <h3>Target Market</h3>
+                <p>{content.business_context?.target_market || 'N/A'}</p>
+              </div>
+              
+              <div className="metrics-box">
+                <h3>Success Metrics</h3>
+                <ul className="metrics-list">
+                  {content.business_context?.success_metrics?.map((m: string, i: number) => (
+                    <li key={i}>
+                      <span className="material-symbols-outlined">analytics</span>
+                      {m}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Constraints (col-span-4) */}
+        <div className="bento-card bento-card--constraints intent-strip-success">
+          <div className="card-header">
+            <h2 className="card-title">
+              <span className="material-symbols-outlined icon">verified_user</span>
+              Constraints
+            </h2>
+          </div>
+          <div className="constraints-content">
+            <div className="constraint-group">
+              <h3>Compliance</h3>
+              <div className="tag-cloud">
+                {content.global_constraints?.compliance?.map((c: string, i: number) => (
+                  <span key={i} className="tag">{c}</span>
+                ))}
+              </div>
+            </div>
+            <div className="constraint-group">
+              <h3>Performance</h3>
+              <p>{content.global_constraints?.performance?.join(', ') || 'Standard'}</p>
+            </div>
+            <div className="constraint-group">
+              <h3>Integration</h3>
+              <p>{content.global_constraints?.legacy_integrations?.join(', ') || 'Standalone'}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Persona Mapping (col-span-12) */}
+        <div className="bento-card bento-card--personas">
+          <h2 className="card-title">System Persona Mapping</h2>
+          <div className="personas-grid">
+            {content.user_roles?.map((role: any, i: number) => (
+              <div key={i} className="persona-chip">
+                <div className="persona-header">
+                  <span className="material-symbols-outlined icon">
+                    {role.permissions_level === 'ADMIN' ? 'admin_panel_settings' : 
+                     role.permissions_level === 'MANAGER' ? 'hub' : 'person'}
+                  </span>
+                  <div className="persona-info">
+                    <span className="name">{role.role_name}</span>
+                    <span className="role-id">{role.role_id || 'N/A'}</span>
+                  </div>
+                </div>
+                <span className="badge">{role.permissions_level}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Epics Grid (col-span-12) */}
+        <div className="epics-section col-span-12">
+          <div className="section-header">
+            <h2>Functional Epics</h2>
+          </div>
+          <div className="epics-grid">
+            {content.core_epics?.map((epic: any, i: number) => (
+              <div key={i} className="epic-card">
+                <div className="epic-card-top">
+                  <div className="epic-info">
+                    <div className="epic-icon">
+                      <span className="material-symbols-outlined">
+                        {epic.epic_id.includes('SEC') ? 'security' : 
+                         epic.epic_id.includes('PROJ') ? 'task' : 'description'}
+                      </span>
+                    </div>
+                    <div className="epic-text">
+                      <h3>{epic.title}</h3>
+                      <div className="epic-meta">
+                        <span className="epic-id">{epic.epic_id}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="epic-desc">
+                  {epic.description}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Tech Stack (col-span-12) */}
+        <div className="bento-card bento-card--tech intent-strip-primary">
+          <h2 className="card-title">Core Technology Stack</h2>
+          <div className="tech-grid">
+            {content.tech_stack?.frontend && (
+              <div className="tech-category">
+                <div className="category-header">
+                  <span className="material-symbols-outlined">splitscreen</span>
+                  <span className="name">Frontend</span>
+                </div>
+                <div className="category-body">
+                  <div className="category-main">
+                    <span className="label">Framework</span>
+                    <span className="value">{content.tech_stack.frontend.framework || 'N/A'}</span>
+                  </div>
+                  {content.tech_stack.frontend.ui_library && (
+                    <div className="sub-item">
+                      <span className="label">UI Library</span>
+                      <span className="value">{content.tech_stack.frontend.ui_library}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {content.tech_stack?.backend && (
+              <div className="tech-category">
+                <div className="category-header">
+                  <span className="material-symbols-outlined">dns</span>
+                  <span className="name">Backend</span>
+                </div>
+                <div className="category-body">
+                  <div className="category-main">
+                    <span className="label">Framework</span>
+                    <span className="value">{content.tech_stack.backend.framework || 'N/A'}</span>
+                  </div>
+                  {content.tech_stack.backend.database && (
+                    <div className="sub-item">
+                      <span className="label">Database</span>
+                      <span className="value">{content.tech_stack.backend.database}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const SadGlobalRenderer = ({ content }: { content: any }) => {
+  const contexts = Array.isArray(content) ? content : (content.contexts || []);
+  
+  return (
+    <div className="visual-view">
+      <div className="sad-overview-grid">
+        {contexts.map((ctx: any, idx: number) => (
+          <div key={idx} className="context-card">
+            <div className="spec-card-top">
+              <span className="group-label">Architecture Definition</span>
+              <span className="file-name">{ctx.context_type?.toUpperCase()}.JSON</span>
+            </div>
+            <div className="spec-card-inner">
+              <div className="card-header">
+                <div className="title-group">
+                  <span className="material-symbols-outlined icon">
+                    {ctx.context_type === 'erd' ? 'database' :
+                     ctx.context_type === 'api' ? 'api' : 'architecture'}
+                  </span>
+                  <span className="name">{ctx.context_type?.toUpperCase()} Specification</span>
+                </div>
+              </div>
+              <div className="card-content-wrapper custom-scrollbar">
+                <SadSpecRenderer
+                  type={ctx.context_type}
+                  data={ctx.context_data_json}
+                  isRaw={false}
+                />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 };
 
 const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings, onViewPrompt }) => {
@@ -89,9 +302,6 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [iterations, setIterations] = useState<any[]>([]);
   const [selectedIteration, setSelectedIteration] = useState<any | null>(null);
-  const sliderRef = useRef<HTMLDivElement>(null);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const [dragConstraints, setDragConstraints] = useState({ left: 0, right: 0 });
 
   // v2: Phase-based state
   const [project, setProject] = useState<Project | null>(null);
@@ -99,34 +309,14 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
   const [activePhase, setActivePhase] = useState<PipelinePhase | null>(null);
   const [modules, setModules] = useState<LocalModule[]>([]);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
+  const [showRawSpec, setShowRawSpec] = useState(false);
+  const [showGuidance, setShowGuidance] = useState(false);
 
   const maxScore = useMemo(() => {
     if (iterations.length === 0) return 0;
     return Math.max(...iterations.map(it => it.calculated_score || 0));
   }, [iterations]);
 
-  const updateDragConstraints = useCallback(() => {
-    if (sliderRef.current && wrapperRef.current) {
-      const containerWidth = sliderRef.current.offsetWidth;
-      const contentWidth = wrapperRef.current.scrollWidth;
-      
-      setDragConstraints({ 
-        left: Math.min(0, containerWidth - contentWidth), 
-        right: 0 
-      });
-    }
-  }, []);
-
-  useEffect(() => {
-    // Initial and iterations change update
-    const timer = setTimeout(updateDragConstraints, 300);
-    
-    window.addEventListener('resize', updateDragConstraints);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener('resize', updateDragConstraints);
-    };
-  }, [iterations, viewMode, selectedNodeId, updateDragConstraints]);
 
 
   const selectedNode = useMemo(() => {
@@ -522,34 +712,52 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
                     className="document-view"
                   >
                     <div className="document-view-container">
-                      <div className="revision-history-bar scrollbar-hide" ref={sliderRef}>
-                        <motion.div 
-                          ref={wrapperRef}
-                          className="revision-tabs-wrapper"
-                          drag="x"
-                          dragConstraints={dragConstraints}
-                          dragElastic={0.1}
-                          onDragStart={updateDragConstraints}
-                        >
+                      <div className="revisions-horizontal">
+                        <div className="revisions-header">
+                          <div className="left">
+                            <span className="material-symbols-outlined">history</span>
+                            <span>Revision History</span>
+                          </div>
+                          <div className="right">
+                            <Button
+                              variant="ghost"
+                              className="ai-guidance-btn"
+                              onClick={() => setShowGuidance(true)}
+                              title="AI Guidance"
+                              leftIcon={<span className="material-symbols-outlined">auto_awesome</span>}
+                            >
+                            </Button>
+                            <button 
+                              className={`raw-spec-btn ${showRawSpec ? 'active' : ''}`}
+                              onClick={() => setShowRawSpec(!showRawSpec)}
+                            >
+                              <span className="material-symbols-outlined">
+                                {showRawSpec ? 'account_tree' : 'data_object'}
+                              </span>
+                              {showRawSpec ? 'Visual' : 'RAW SPEC'}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="revisions-list custom-scrollbar">
                           {iterations.map((it) => {
                             const isBest = it.calculated_score === maxScore && maxScore > 0;
                             return (
                               <button
                                 key={it.iteration_id}
+                                className={`revision-btn ${selectedIteration?.iteration_id === it.iteration_id ? 'active' : ''} ${isBest ? 'confirmed' : ''}`}
                                 onClick={() => handleSelectIteration(it)}
-                                className={`revision-tab ${
-                                  selectedIteration?.iteration_id === it.iteration_id ? 'active' : ''
-                                } ${isBest ? 'best' : ''}`}
                               >
-                                <span className="rev-num">Rev #{it.iteration_number}</span>
-                                <div className="rev-score">
-                                  <span>{it.calculated_score} PTS</span>
-                                  {selectedIteration?.iteration_id === it.iteration_id && <span className="pulse-dot"></span>}
-                                </div>
+                                <span className="iter-num">Draft #{it.iteration_number}</span>
+                                {isBest && (
+                                  <span className="material-symbols-outlined selected-icon">
+                                    check_circle
+                                  </span>
+                                )}
+                                <span className="iter-meta">{it.calculated_score}</span>
                               </button>
                             );
                           })}
-                        </motion.div>
+                        </div>
                       </div>
 
                       <div className="document-body">
@@ -574,18 +782,39 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
                         </motion.div>
 
                         <div className="code-window">
-                          <div className="code-content">
+                          <div className={`code-content ${!showRawSpec ? 'visual-render' : ''}`}>
                             {nodeContent ? (
-                              <pre>
+                              <>
                                 {(() => {
                                   try {
+                                    if (showRawSpec) {
+                                      return (
+                                        <pre>
+                                          {typeof nodeContent === 'string' ? nodeContent : JSON.stringify(nodeContent, null, 2)}
+                                        </pre>
+                                      );
+                                    }
                                     const json = typeof nodeContent === 'string' ? JSON.parse(nodeContent) : nodeContent;
-                                    return renderJson(json);
+                                    
+                                    // Visual Renderers based on node type
+                                    if (selectedNode?.target_node_type === 'genesis-prd') {
+                                      return <PrdBentoRenderer content={json} />;
+                                    } else if (selectedNode?.target_node_type === 'sad-global') {
+                                      return <SadGlobalRenderer content={json} />;
+                                    } else if (['PRD', 'FSD', 'IA', 'User Flow', 'ERD', 'Wireframe', 'API_Spec', 'TC'].includes(selectedNode?.target_node_type || '')) {
+                                      return <SadSpecRenderer type={selectedNode?.target_node_type || ''} data={json} />;
+                                    }
+                                    
+                                    return (
+                                      <pre>
+                                        {renderJson(json)}
+                                      </pre>
+                                    );
                                   } catch (e) {
-                                    return nodeContent;
+                                    return <pre>{nodeContent}</pre>;
                                   }
                                 })()}
-                              </pre>
+                              </>
                             ) : (
                               <div className="opacity-30 italic">생성된 내용이 없습니다.</div>
                             )}
@@ -705,6 +934,61 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
           nodeType={hitlNode?.target_node_type || ''}
           currentScore={hitlNode?.current_best_score || 0}
         />
+
+        {showGuidance && selectedIteration && (
+          <BaseModal
+            isOpen={showGuidance}
+            onClose={() => setShowGuidance(false)}
+            title="AI Intelligence Feedback"
+            subtitle={`Draft #${selectedIteration.iteration_number} - Score: ${selectedIteration.calculated_score}`}
+            size="md"
+          >
+            <div className="intelligence-feedback">
+              {selectedIteration.critical_errors_array && (
+                <div className="feedback-card error">
+                  <div className="card-header">
+                    <span className="material-symbols-outlined">report_problem</span>
+                    <h4>Critical Issues</h4>
+                  </div>
+                  <div className="card-content">
+                    <p className="feedback-body">
+                      {(() => {
+                        try {
+                          const parsed = JSON.parse(selectedIteration.critical_errors_array);
+                          return Array.isArray(parsed) ? parsed.join(', ') : selectedIteration.critical_errors_array;
+                        } catch {
+                          return selectedIteration.critical_errors_array;
+                        }
+                      })()}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {selectedIteration.actionable_feedback_text && (
+                <div className="feedback-card info">
+                  <div className="card-header">
+                    <span className="material-symbols-outlined">lightbulb</span>
+                    <h4>Optimization Guidance</h4>
+                  </div>
+                  <div className="card-content">
+                    <p>{selectedIteration.actionable_feedback_text}</p>
+                  </div>
+                </div>
+              )}
+              {!selectedIteration.critical_errors_array && !selectedIteration.actionable_feedback_text && (
+                <div className="feedback-card success">
+                  <div className="card-header">
+                    <span className="material-symbols-outlined">check_circle</span>
+                    <h4>All Good</h4>
+                  </div>
+                  <div className="card-content">
+                    <p>이 리비전에 특별한 결함이나 개선 제안이 없습니다.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </BaseModal>
+        )}
 
         {loading && (
           <div className="engine-status">

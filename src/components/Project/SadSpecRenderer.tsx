@@ -11,8 +11,28 @@ interface SadSpecRendererProps {
  * 1. ERD Renderer (sad_core_erd)
  */
 const ErdRenderer: React.FC<{ data: any }> = ({ data }) => {
-  const entities = data.entities || [];
-  const relations = data.relationships || [];
+  // Handle both SadCoreErdSchema (entities) and ErdSchema (tables)
+  const isModuleErd = !!data.tables;
+  const entities = isModuleErd 
+    ? (data.tables || []).map((t: any) => ({
+        entity_name: t.table_name,
+        description: t.description || '',
+        attributes: (t.columns || []).map((c: any) => ({
+          name: c.name,
+          data_type: c.data_type,
+          is_primary_key: c.is_pk,
+          is_nullable: c.is_nullable,
+          description: c.description
+        }))
+      }))
+    : (data.entities || []);
+
+  const relations = (data.relationships || []).map((rel: any) => ({
+    from_entity: rel.from_entity || rel.source_table,
+    to_entity: rel.to_entity || rel.target_table,
+    relationship_type: rel.relationship_type || rel.rel_type,
+    description: rel.description
+  }));
 
   return (
     <div className="sad-spec-renderer">
@@ -20,9 +40,9 @@ const ErdRenderer: React.FC<{ data: any }> = ({ data }) => {
         <table>
           <thead>
             <tr>
-              <th>Entity</th>
+              <th>{isModuleErd ? 'Table' : 'Entity'}</th>
               <th>Description</th>
-              <th>Attributes</th>
+              <th>{isModuleErd ? 'Columns' : 'Attributes'}</th>
             </tr>
           </thead>
           <tbody>
@@ -356,7 +376,368 @@ const ModuleDepsRenderer: React.FC<{ data: any }> = ({ data }) => {
 };
 
 /**
- * 9. Fallback Renderer (JSON)
+ * 9. Module PRD Renderer (PRD)
+ */
+const PrdRenderer: React.FC<{ data: any }> = ({ data }) => {
+  return (
+    <div className="sad-spec-renderer">
+      <div className="tech-grid" style={{ gridTemplateColumns: '1fr', marginBottom: '1.5rem' }}>
+        <div className="tech-category">
+          <div className="category-header"><span className="name">Vision & Overview</span></div>
+          <div className="category-body">
+            <div className="category-main">
+               <span className="label">Problem</span>
+               <span className="value" style={{ fontSize: '0.85rem' }}>{data.overview?.problem_statement}</span>
+            </div>
+            <div className="category-main" style={{ marginTop: '0.5rem' }}>
+               <span className="label">Vision</span>
+               <span className="value" style={{ fontSize: '0.85rem' }}>{data.overview?.solution_vision}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="spec-table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>Description</th>
+              <th>Priority</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(data.core_features || []).map((f: any, i: number) => (
+              <tr key={i}>
+                <td><b>{f.feature_name}</b></td>
+                 <td className="feature-desc">{f.description}</td>
+                <td><span className={`badge ${f.priority === 'P0' ? 'badge--primary' : 'badge--warning'}`}>{f.priority}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+       <div className="tech-grid" style={{ marginTop: '1.5rem', gridTemplateColumns: '1fr' }}>
+        <div className="tech-category">
+          <div className="category-header"><span className="name">User Stories</span></div>
+          <div className="category-body">
+            <ul className="spec-list">
+              {(data.user_stories || []).map((s: string, i: number) => (
+                <li key={i}><div className="bullet" /><div className="text">{s}</div></li>
+              ))}
+            </ul>
+          </div>
+        </div>
+        <div className="tech-category">
+          <div className="category-header"><span className="name">Constraints</span></div>
+          <div className="category-body">
+             <ul className="spec-list">
+              {(data.constraints || []).map((c: string, i: number) => (
+                <li key={i}><div className="bullet" /><div className="text">{c}</div></li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * 10. FSD Renderer (FSD)
+ */
+const FsdRenderer: React.FC<{ data: any }> = ({ data }) => {
+  const features = data.features || [];
+  return (
+    <div className="sad-spec-renderer">
+      {features.map((f: any, i: number) => (
+        <div key={i} className="epic-map-card" style={{ marginBottom: '1.5rem' }}>
+          <div className="epic-header">
+            <span className="epic-id">{f.func_id}</span>
+            <span className="epic-title">{f.summary}</span>
+            <span className="badge badge--primary" style={{ marginLeft: 'auto' }}>{f.module}</span>
+          </div>
+          <div style={{ fontSize: '0.8rem', opacity: 0.8, marginBottom: '1rem', padding: '0 0.5rem' }}>
+            {f.description}
+          </div>
+          <div className="tech-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+             <div className="tech-category" style={{ padding: '0.75rem' }}>
+                <div className="category-header"><span className="name" style={{ fontSize: '0.6rem' }}>Pre-Condition</span></div>
+                <div className="category-body"><span className="value" style={{ fontSize: '0.7rem' }}>{f.pre_condition}</span></div>
+             </div>
+             <div className="tech-category" style={{ padding: '0.75rem' }}>
+                <div className="category-header"><span className="name" style={{ fontSize: '0.6rem' }}>Post-Condition</span></div>
+                <div className="category-body"><span className="value" style={{ fontSize: '0.7rem' }}>{f.post_condition}</span></div>
+             </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+            <div>
+              <h4 style={{ fontSize: '0.65rem', color: 'var(--primary)', marginBottom: '0.5rem', fontWeight: 900, textTransform: 'uppercase' }}>Main Flow</h4>
+              <ul className="spec-list">
+                {f.flow?.map((s: string, j: number) => (
+                  <li key={j}><div className="bullet" /><div className="text">{s}</div></li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h4 style={{ fontSize: '0.65rem', color: 'var(--error)', marginBottom: '0.5rem', fontWeight: 900, textTransform: 'uppercase' }}>Exceptions</h4>
+              <ul className="spec-list">
+                {f.exception_flow?.map((s: string, j: number) => (
+                  <li key={j} style={{ borderBottomColor: 'rgba(255,0,0,0.05)' }}><div className="bullet" style={{ background: 'var(--error)' }} /><div className="text">{s}</div></li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+/**
+ * 11. User Flow Renderer (User Flow)
+ */
+const UserFlowRenderer: React.FC<{ data: any }> = ({ data }) => {
+  return (
+    <div className="sad-spec-renderer">
+      <div className="spec-table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Label</th>
+              <th>Actor</th>
+              <th>Action / Flow</th>
+              <th>System Response</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(data.nodes || []).map((n: any, i: number) => (
+              <tr key={i}>
+                <td><code style={{ fontSize: '0.7rem' }}>{n.id}</code></td>
+                <td><b>{n.label}</b></td>
+                <td><span className="badge">{n.actor}</span></td>
+                <td><small>{n.step}</small></td>
+                <td><small style={{ color: 'var(--primary)', fontWeight: 600 }}>{n.system_response}</small></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {data.edges?.length > 0 && (
+        <div style={{ marginTop: '1.5rem' }}>
+          <h4 style={{ fontSize: '0.7rem', color: 'var(--primary)', marginBottom: '0.75rem', fontWeight: 900, textTransform: 'uppercase' }}>Flow Connections</h4>
+          <div className="spec-table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>From</th>
+                  <th>To</th>
+                  <th>Condition / trigger</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.edges.map((e: any, i: number) => (
+                  <tr key={i}>
+                    <td><b>{e.from_id}</b></td>
+                    <td><b>{e.to_id}</b></td>
+                    <td><small>{e.condition}</small></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * 12. IA Renderer (IA)
+ */
+const IaRenderer: React.FC<{ data: any }> = ({ data }) => {
+  const elementsMap = (data.screen_elements || []).reduce((acc: any, wrap: any) => {
+    acc[wrap.screen_id] = wrap.elements;
+    return acc;
+  }, {});
+
+  return (
+    <div className="sad-spec-renderer">
+      <div className="spec-table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Screen ID</th>
+              <th>Title</th>
+              <th>Path</th>
+              <th>Elements</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(data.hierarchy || []).map((h: any, i: number) => (
+              <tr key={i}>
+                <td style={{ paddingLeft: `${h.depth * 1}rem` }}>
+                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                     {h.depth > 0 && <span className="material-symbols-outlined" style={{ fontSize: '1rem', opacity: 0.3 }}>subdirectory_arrow_right</span>}
+                     <code style={{ fontSize: '0.7rem' }}>{h.screen_id}</code>
+                   </div>
+                </td>
+                <td><b>{h.title}</b></td>
+                <td><code style={{ fontSize: '0.7rem', opacity: 0.6 }}>{h.path}</code></td>
+                <td>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                    {elementsMap[h.screen_id]?.map((el: any, j: number) => (
+                      <span key={j} className="badge" title={el.mapped_func_id}>{el.label}</span>
+                    ))}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * 13. Wireframe Renderer (Wireframe)
+ */
+const WireframeRenderer: React.FC<{ data: any }> = ({ data }) => {
+  return (
+    <div className="sad-spec-renderer" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: '1.5rem', width: '100%', alignItems: 'start' }}>
+      {(data.screens || []).map((s: any, i: number) => (
+        <div key={i} className="epic-map-card">
+          <div className="epic-header" style={{ padding: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <span className="epic-id">{s.screen_id}</span>
+            <span className="epic-title">{s.screen_name}</span>
+          </div>
+          <div className="tech-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', padding: '1rem' }}>
+            {s.layout_regions?.map((reg: any, j: number) => (
+              <div key={j} className="tech-category" style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)' }}>
+                <div className="category-header" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <span className="name">{reg.region_name}</span>
+                </div>
+                <div className="category-body">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {(reg.components || []).map((c: any, k: number) => (
+                      <div key={k} style={{ padding: '0.5rem', borderRadius: '4px', background: 'rgba(255,255,255,0.02)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--primary)' }}>{c.component_type}</span>
+                          <span className="badge" style={{ fontSize: '0.6rem' }}>{c.mapped_func_id}</span>
+                        </div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.25rem' }}>{c.label}</div>
+                        {c.state_condition && (
+                          <div style={{ fontSize: '0.65rem', opacity: 0.6, fontStyle: 'italic', marginBottom: '0.25rem' }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: '0.8rem', verticalAlign: 'middle', marginRight: '0.2rem' }}>info</span>
+                            {c.state_condition}
+                          </div>
+                        )}
+                        <div style={{ fontSize: '0.7rem', opacity: 0.8, lineHeight: 1.4 }}>{c.description}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+/**
+ * 14. API Spec Renderer (API_Spec)
+ */
+const ApiSpecRenderer: React.FC<{ data: any }> = ({ data }) => {
+  const endpoints = data.endpoints || [];
+  return (
+    <div className="sad-spec-renderer">
+      {endpoints.map((ep: any, i: number) => (
+        <div key={i} className="epic-map-card" style={{ padding: '0' }}>
+          <div className="epic-header" style={{ padding: '1rem', marginBottom: 0 }}>
+            <span className={`badge ${['POST', 'PUT', 'PATCH'].includes(ep.method) ? 'badge--primary' : 'badge--success'}`} style={{ padding: '0.2rem 0.6rem', fontSize: '0.7rem' }}>{ep.method}</span>
+            <code style={{ fontSize: '0.85rem', color: 'white', fontWeight: 700 }}>{ep.path}</code>
+          </div>
+          <div style={{ padding: '0 1rem 1rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+             <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>{ep.summary}</div>
+             <div style={{ fontSize: '0.75rem', opacity: 0.6 }}>{ep.description}</div>
+          </div>
+          <div className="tech-grid" style={{ gridTemplateColumns: '1fr 1fr', padding: '1rem', gap: '1rem' }}>
+             <div className="tech-category" style={{ padding: '0.75rem' }}>
+                <div className="category-header"><span className="name" style={{ fontSize: '0.75rem' }}>Request Body</span></div>
+                <div className="category-body">
+                  <pre style={{ fontSize: '0.8rem', margin: 0, opacity: 0.7 }}>{JSON.stringify(ep.request_body, null, 2)}</pre>
+                </div>
+             </div>
+             <div className="tech-category" style={{ padding: '0.75rem' }}>
+                <div className="category-header"><span className="name" style={{ fontSize: '0.75rem' }}>Responses</span></div>
+                <div className="category-body">
+                  <pre style={{ fontSize: '0.8rem', margin: 0, opacity: 0.7 }}>{JSON.stringify(ep.responses, null, 2)}</pre>
+                </div>
+             </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+/**
+ * 15. TC Renderer (TC)
+ */
+const TcRenderer: React.FC<{ data: any }> = ({ data }) => {
+  return (
+    <div className="sad-spec-renderer">
+      <div className="spec-table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Type</th>
+              <th>Test Case Title</th>
+              <th>Steps / Expected</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(data.test_cases || []).map((tc: any, i: number) => (
+              <tr key={i}>
+                <td><code style={{ fontSize: '0.7rem' }}>{tc.tc_id}</code></td>
+                <td><span className="badge">{tc.tc_type}</span></td>
+                <td>
+                  <div style={{ fontWeight: 700 }}>{tc.title}</div>
+                  <div style={{ fontSize: '0.65rem', opacity: 0.5 }}>REQ: {tc.mapped_req_id}</div>
+                </td>
+                <td>
+                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <div>
+                        <b style={{ fontSize: '0.6rem', color: 'var(--primary)' }}>STEPS:</b>
+                        <ul className="spec-list" style={{ marginTop: '0.25rem' }}>
+                          {tc.test_steps?.map((s: string, j: number) => (
+                            <li key={j} style={{ padding: '0.15rem 0' }}><div className="bullet" /><div className="text" style={{ fontSize: '0.7rem' }}>{s}</div></li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.5rem' }}>
+                        <b style={{ fontSize: '0.6rem', color: 'var(--status-completed)' }}>EXPECTED:</b>
+                        <div style={{ fontSize: '0.7rem', opacity: 0.8, marginTop: '0.25rem' }}>{tc.expected_result}</div>
+                      </div>
+                   </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * 16. Fallback Renderer (JSON)
  */
 const FallbackRenderer: React.FC<{ data: any }> = ({ data }) => {
   return (
@@ -384,6 +765,7 @@ const SadSpecRenderer: React.FC<SadSpecRendererProps> = ({ type, data, isRaw }) 
 
   // Type normalization
   switch (type) {
+    // SAD Global types
     case 'sad_core_erd':
       return <ErdRenderer data={workingData} />;
     case 'sad_auth_rbac':
@@ -400,6 +782,25 @@ const SadSpecRenderer: React.FC<SadSpecRendererProps> = ({ type, data, isRaw }) 
       return <EpicMappingRenderer data={workingData} />;
     case 'sad_module_deps':
       return <ModuleDepsRenderer data={workingData} />;
+    
+    // Module pipeline types
+    case 'PRD':
+      return <PrdRenderer data={workingData} />;
+    case 'FSD':
+      return <FsdRenderer data={workingData} />;
+    case 'User Flow':
+      return <UserFlowRenderer data={workingData} />;
+    case 'IA':
+      return <IaRenderer data={workingData} />;
+    case 'ERD':
+      return <ErdRenderer data={workingData} />;
+    case 'Wireframe':
+      return <WireframeRenderer data={workingData} />;
+    case 'API_Spec':
+      return <ApiSpecRenderer data={workingData} />;
+    case 'TC':
+      return <TcRenderer data={workingData} />;
+
     default:
       return <FallbackRenderer data={workingData} />;
   }

@@ -35,6 +35,7 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
   const [tempMax, setTempMax] = useState(node?.max_iterations || 10);
   const [selectedEpic, setSelectedEpic] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAiGuidanceOpen, setIsAiGuidanceOpen] = useState(false);
 
   // node 정보가 외부에서 변경될 때 로컬 상태 동기화
   React.useEffect(() => {
@@ -369,12 +370,23 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
               <span className="material-symbols-outlined">history</span>
               <span>Revision History</span>
             </div>
-            <button className="raw-toggle" onClick={() => setShowRawView(!showRawView)}>
-              <span className="material-symbols-outlined">
-                {showRawView ? 'dashboard' : 'code'}
-              </span>
-              {showRawView ? 'Visual' : 'RAW SPEC'}
-            </button>
+            <div className="right">
+              {iterations[selectedIdx] && (
+                <Button
+                  variant="primary"
+                  onClick={() => setIsAiGuidanceOpen(true)}
+                  className="ai-guidance-btn"
+                  leftIcon={<span className="material-symbols-outlined">auto_awesome</span>}
+                  title="AI Guidance"
+                />
+              )}
+              <button className="raw-toggle" onClick={() => setShowRawView(!showRawView)}>
+                <span className="material-symbols-outlined">
+                  {showRawView ? 'dashboard' : 'code'}
+                </span>
+                {showRawView ? 'Visual' : 'RAW SPEC'}
+              </button>
+            </div>
           </div>
           <div className="revisions-list custom-scrollbar">
             {iterations.map((it, idx) => (
@@ -730,6 +742,53 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* 4. AI Guidance Modal */}
+      {iterations[selectedIdx] && (
+        <BaseModal
+          isOpen={isAiGuidanceOpen}
+          onClose={() => setIsAiGuidanceOpen(false)}
+          title="AI Intelligence Feedback"
+          subtitle={`Draft #${iterations[selectedIdx].iteration_number} - Score: ${iterations[selectedIdx].calculated_score}`}
+          size="md"
+        >
+          <div className="intelligence-feedback">
+            {iterations[selectedIdx].critical_errors_array && (
+              <div className="feedback-card error">
+                <div className="card-header">
+                  <span className="material-symbols-outlined">error</span>
+                  <h4>Critical Issues</h4>
+                </div>
+                <div className="card-content">
+                  <p>{iterations[selectedIdx].critical_errors_array}</p>
+                </div>
+              </div>
+            )}
+            {iterations[selectedIdx].actionable_feedback_text && (
+              <div className="feedback-card info">
+                <div className="card-header">
+                  <span className="material-symbols-outlined">tips_and_updates</span>
+                  <h4>Optimization Guidance</h4>
+                </div>
+                <div className="card-content">
+                  <p>{iterations[selectedIdx].actionable_feedback_text}</p>
+                </div>
+              </div>
+            )}
+            {!iterations[selectedIdx].critical_errors_array && !iterations[selectedIdx].actionable_feedback_text && (
+              <div className="feedback-card success">
+                <div className="card-header">
+                  <span className="material-symbols-outlined">check_circle</span>
+                  <h4>All Good</h4>
+                </div>
+                <div className="card-content">
+                  <p>이 리비전에 특별한 결함이나 개선 제안이 없습니다.</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </BaseModal>
       )}
 
       {!content && !loading && isReady && (

@@ -17,7 +17,7 @@
 ### Metric F: 아키텍처 제약의 논리적 캡슐화 (Logical Encapsulation of Constraints)
 - **기본 점수: 20점**
 - **[감점 트리거]**
-    - **[-15점] [치명적] 제약 조건 위반:** Tauri/SQLite 로컬 환경을 위배하는 클라우드 동기화, 실시간 협업 기반 기능 명세.
+    - **[-15점] [치명적] 기술 제약 위반:** $GLOBAL_CONTEXT 에 정의된 기술 스택 및 글로벌 제약 사항을 위배하는 기능 명세 (예: 로컬 전용 앱 설정인데 클라우드 기능 포함 등).
     - **[-5점] 경계선(Out-of-Scope) 방치:** 이번 개발 주기에 제외할 기능을 정의하지 않음.
 
 ### Metric G: 기능 체계의 E2E 완결성 (E2E Completeness of Feature System)

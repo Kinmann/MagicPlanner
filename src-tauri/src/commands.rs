@@ -1154,8 +1154,8 @@ pub async fn run_sad_global_pipeline(
         return Err("현재 상태에서는 실행할 수 없습니다.".to_string());
     }
 
-    // 상태를 RUNNING으로 변경
-    sqlx::query("UPDATE document_node SET node_state = 'RUNNING', updated_at = ? WHERE node_id = ?")
+    // 상태를 IN_PROGRESS로 변경
+    sqlx::query("UPDATE document_node SET node_state = 'IN_PROGRESS', updated_at = ? WHERE node_id = ?")
         .bind(Utc::now().to_rfc3339())
         .bind(&sad_node.node_id)
         .execute(&*pool)
@@ -1199,6 +1199,10 @@ pub async fn run_sad_global_pipeline(
         println!("!!! Failed to load common.txt generator prompt");
         String::new()
     });
+
+    if current_iter >= max_iters && !is_global_success {
+        last_error = "최대 반복 횟수(Max Iterations)에 도달했습니다. 설정을 변경하여 횟수를 늘려주세요.".to_string();
+    }
 
     // Stage 1: 글로벌 컨텍스트 5종 생성 및 평가 루프
     while current_iter < max_iters && !is_global_success {
@@ -1373,6 +1377,13 @@ pub async fn run_sad_global_pipeline(
     }
 
     if !is_global_success {
+        sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', updated_at = ? WHERE node_id = ?")
+            .bind(Utc::now().to_rfc3339())
+            .bind(&sad_node.node_id)
+            .execute(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+        let _ = app_handle.emit("nodes-updated", ());
         return Err(format!("SAD 글로벌 컨텍스트 생성 불가: {}", last_error));
     }
 
@@ -1469,7 +1480,7 @@ pub async fn run_sad_module_pipeline(
         return Err("현재 상태에서는 실행할 수 없습니다.".to_string());
     }
 
-    sqlx::query("UPDATE document_node SET node_state = 'RUNNING', updated_at = ? WHERE node_id = ?")
+    sqlx::query("UPDATE document_node SET node_state = 'IN_PROGRESS', updated_at = ? WHERE node_id = ?")
         .bind(Utc::now().to_rfc3339())
         .bind(&sad_node.node_id)
         .execute(&*pool)
@@ -1512,6 +1523,10 @@ pub async fn run_sad_module_pipeline(
         println!("!!! Failed to load common.txt generator prompt");
         String::new()
     });
+
+    if current_iter >= max_iters && !is_module_success {
+        last_error = "최대 반복 횟수(Max Iterations)에 도달했습니다. 설정을 변경하여 횟수를 늘려주세요.".to_string();
+    }
 
     while current_iter < max_iters && !is_module_success {
         current_iter += 1;
@@ -1681,6 +1696,13 @@ pub async fn run_sad_module_pipeline(
     }
 
     if !is_module_success {
+        sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', updated_at = ? WHERE node_id = ?")
+            .bind(Utc::now().to_rfc3339())
+            .bind(&sad_node.node_id)
+            .execute(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+        let _ = app_handle.emit("nodes-updated", ());
         return Err(format!("SAD 모듈 분할 생성 불가: {}", last_error));
     }
 

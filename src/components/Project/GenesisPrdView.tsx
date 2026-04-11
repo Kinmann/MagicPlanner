@@ -134,18 +134,20 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
       // 데이터 새로고침 후 confirmed 항목으로 포커스 이동
       const iters = await invoke<any[]>('get_node_iterations', { nodeId: node?.node_id });
       if (iters) {
-        const sorted = [...iters].sort((a, b) => (b.calculated_score || 0) - (a.calculated_score || 0));
+        // iteration_number 오름차순 정렬
+        const sorted = [...iters].sort((a, b) => a.iteration_number - b.iteration_number);
         setIterations(sorted);
-        // is_pass=true인 유일한 항목을 선택
+        
+        // is_pass=true인 항목을 먼저 찾고, 없으면 가장 최신(마지막 인덱스) 선택
         const passIdx = sorted.findIndex((i: any) => i.is_pass);
-        setSelectedIdx(passIdx >= 0 ? passIdx : -1);
-        if (passIdx >= 0) {
-          let rawData = sorted[passIdx].generated_draft_json;
-          if (typeof rawData === 'string') {
-            try { rawData = JSON.parse(rawData); } catch {}
-          }
-          setContent(normalizeKeys(rawData));
+        const targetIdx = passIdx >= 0 ? passIdx : sorted.length - 1;
+        
+        setSelectedIdx(targetIdx);
+        let rawData = sorted[targetIdx].generated_draft_json;
+        if (typeof rawData === 'string') {
+          try { rawData = JSON.parse(rawData); } catch {}
         }
+        setContent(normalizeKeys(rawData));
       }
     } catch (e: any) {
       setError(e.toString());
@@ -159,22 +161,20 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
     try {
       const iters = await invoke<any[]>('get_node_iterations', { nodeId: node.node_id });
       if (iters && iters.length > 0) {
-        const sorted = [...iters].sort((a, b) => (b.calculated_score || 0) - (a.calculated_score || 0));
+        // iteration_number 오름차순 정렬
+        const sorted = [...iters].sort((a, b) => a.iteration_number - b.iteration_number);
         setIterations(sorted);
 
-        // confirmed(is_pass=true) 항목이 있으면 그것을 선택, 없으면 선택 안 함
+        // confirmed(is_pass=true) 항목이 있으면 그것을 선택, 없으면 가장 최신(마지막 인덱스) 선택
         const passIdx = sorted.findIndex((it: any) => it.is_pass);
-        if (passIdx >= 0) {
-          setSelectedIdx(passIdx);
-          let rawData = sorted[passIdx].generated_draft_json;
-          if (typeof rawData === 'string') {
-            try { rawData = JSON.parse(rawData); } catch {}
-          }
-          setContent(normalizeKeys(rawData));
-        } else {
-          setSelectedIdx(-1);
-          setContent(null);
+        const targetIdx = passIdx >= 0 ? passIdx : sorted.length - 1;
+
+        setSelectedIdx(targetIdx);
+        let rawData = sorted[targetIdx].generated_draft_json;
+        if (typeof rawData === 'string') {
+          try { rawData = JSON.parse(rawData); } catch {}
         }
+        setContent(normalizeKeys(rawData));
       } else {
         setIterations([]);
         setSelectedIdx(-1);
@@ -250,6 +250,7 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
   const isPausedHitl = node?.node_state === 'PAUSED_HITL';
   const isPausedStopped = node?.node_state === 'PAUSED_STOPPED';
   const isCompleted = node?.node_state === 'COMPLETED';
+  const hasPass = iterations.some(it => it.is_pass);
 
   return (
     <div className="genesis-prd-view">
@@ -318,11 +319,11 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
             {(isPausedHitl || isCompleted) && (
               <Button 
                 onClick={handleApprove} 
-                disabled={loading || isLocked} 
+                disabled={loading || isLocked || !hasPass} 
                 variant="primary" 
                 className="proceed-btn"
                 rightIcon={<span className="material-symbols-outlined">arrow_forward</span>}
-                title={isLocked ? "이미 다음 단계로 진행되었습니다." : ""}
+                title={isLocked ? "이미 다음 단계로 진행되었습니다." : (!hasPass ? "Draft 확정이 필요합니다." : "")}
               >
                 Proceed to SAD
               </Button>

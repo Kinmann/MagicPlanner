@@ -275,18 +275,27 @@
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
+    margin-bottom: 0.5rem;
 
     .revisions-header {
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 0.5rem;
       padding: 0 0.25rem;
+
+      .left {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
 
       .material-symbols-outlined {
         font-size: 0.875rem;
         color: $on-surface-variant;
       }
-      span:last-child {
+
+      span:not(.material-symbols-outlined) {
         font-size: 0.625rem; /* 10px */
         font-weight: 900;
         color: $on-surface-variant;
@@ -374,6 +383,16 @@
             filter: drop-shadow(0 0 5px rgba($primary, 0.5));
           }
         }
+
+        &.confirmed:not(.active) {
+          border-color: rgba($status-completed, 0.3);
+          background: rgba($status-completed, 0.05);
+
+          .selected-icon {
+            color: $status-completed;
+            opacity: 1;
+          }
+        }
       }
     }
   }
@@ -411,17 +430,28 @@
         }
       }
 
-      .proceed-btn {
-        font-weight: 800;
-        letter-spacing: -0.01em;
+      &__actions {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
 
-        .btn__icon {
-          transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        }
+        .ai-guidance-btn {
+          width: 50px;
+          height: 50px;
+          padding: 0;
+          min-width: unset;
+          border-radius: $radius-lg;
+          display: flex;
+          align-items: center;
+          justify-content: center;
 
-        &:hover:not(:disabled) {
-          .btn__icon--right {
-            transform: translateX(4px);
+          .btn__icon {
+            margin: 0;
+            font-size: 1.1rem;
+          }
+
+          .btn__text {
+            display: none;
           }
         }
       }

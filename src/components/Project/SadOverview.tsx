@@ -59,8 +59,10 @@ const SadOverview: React.FC<SadOverviewProps> = ({
         const result = await invoke<GenerationIteration[]>('get_node_iterations', { nodeId: globalNode.node_id });
         setGlobalIters(result);
         if (result.length > 0 && !selectedGlobalIterId) {
-          const passIter = result.find(it => it.is_pass) || result[result.length - 1];
-          setSelectedGlobalIterId(passIter.iteration_id);
+          // 확정된(Passed) 리비전이 있으면 그것을 선택, 없으면 가장 최근 리비전을 선택(단순 프리뷰)
+          const passIter = result.find(it => it.is_pass === 1 || it.is_pass === true);
+          const defaultIter = passIter || result[result.length - 1];
+          setSelectedGlobalIterId(defaultIter.iteration_id);
         }
       }
 
@@ -71,8 +73,9 @@ const SadOverview: React.FC<SadOverviewProps> = ({
         const result = await invoke<GenerationIteration[]>('get_node_iterations', { nodeId: moduleNode.node_id });
         setModuleIters(result);
         if (result.length > 0 && !selectedModuleIterId) {
-          const passIter = result.find(it => it.is_pass) || result[result.length - 1];
-          setSelectedModuleIterId(passIter.iteration_id);
+          const passIter = result.find(it => it.is_pass === 1 || it.is_pass === true);
+          const defaultIter = passIter || result[result.length - 1];
+          setSelectedModuleIterId(defaultIter.iteration_id);
         }
       }
     } catch { }
@@ -287,16 +290,16 @@ const SadOverview: React.FC<SadOverviewProps> = ({
                 disabled={loading || currentNode?.node_state === 'IN_PROGRESS' || (activeStage === 'MODULE' && !isGlobalDone) || isCurrentStageLocked}
                 variant={(currentNode?.node_state === 'PAUSED_HITL' || currentNode?.node_state === 'COMPLETED') ? 'ghost' : 'primary'}
                 className="proceed-btn"
-                isLoading={loading || currentNode?.node_state === 'IN_PROGRESS'}
+                isLoading={loading || currentNode?.node_state === 'IN_PROGRESS' || currentNode?.node_state === 'RUNNING'}
                 leftIcon={<span className="material-symbols-outlined">auto_awesome</span>}
                 title={isCurrentStageLocked ? (activeStage === 'GLOBAL' && isModuleStarted ? "모듈 분리 단계가 이미 시작되었습니다." : "다음 단계가 진행 중입니다.") : ""}
               >
-                {(loading || currentNode?.node_state === 'IN_PROGRESS') ? '진행 중' : ((currentNode?.node_state === 'PAUSED_HITL' || currentNode?.node_state === 'COMPLETED') ? '재생성' : '생성 시작')}
+                {(loading || currentNode?.node_state === 'IN_PROGRESS' || currentNode?.node_state === 'RUNNING') ? '진행 중' : ((currentNode?.node_state === 'PAUSED_HITL' || currentNode?.node_state === 'COMPLETED') ? '재생성' : '생성 시작')}
               </Button>
 
-              {currentNode?.node_state === 'IN_PROGRESS' && (
+              {(loading || currentNode?.node_state === 'IN_PROGRESS' || currentNode?.node_state === 'RUNNING') && (
                 <Button
-                  onClick={() => handleStop(currentNode.node_id)}
+                  onClick={() => currentNode && handleStop(currentNode.node_id)}
                   variant="danger"
                   leftIcon={<span className="material-symbols-outlined">stop</span>}
                 >
@@ -316,17 +319,6 @@ const SadOverview: React.FC<SadOverviewProps> = ({
                 </Button>
               )}
 
-              {currentNode?.node_state === 'PAUSED_HITL' && currentSelectedIterId !== 'OFFICIAL' && (
-                <Button
-                  onClick={() => handleConfirmIteration(activeStage)}
-                  disabled={loading || isCurrentStageLocked}
-                  variant="secondary"
-                  leftIcon={<span className="material-symbols-outlined">check_circle</span>}
-                  title={isCurrentStageLocked ? "이미 다음 단계로 진행되었습니다." : ""}
-                >
-                  Draft 확정
-                </Button>
-              )}
 
               {activeStage === 'MODULE' && (isModuleDone || isApproved) && (
                 <Button
@@ -378,27 +370,29 @@ const SadOverview: React.FC<SadOverviewProps> = ({
 
       <div className="revisions-horizontal">
         <div className="revisions-header">
-          <span className="material-symbols-outlined">history</span>
-          <span>Revision History</span>
+          <div className="left">
+            <span className="material-symbols-outlined">history</span>
+            <span>Revision History</span>
+          </div>
         </div>
         <div className="revisions-list custom-scrollbar">
           {currentIters.map((it) => {
-            const isOfficial = !!it.is_pass || contexts.some(ctx => ctx.iteration_id === it.iteration_id);
+            const isConfirmed = it.is_pass === 1 || it.is_pass === true;
 
             return (
-              <button
+              <div
                 key={it.iteration_id}
-                className={`revision-btn ${currentSelectedIterId === it.iteration_id ? 'active' : ''}`}
+                className={`revision-btn ${currentSelectedIterId === it.iteration_id ? 'active' : ''} ${isConfirmed ? 'confirmed' : ''}`}
                 onClick={() => activeStage === 'GLOBAL' ? setSelectedGlobalIterId(it.iteration_id) : setSelectedModuleIterId(it.iteration_id)}
               >
                 <span className="iter-num">
                   Draft #{it.iteration_number}
                 </span>
-                {isOfficial && (
+                {isConfirmed && (
                   <span className="material-symbols-outlined selected-icon">check_circle</span>
                 )}
                 <span className="iter-meta">{it.calculated_score}</span>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -410,16 +404,30 @@ const SadOverview: React.FC<SadOverviewProps> = ({
             <span className="material-symbols-outlined">terminal</span>
             <h6>Technical Specifications</h6>
           </div>
-          {activeIteration && (
-            <Button
-              variant="primary"
-              onClick={() => setIsAiGuidanceOpen(true)}
-              className="ai-guidance-btn proceed-btn"
-              rightIcon={<span className="material-symbols-outlined">auto_awesome</span>}
-            >
-              AI Guidance
-            </Button>
-          )}
+          <div className="tech-specs-header__actions">
+            {activeIteration && (
+              <Button
+                variant="primary"
+                onClick={() => setIsAiGuidanceOpen(true)}
+                className="ai-guidance-btn"
+                leftIcon={<span className="material-symbols-outlined">auto_awesome</span>}
+                title="AI Guidance"
+              >
+              </Button>
+            )}
+
+            {currentNode?.node_state === 'PAUSED_HITL' && !(activeIteration?.is_pass === 1 || activeIteration?.is_pass === true) && (
+              <Button
+                onClick={() => handleConfirmIteration(activeStage)}
+                disabled={loading || isCurrentStageLocked}
+                variant="secondary"
+                leftIcon={<span className="material-symbols-outlined">check_circle</span>}
+                title={isCurrentStageLocked ? "이미 다음 단계로 진행되었습니다." : ""}
+              >
+                Draft 확정
+              </Button>
+            )}
+          </div>
         </div>
 
         <BaseModal

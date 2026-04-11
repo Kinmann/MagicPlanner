@@ -171,10 +171,12 @@ pub fn run() {
                     }
                 }
 
+
                 // ============================================================
                 // [HOTFIX] SAD/PRD 중복 번호 및 아이콘 오표시 긴급 보정
                 // ============================================================
                 println!(">>> Running DB Data Cleanup...");
+                // [HOTFIX] 데이터 자동 보정 (SAD/PRD 제외, 모듈 내 노드만 자동 확정)
                 let _ = sqlx::query("
                     -- 1. 이터레이션 번호 재부여 (생성순)
                     UPDATE generation_iteration
@@ -189,18 +191,26 @@ pub fn run() {
                 ").execute(&pool).await;
 
                 let _ = sqlx::query("
-                    -- 2. 모든 is_pass 초기화 후 최고점 리비전만 1로 설정
-                    UPDATE generation_iteration SET is_pass = 0;
+                    -- 2. SAD/PRD를 제외한 모듈 내 노드들만 is_pass 초기화 후 최고점 리비전 자동 확정
+                    UPDATE generation_iteration 
+                    SET is_pass = 0 
+                    WHERE node_id IN (
+                        SELECT node_id FROM document_node 
+                        WHERE target_node_type NOT IN ('Genesis_PRD', 'SAD_Global', 'SAD_Module')
+                    );
                 ").execute(&pool).await;
 
                 let _ = sqlx::query("
                     UPDATE generation_iteration 
                     SET is_pass = 1
                     WHERE iteration_id IN (
-                        SELECT iteration_id FROM (
-                            SELECT iteration_id, row_number() OVER (PARTITION BY node_id ORDER BY calculated_score DESC, created_at DESC) as rank
+                        SELECT it.iteration_id FROM (
+                            SELECT iteration_id, node_id, row_number() OVER (PARTITION BY node_id ORDER BY calculated_score DESC, created_at DESC) as rank
                             FROM generation_iteration
-                        ) WHERE rank = 1
+                        ) it
+                        JOIN document_node dn ON it.node_id = dn.node_id
+                        WHERE it.rank = 1 
+                        AND dn.target_node_type NOT IN ('Genesis_PRD', 'SAD_Global', 'SAD_Module')
                     );
                 ").execute(&pool).await;
 

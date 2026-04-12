@@ -1030,17 +1030,6 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
           </BaseModal>
         )}
 
-        {loading && (
-          <div className="engine-status">
-            <div className="status-row">
-              <Spinner size="sm" />
-              <span>Engine Orchestrating...</span>
-            </div>
-            <div className="status-description">
-              {nodes.find(n => n.node_state === 'IN_PROGRESS')?.last_action || statusMessage || "Initializing..."}
-            </div>
-          </div>
-        )}
     </div>
   );
 };

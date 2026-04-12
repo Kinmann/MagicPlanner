@@ -2529,3 +2529,43 @@ async fn is_node_stopped(pool: &SqlitePool, node_id: &str) -> bool {
     }
     false
 }
+
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+#[serde(rename_all = "snake_case")]
+pub struct ActiveNodeInfo {
+    pub node_id: String,
+    pub project_id: String,
+    pub project_name: String,
+    pub module_id: Option<String>,
+    pub module_name: Option<String>,
+    pub target_node_type: String,
+    pub node_state: String,
+    pub last_action: Option<String>,
+}
+
+#[tauri::command]
+pub async fn get_all_active_nodes(
+    pool: tauri::State<'_, SqlitePool>,
+) -> Result<Vec<ActiveNodeInfo>, String> {
+    let active_nodes = sqlx::query_as::<_, ActiveNodeInfo>(
+        "SELECT 
+            n.node_id, 
+            n.project_id, 
+            p.project_name, 
+            n.module_id, 
+            m.module_name, 
+            n.target_node_type, 
+            n.node_state, 
+            n.last_action 
+         FROM document_node n
+         JOIN project p ON n.project_id = p.project_id
+         LEFT JOIN local_module m ON n.module_id = m.module_id
+         WHERE n.node_state = 'IN_PROGRESS' AND n.is_deleted = 0
+         ORDER BY n.updated_at DESC"
+    )
+    .fetch_all(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(active_nodes)
+}

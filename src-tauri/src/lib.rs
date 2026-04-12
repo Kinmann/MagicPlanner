@@ -278,6 +278,7 @@ pub fn run() {
             commands::confirm_genesis_prd_iteration,
             commands::stop_node_pipeline,
             commands::resume_node_pipeline,
+            commands::get_all_active_nodes,
         ])
         .plugin(tauri_plugin_dialog::init())
         .run(tauri::generate_context!())

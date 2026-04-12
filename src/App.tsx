@@ -6,6 +6,7 @@ import Dashboard from "./pages/Dashboard";
 import Workspace from "./pages/Workspace";
 import PromptView from "./pages/PromptView";
 import CreateProject from "./pages/CreateProject";
+import EngineStatusOverlay from "./components/layout/EngineStatusOverlay";
 import "./App.scss";
 
 function App() {
@@ -98,6 +99,7 @@ function App() {
           </motion.div>
         )}
       </AnimatePresence>
+      <EngineStatusOverlay />
     </div>
   );
 }

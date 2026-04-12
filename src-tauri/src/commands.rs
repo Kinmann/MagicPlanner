@@ -852,7 +852,7 @@ async fn call_gemini(client: &Client, api_key: &str, sys_prompt: &str, user_prom
         "temperature": 0.7,
         "topP": 0.95,
         "topK": 40,
-        "maxOutputTokens": 16384,
+        "maxOutputTokens": 65536,
         "responseMimeType": "application/json"
     });
 

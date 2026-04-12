@@ -15,6 +15,20 @@ interface ActiveNodeInfo {
   last_action: string | null;
 }
 
+const NODE_TYPE_LABELS: Record<string, string> = {
+  genesis_prd: "Genesis PRD",
+  sad_global: "SAD-Global Context",
+  sad_module: "SAD-Module Split",
+  prd_module: "PRD",
+  fsd: "FSD",
+  ia: "IA",
+  erd: "ERD",
+  user_flow: "User Flow",
+  wireframe: "Wireframe",
+  api_spec: "API Spec",
+  tc: "TC",
+};
+
 const EngineStatusOverlay: React.FC = () => {
   const [activeNodes, setActiveNodes] = useState<ActiveNodeInfo[]>([]);
   
@@ -58,7 +72,7 @@ const EngineStatusOverlay: React.FC = () => {
               {node.project_name}
             </span>
             <span className="node-name">
-              [{node.module_name || node.target_node_type}]
+              [{NODE_TYPE_LABELS[node.target_node_type] || node.target_node_type}]
             </span>
             <span className="node-last-action">{node.last_action || "Initializing..."}</span>
           </div>

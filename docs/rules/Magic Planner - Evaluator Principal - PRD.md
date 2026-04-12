@@ -3,7 +3,7 @@
 생성일: 2026년 3월 29일 오후 1:52
 
 **[Objective]**
-본 지표는 파이프라인 최상단 노드인 PRD 산출물에 배타적으로 적용되는 70점 만점의 특화 검증 기준입니다. 해당 노드는 다중 루프(Multi-loop)를 통해 시스템의 '혁신적 가치'를 강제 도출해야 하는 발산형 노드입니다. 당신은 벤처 캐피탈(VC) 심사역이자 엄격한 시스템 아키텍트의 논리 회로를 에뮬레이션(Emulation)하십시오. 독창성 부재, 피상적 문제 정의, 시스템 제약 위반을 기계적으로 스캔하여 감점 연산을 수행하십시오.
+본 문서는 Phase 3: Module PRD 검증을 위해 주입되는 배타적 평가 지표(70점 만점)임. 당신은 감정을 배제한 '결정론적 룰 엔진(Deterministic Rule Engine)'으로 작동해야 함. 자연어의 의미적 관대함을 허용하지 말 것. 식별자 매칭, 도메인 경계, 상속 제약 위반 여부를 기계적으로 스캔하여 감점 트리거(Trigger) 조건 충족 시 즉각 감점 연산을 수행할 것.
 
 ## 특화 평가 지표 (Domain Metrics) : 총점 70점
 
@@ -12,38 +12,55 @@
 - 각 Metric의 최종 점수 산출 공식: `MAX(0, 기본 점수 - 누적 감점)`
 - 감점 발생 시 해당 사유를 반드시 최종 출력의 `critical_errors` 배열에 기록하십시오.
 
-### Metric D: 독창성 및 차별화 가치 (Originality & Unique Value Proposition)
+### Metric D: 모듈 바운더리 및 책임 캡슐화 (Module Boundary Encapsulation)
 
-단순한 데이터 입출력(CRUD) 수준을 넘어, 대상 사용자에게 새로운 효용(Aha Moment)을 제공하는 핵심 차별화 요소(Killer Feature)가 존재하는지 검증합니다.
+- **Objective:** 타겟 모듈(`$TARGET_MODULE`)의 책임 범위 내 이탈 여부 및 설계 계층 위반 스캔.
+- **Base Score:** 20점
+- **[Deduction Triggers]:**
+    - **[Code D-1] 타 모듈 도메인 침범 (-20점):** - `IF` 산출된 기능 로직이 선행 `$SOURCE_DOCUMENTS`(SAD)에 명시된 타겟 모듈의 책임을 벗어남 `AND` 타 모듈(`MOD-XXX`)의 명시적 책임에 해당함
+        - `THEN` -20점 (즉시 삭감)
+    - **[Code D-2] 할당 외 에픽 포함 (-10점):**
+        - `IF` 산출물 내에 참조된 `EPIC-XXX` 식별자가 타겟 모듈에 할당된 에픽 리스트에 존재하지 않음 (`Unmapped ID`)
+        - `THEN` -10점
+    - **[Code D-3] 마이크로 설계 개입 (-10점):**
+        - `IF` 산출물 데이터에 물리적 DB 컬럼명, HTTP API 엔드포인트(URL), JSON 파라미터 타입 등 구현 레벨(FSD/ERD)의 데이터 규격이 포함됨
+        - `THEN` -10점
 
-- **기본 점수:** 20점
-- **[감점 트리거]**
-    - **[-10점] 레퍼런스 답습 (Cliché & Generic):** 제안된 제품이 시장에 이미 존재하는 범용적 어플리케이션(예: 단순 메모, To-do, 게시판)의 아키텍처 패턴을 그대로 복제하였으며, 해당 시스템만의 독창적 문제 해결 방식이나 차별화 알고리즘이 명세되지 않은 경우.
-    - **[-10점] 핵심 가치 증발 (Missing Aha Moment):** `core_features`의 가치 제안(Value Proposition)이 "사용하기 편리하다", "데이터를 안전하게 저장한다"와 같은 1차원적 시스템 기본 기대값 수준으로 서술되어, 비즈니스적 효용 가치를 증명하지 못하는 경우.
+### Metric E: 기능 분해의 해상도 (Feature Decomposition Specificity)
 
-### Metric E: 타겟 및 문제 정의의 해상도 (Resolution of Target & Problem)
+- **Objective:** 에픽(Epic) -> 기능(Feature) 분해 과정의 논리성 및 예외 처리(Edge Case) 무결성 스캔.
+- **Base Score:** 20점
+- **[Deduction Triggers]:**
+    - **[Code E-1] 동어반복 분해 (-10점):**
+        - `IF` 도출된 Feature의 제목/설명이 상위 Epic의 텍스트와 의미적으로 90% 이상 동일함 (기능적 분해 없이 1:1 매핑만 수행됨)
+        - `THEN` -10점
+    - **[Code E-2] 엣지 케이스 누락 (-5점):**
+        - `IF` 핵심 기능 명세에 정상 흐름(Happy Path)만 존재함 `AND` 필수 예외 상황(데이터 부재, 권한 실패, 한도 초과 등 Unhappy Path)에 대한 분기 처리가 누락됨
+        - `THEN` -5점
+    - **[Code E-3] 에픽 추적성 단절 (-5점):**
+        - `IF` 도출된 세부 기능에 부모 에픽의 식별자(`EPIC-XXX`)가 역방향 매핑(Traceability)되지 않음
+        - `THEN` -5점
 
-사용자 페르소나와 그들이 겪는 페인 포인트(Pain Point)가 측정 가능하고 맥락적인(Contextual) 데이터 수준으로 분해되었는지 평가합니다.
+### Metric F: 글로벌 컨텍스트 상속 정합성 (Global Context Inheritance)
 
-- **기본 점수:** 15점
-- **[감점 트리거]**
-    - **[-10점] 피상적 문제 정의 (Superficial Problem):** 해결 대상 문제(`problem_statement`)가 "시간 부족", "비효율" 등 원인 분석이 결여된 추상적 명사로 기재되고, 구체적으로 어떤 맥락(Context)에서 어떤 손실(비용, 시간, 심리적 부담 등)이 발생하는지 정량적/정성적으로 특정되지 않은 경우.
-    - **[-5점] 타겟 집단 모호성 (Ambiguous Target):** `target_audience` 변수에 "일반 사용자", "학생", "직장인" 등 도달 가능성(Reachability)과 특성을 검증할 수 없는 과도하게 광범위한 집단이 매핑된 경우.
+- **Objective:** SAD 단계에서 주입된 전역 RBAC(권한 체계) 상속 및 인가(Authorization) 로직 매핑 스캔.
+- **Base Score:** 15점
+- **[Deduction Triggers]:**
+    - **[Code F-1] 고스트 권한 사용 (-5점):**
+        - `IF` 세부 기능에 할당된 접근 권한이 `$SOURCE_DOCUMENTS`의 RBAC 리스트에 정의된 `ROLE-XXX` 식별자와 일치하지 않음 (임의 문자열 창조)
+        - `THEN` -5점
+    - **[Code F-2] 인가 로직 누락 (-5점):**
+        - `IF` 해당 기능이 상태를 변경하는 작업(Create, Update, Delete)임 `AND` 실행자의 최소 권한 레벨이나 데이터 소유권(Ownership) 검증 명세가 누락됨
+        - `THEN` -5점
 
-### Metric F: 아키텍처 제약의 논리적 캡슐화 (Logical Encapsulation of Constraints)
+### Metric G: 인터페이스 대응 준비도 (Dependency & Interface Readiness)
 
-제안된 창의적 아이디어가 시스템에 사전 부여된 물리적 환경(Tauri 프레임워크 기반, 로컬 SQLite 단일 파일 데이터베이스) 내에서 실현 가능하도록 통제되었는지 검증합니다.
-
-- **기본 점수:** 20점
-- **[감점 트리거]**
-    - **[-15점] [치명적 오류] 제약 조건 위반 (Constraint Violation):** 로컬 데스크톱 환경 제약을 명백히 위배하는 클라우드 데이터 동기화, 외부 SaaS 실시간 의존 로직, 다중 사용자 실시간 협업(Multiplayer) 기능 등을 핵심 요구사항으로 기재한 경우.
-    - **[-5점] 경계선(Out-of-Scope) 방치:** 창의적 발산으로 인한 요구사항 팽창(Scope Creep)을 차단하기 위해, 이번 개발 주기에서 '명시적으로 제외할 기능(Out-of-Scope)' 속성을 정의하지 않은 경우.
-
-### Metric G: 기능 체계의 E2E 완결성 (E2E Completeness of Feature System)
-
-도출된 창의적 핵심 기능이 고립되지 않고, 소프트웨어의 정상적 구동을 보장하는 필수 기저 기능(Base Features)들과 유기적으로 연결되었는지 평가합니다.
-
-- **기본 점수:** 15점
-- **[감점 트리거]**
-    - **[-10점] 데이터 제어 동선 단절 (Dead-end Data Flow):** 핵심 기능을 통해 산출되거나 가공된 데이터를 이후 사용자가 직접 제어(조회, 수정, 영구 삭제, 내보내기 등)할 수 있는 후속 권한(기능)이 명세되지 않아 시스템 내 논리적 교착(Deadlock)이 발생하는 경우.
-    - **[-5점/건] 최소 요건(MVP) 기저 로직 누락:** 아무리 혁신적인 서비스라 하더라도 시스템 운용상 필연적으로 요구되는 기저 기능(예: 환경 설정, 데이터 초기화, 오류 발생 시 상태 복구 등)이 누락되어 독립 실행형 소프트웨어의 요건을 갖추지 못한 경우.
+- **Objective:** 모듈 간 통신(I/O) 맥락 및 동기/비동기 아키텍처 제약 위반 스캔.
+- **Base Score:** 15점
+- **[Deduction Triggers]:**
+    - **[Code G-1] I/O 맥락 누락 (-5점):**
+        - `IF` SAD 기준 해당 모듈에 타 모듈과의 의존성(Inbound/Outbound)이 존재함 `AND` 산출된 세부 기능 명세에 해당 데이터 교환을 트리거/수신하는 로직이 부재함
+        - `THEN` -5점
+    - **[Code G-2] 통신 정책 충돌 (-5점):**
+        - `IF` SAD에 정의된 통신 규격(예: Async Message Queue)과 기능 명세의 기대 동작(예: Sync Blocking 형태의 즉각적 사용자 응답 대기)이 아키텍처적으로 모순됨
+        - `THEN` -5점

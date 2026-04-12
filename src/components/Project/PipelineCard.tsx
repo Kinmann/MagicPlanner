@@ -235,7 +235,7 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
           </div>
         )}
 
-        {(node.node_state === 'PAUSED_API_ERROR' || node.node_state === 'IN_PROGRESS') && (
+        {node.node_state === 'PAUSED_API_ERROR' && (
           <div className="status-actions">
             <button 
               className="btn btn-error" 
@@ -245,20 +245,22 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
               }}
             >
               <span className="material-symbols-outlined">refresh</span> 
-              {node.node_state === 'IN_PROGRESS' ? 'Force Reboot' : 'Retry Cycle'}
+              Retry Cycle
             </button>
-            
-            {node.node_state === 'IN_PROGRESS' && (
-              <button 
-                className="btn btn-ghost is-stop" 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onStop(node.node_id);
-                }}
-              >
-                <span className="material-symbols-outlined">stop_circle</span> Stop
-              </button>
-            )}
+          </div>
+        )}
+
+        {node.node_state === 'IN_PROGRESS' && (
+          <div className="status-actions">
+            <button 
+              className="btn btn-ghost is-stop" 
+              onClick={(e) => {
+                e.stopPropagation();
+                onStop(node.node_id);
+              }}
+            >
+              <span className="material-symbols-outlined">stop_circle</span> Stop
+            </button>
           </div>
         )}
 

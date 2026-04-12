@@ -312,16 +312,37 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
   const [showRawSpec, setShowRawSpec] = useState(false);
   const [showGuidance, setShowGuidance] = useState(false);
 
-  const maxScore = useMemo(() => {
-    if (iterations.length === 0) return 0;
-    return Math.max(...iterations.map(it => it.calculated_score || 0));
-  }, [iterations]);
-
-
-
   const selectedNode = useMemo(() => {
     return nodes.find(n => n.node_id === selectedNodeId) || null;
   }, [nodes, selectedNodeId]);
+
+  const bestIterationId = useMemo(() => {
+    if (!selectedNode || iterations.length === 0) return null;
+    
+    // Genesis PRD나 SAD문서는 기존대로 is_pass 기준 (사용자 요청)
+    if (selectedNode.node_category !== 'MODULE') {
+      const passed = iterations.find(it => it.is_pass);
+      return passed ? passed.iteration_id : iterations[iterations.length - 1]?.iteration_id;
+    }
+
+    // 모듈 내 문서 노드는 새로운 로직 적용: 기준점 이상 중 최고점 -> 최신 순
+    const threshold = selectedNode.threshold_score || 0;
+    const qualified = iterations.filter(it => (it.calculated_score || 0) >= threshold);
+    
+    if (qualified.length === 0) return null;
+
+    const best = [...qualified].sort((a, b) => {
+      if (b.calculated_score !== a.calculated_score) {
+        return (b.calculated_score || 0) - (a.calculated_score || 0);
+      }
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    })[0];
+    
+    return best?.iteration_id;
+  }, [selectedNode, iterations]);
+
+
+
 
   // v2: Fetch project info
   const fetchProject = useCallback(async () => {
@@ -478,14 +499,33 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
     setIterations([]);
     setSelectedIteration(null);
     try {
-      const iters = await invoke<any[]>('get_node_iterations', { nodeId: node.node_id });
+      const iters = await invoke<any[]>('get_node_iterations', { nodeId: node.node_id }) || [];
       const sortedIters = [...iters].sort((a, b) => 
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       );
       setIterations(sortedIters);
       if (sortedIters && sortedIters.length > 0) {
-        const best = [...sortedIters].sort((a, b) => (b.calculated_score || 0) - (a.calculated_score || 0))[0];
-        handleSelectIteration(best);
+        let target;
+        // 모듈 노드인 경우 최적 리비전 선택 로직 적용
+        if (node.node_category === 'MODULE') {
+          const threshold = node.threshold_score || 0;
+          const qualified = sortedIters.filter(it => (it.calculated_score || 0) >= threshold);
+          if (qualified.length > 0) {
+            target = [...qualified].sort((a, b) => {
+              if (b.calculated_score !== a.calculated_score) {
+                return (b.calculated_score || 0) - (a.calculated_score || 0);
+              }
+              return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+            })[0];
+          } else {
+            target = sortedIters[sortedIters.length - 1];
+          }
+        } else {
+          // 기존 로직: is_pass 우선 또는 전체 최고점
+          const passed = sortedIters.find(it => it.is_pass);
+          target = passed || [...sortedIters].sort((a, b) => (b.calculated_score || 0) - (a.calculated_score || 0))[0];
+        }
+        handleSelectIteration(target);
       } else {
         setNodeContent("생성된 내용이 없습니다.");
       }
@@ -740,15 +780,15 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
                         </div>
                         <div className="revisions-list custom-scrollbar">
                           {iterations.map((it) => {
-                            const isBest = it.calculated_score === maxScore && maxScore > 0;
+                            const isConfirmed = it.iteration_id === bestIterationId;
                             return (
                               <button
                                 key={it.iteration_id}
-                                className={`revision-btn ${selectedIteration?.iteration_id === it.iteration_id ? 'active' : ''} ${isBest ? 'confirmed' : ''}`}
+                                className={`revision-btn ${selectedIteration?.iteration_id === it.iteration_id ? 'active' : ''} ${isConfirmed ? 'confirmed' : ''}`}
                                 onClick={() => handleSelectIteration(it)}
                               >
                                 <span className="iter-num">Draft #{it.iteration_number}</span>
-                                {isBest && (
+                                {isConfirmed && (
                                   <span className="material-symbols-outlined selected-icon">
                                     check_circle
                                   </span>
@@ -994,13 +1034,11 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
           <div className="engine-status">
             <div className="status-row">
               <Spinner size="sm" />
-              Engine Orchestrating...
+              <span>Engine Orchestrating...</span>
             </div>
-            {statusMessage && (
-               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="status-message">
-                 {statusMessage}
-               </motion.div>
-            )}
+            <div className="status-description">
+              {nodes.find(n => n.node_state === 'IN_PROGRESS')?.last_action || statusMessage || "Initializing..."}
+            </div>
           </div>
         )}
     </div>

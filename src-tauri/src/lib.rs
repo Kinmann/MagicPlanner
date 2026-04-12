@@ -1,6 +1,11 @@
 mod commands;
 pub mod schemas;
 
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
+
+pub struct ActiveTasks(pub Arc<Mutex<HashSet<String>>>);
+
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -11,6 +16,8 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let active_tasks = ActiveTasks(Arc::new(Mutex::new(HashSet::new())));
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::new().build())
@@ -240,6 +247,7 @@ pub fn run() {
                 Ok::<sqlx::SqlitePool, String>(pool)
             })?;
             app.manage(pool);
+            app.manage(active_tasks);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

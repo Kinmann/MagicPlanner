@@ -2,8 +2,10 @@ use serde::{Deserialize, Serialize};
 use reqwest::Client;
 use uuid::Uuid;
 use chrono::Utc;
-use tauri::{Manager, Emitter};
+use tauri::{Manager, Emitter, State};
 use sqlx::{SqlitePool, FromRow, Row};
+use crate::ActiveTasks;
+use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, sqlx::Type)]
 #[sqlx(type_name = "TEXT")]
@@ -347,12 +349,15 @@ pub async fn delete_project(
 pub async fn run_pipeline(
     app_handle: tauri::AppHandle,
     pool: tauri::State<'_, SqlitePool>,
+    active_tasks: tauri::State<'_, ActiveTasks>,
     project_id: String,
     node_type: String,
     api_key: String,
 ) -> Result<String, String> {
-    println!(">>> Pipeline started for node: {} in project: {}", node_type, project_id);
-    // 1. 노드 상태 조회 및 가드
+    println!(">>> run_pipeline started for project: {}, node: {}", project_id, node_type);
+    let client = Client::new();
+
+    // 1. 노드 정보 조회
     let node = sqlx::query_as::<_, DocumentNode>(
         "SELECT * FROM document_node WHERE project_id = ? AND target_node_type = ?"
     )
@@ -362,6 +367,30 @@ pub async fn run_pipeline(
     .await
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "Node not found".to_string())?;
+
+    // 중복 실행 체크
+    {
+        let mut tasks = active_tasks.0.lock().map_err(|e| e.to_string())?;
+        if tasks.contains(&node.node_id) {
+            println!(">>> [ABORT] Node is already running: {}", node.node_id);
+            return Err("이미 프로세스가 진행 중입니다. (ActiveTask Detect)".to_string());
+        }
+        tasks.insert(node.node_id.clone());
+    }
+
+    // RAII 가드 생성
+    struct TaskGuard {
+        tasks: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+        node_id: String,
+    }
+    impl Drop for TaskGuard {
+        fn drop(&mut self) {
+            if let Ok(mut t) = self.tasks.lock() {
+                t.remove(&self.node_id);
+            }
+        }
+    }
+    let _guard = TaskGuard { tasks: active_tasks.0.clone(), node_id: node.node_id.clone() };
 
     if node.node_state != "READY" && node.node_state != "PAUSED_HITL" && node.node_state != "PAUSED_API_ERROR" && node.node_state != "PAUSED_STOPPED" && node.node_state != "COMPLETED" {
           return Err("현재 상태에서는 실행할 수 없습니다. (READY, PAUSED_HITL, PAUSED_API_ERROR, PAUSED_STOPPED 또는 COMPLETED 필요)".to_string());
@@ -523,6 +552,12 @@ pub async fn run_pipeline(
         for f in eval.feedback {
             previous_feedback.push(format!("보강 필요: {}", f));
         }
+    }
+
+    // 루프 종료 후, 정지 상태인지 다시 확인 (PAUSED_STOPPED 상태 덮어쓰기 방지)
+    if is_node_stopped(&pool, &node.node_id).await {
+        println!(">>> Pipeline loop for node {} terminated due to manual stop signal.", node.node_id);
+        return Ok(current_best_content);
     }
 
     // 4. 상태 결정 및 업데이트
@@ -959,11 +994,12 @@ pub async fn get_global_contexts(
 pub async fn run_genesis_prd_pipeline(
     app_handle: tauri::AppHandle,
     pool: tauri::State<'_, SqlitePool>,
+    active_tasks: tauri::State<'_, ActiveTasks>,
     project_id: String,
     api_key: String,
 ) -> Result<String, String> {
     // Genesis_PRD 노드로 기존 run_pipeline 위임
-    run_pipeline(app_handle, pool, project_id, "Genesis_PRD".to_string(), api_key).await
+    run_pipeline(app_handle, pool, active_tasks, project_id, "Genesis_PRD".to_string(), api_key).await
 }
 
 /// Genesis PRD HITL 승인 → SAD 페이즈로 전환 + SAD 노드 생성
@@ -1105,11 +1141,46 @@ pub async fn approve_genesis_prd(
 pub async fn run_sad_global_pipeline(
     app_handle: tauri::AppHandle,
     pool: tauri::State<'_, SqlitePool>,
+    active_tasks: tauri::State<'_, ActiveTasks>,
     project_id: String,
     api_key: String,
 ) -> Result<String, String> {
     println!(">>> SAD Global Pipeline started for project: {}", project_id);
     let client = reqwest::Client::new();
+
+    // SAD_Global 노드 정보 조회 (중복 실행 체크용)
+    let sad_node = sqlx::query_as::<_, DocumentNode>(
+        "SELECT * FROM document_node WHERE project_id = ? AND target_node_type = 'SAD_Global'"
+    )
+    .bind(&project_id)
+    .fetch_optional(&*pool)
+    .await
+    .map_err(|e| e.to_string())?
+    .ok_or_else(|| "SAD_Global node not found".to_string())?;
+
+    // 중복 실행 체크
+    {
+        let mut tasks = active_tasks.0.lock().map_err(|e| e.to_string())?;
+        if tasks.contains(&sad_node.node_id) {
+            println!(">>> [ABORT] Node is already running: {}", sad_node.node_id);
+            return Err("이미 프로세스가 진행 중입니다. (ActiveTask Detect)".to_string());
+        }
+        tasks.insert(sad_node.node_id.clone());
+    }
+
+    // RAII 가드 생성
+    struct TaskGuard {
+        tasks: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+        node_id: String,
+    }
+    impl Drop for TaskGuard {
+        fn drop(&mut self) {
+            if let Ok(mut t) = self.tasks.lock() {
+                t.remove(&self.node_id);
+            }
+        }
+    }
+    let _guard = TaskGuard { tasks: active_tasks.0.clone(), node_id: sad_node.node_id.clone() };
 
     let project = sqlx::query_as::<_, Project>(
         "SELECT * FROM project WHERE project_id = ?"
@@ -1376,6 +1447,12 @@ pub async fn run_sad_global_pipeline(
         }
     }
 
+    // 루프 종료 후, 정지 상태인지 다시 확인 (PAUSED_STOPPED 상태 덮어쓰기 방지)
+    if is_node_stopped(&pool, &sad_node.node_id).await {
+        println!(">>> SAD Global Pipeline loop for node {} terminated due to manual stop signal.", sad_node.node_id);
+        return Ok("SAD global context pipeline stopped".to_string());
+    }
+
     if !is_global_success {
         sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', updated_at = ? WHERE node_id = ?")
             .bind(Utc::now().to_rfc3339())
@@ -1414,11 +1491,46 @@ pub async fn run_sad_global_pipeline(
 pub async fn run_sad_module_pipeline(
     app_handle: tauri::AppHandle,
     pool: tauri::State<'_, SqlitePool>,
+    active_tasks: tauri::State<'_, ActiveTasks>,
     project_id: String,
     api_key: String,
 ) -> Result<String, String> {
     println!(">>> SAD Module Split Pipeline started for project: {}", project_id);
     let client = reqwest::Client::new();
+
+    // SAD_Module 노드 정보 조회 (중복 실행 체크용)
+    let sad_node = sqlx::query_as::<_, DocumentNode>(
+        "SELECT * FROM document_node WHERE project_id = ? AND target_node_type = 'SAD_Module'"
+    )
+    .bind(&project_id)
+    .fetch_optional(&*pool)
+    .await
+    .map_err(|e| e.to_string())?
+    .ok_or_else(|| "SAD_Module node not found".to_string())?;
+
+    // 중복 실행 체크
+    {
+        let mut tasks = active_tasks.0.lock().map_err(|e| e.to_string())?;
+        if tasks.contains(&sad_node.node_id) {
+            println!(">>> [ABORT] Node is already running: {}", sad_node.node_id);
+            return Err("이미 프로세스가 진행 중입니다. (ActiveTask Detect)".to_string());
+        }
+        tasks.insert(sad_node.node_id.clone());
+    }
+
+    // RAII 가드 생성
+    struct TaskGuard {
+        tasks: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+        node_id: String,
+    }
+    impl Drop for TaskGuard {
+        fn drop(&mut self) {
+            if let Ok(mut t) = self.tasks.lock() {
+                t.remove(&self.node_id);
+            }
+        }
+    }
+    let _guard = TaskGuard { tasks: active_tasks.0.clone(), node_id: sad_node.node_id.clone() };
 
     let project = sqlx::query_as::<_, Project>(
         "SELECT * FROM project WHERE project_id = ?"
@@ -1695,6 +1807,12 @@ pub async fn run_sad_module_pipeline(
         }
     }
 
+    // 루프 종료 후, 정지 상태인지 다시 확인 (PAUSED_STOPPED 상태 덮어쓰기 방지)
+    if is_node_stopped(&pool, &sad_node.node_id).await {
+        println!(">>> SAD Module Pipeline loop for node {} terminated due to manual stop signal.", sad_node.node_id);
+        return Ok("SAD module context pipeline stopped".to_string());
+    }
+
     if !is_module_success {
         sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', updated_at = ? WHERE node_id = ?")
             .bind(Utc::now().to_rfc3339())
@@ -1916,6 +2034,7 @@ pub async fn confirm_sad_iteration(
 pub async fn run_module_pipeline(
     app_handle: tauri::AppHandle,
     pool: tauri::State<'_, SqlitePool>,
+    active_tasks: tauri::State<'_, ActiveTasks>,
     project_id: String,
     module_id: String,
     node_type: String,
@@ -2011,6 +2130,30 @@ pub async fn run_module_pipeline(
     .await
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "Node not found in module".to_string())?;
+
+    // 중복 실행 체크
+    {
+        let mut tasks = active_tasks.0.lock().map_err(|e| e.to_string())?;
+        if tasks.contains(&node.node_id) {
+            println!(">>> [ABORT] Node is already running: {}", node.node_id);
+            return Err("이미 프로세스가 진행 중입니다. (ActiveTask Detect)".to_string());
+        }
+        tasks.insert(node.node_id.clone());
+    }
+
+    // RAII 가드 생성
+    struct TaskGuard {
+        tasks: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+        node_id: String,
+    }
+    impl Drop for TaskGuard {
+        fn drop(&mut self) {
+            if let Ok(mut t) = self.tasks.lock() {
+                t.remove(&self.node_id);
+            }
+        }
+    }
+    let _guard = TaskGuard { tasks: active_tasks.0.clone(), node_id: node.node_id.clone() };
 
     if node.node_state != "READY" && node.node_state != "PAUSED_HITL" && node.node_state != "PAUSED_API_ERROR" && node.node_state != "PAUSED_STOPPED" && node.node_state != "COMPLETED" {
         return Err("현재 상태에서는 실행할 수 없습니다. (READY, PAUSED_HITL, PAUSED_API_ERROR, PAUSED_STOPPED 또는 COMPLETED 필요)".to_string());
@@ -2124,7 +2267,7 @@ pub async fn run_module_pipeline(
         sqlx::query(
             "INSERT INTO generation_iteration (iteration_id, node_id, iteration_number, generated_draft_json, calculated_score, is_pass, critical_errors_array, actionable_feedback_text, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"
         )
-        .bind(iter_id).bind(&node.node_id).bind(i).bind(&draft).bind(eval.score).bind(false)
+        .bind(iter_id).bind(&node.node_id).bind(i).bind(&draft).bind(eval.score).bind(eval.is_pass)
         .bind(errors_json).bind(feedback_json).bind(Utc::now().to_rfc3339()).bind(Utc::now().to_rfc3339())
         .execute(&*pool).await.map_err(|e| e.to_string())?;
 
@@ -2162,6 +2305,12 @@ pub async fn run_module_pipeline(
                 return Err(msg);
             }
         }
+    }
+
+    // 루프 종료 후, 정지 상태인지 다시 확인 (PAUSED_STOPPED 상태 덮어쓰기 방지)
+    if is_node_stopped(&pool, &node.node_id).await {
+        println!(">>> Pipeline loop for node {} terminated due to manual stop signal.", node.node_id);
+        return Ok(current_best_content);
     }
 
     let final_state = if current_best_score < threshold { NodeState::PausedHitl } else { NodeState::Completed };

@@ -21,6 +21,35 @@ Genesis PRD를 기반으로 시스템 전체에서 사용할 기술 스택을 �
 3. **호환성 검증**:
    - 선정된 기술들 간의 상호 운용성이 검증되었는지, 그리고 비즈니스 제약(Global Constraints)에 부합하는지 최종 검토하십시오.
 
-[출력 형식]
+[출력 형식 가이드]
+```json
+{
+  "frontend": {
+    "language": "...",
+    "framework": "...",
+    "state_management": "...",
+    "styling": "...",
+    "ui_library": "..."
+  },
+  "backend": {
+    "language": "...",
+    "framework": "...",
+    "database_client": "...",
+    "auth_library": "...",
+    "api_type": "..."
+  },
+  "database": {
+    "rdb": "...",
+    "nosql": "...",
+    "cache": "..."
+  },
+  "infra": {
+    "cloud_provider": "...",
+    "container": "...",
+    "ci_cd": "..."
+  }
+}
+```
+
 반드시 마크다운 백틱(```json)이나 인사말 없이, 순수하고 유효한 JSON 객체 1개만 출력하십시오.
 인사말이나 부연 설명을 절대 붙이지 마십시오.

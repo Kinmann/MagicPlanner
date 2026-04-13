@@ -12,7 +12,6 @@ import SadOverview from '../components/Project/SadOverview';
 import ModuleTree from '../components/Project/ModuleTree';
 import Button from '../components/common/Button';
 import Header from "../components/layout/Header";
-import Spinner from '../components/common/Spinner';
 import BaseModal from '../components/common/BaseModal';
 import SadSpecRenderer from '../components/Project/SadSpecRenderer';
 import CriticalErrorModal from '../components/Project/CriticalErrorModal';
@@ -299,7 +298,6 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
   const [showHitlModal, setShowHitlModal] = useState(false);
   const hitlDismissed = useRef(false);
   const [hitlNode, setHitlNode] = useState<DocumentNode | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [iterations, setIterations] = useState<any[]>([]);
   const [selectedIteration, setSelectedIteration] = useState<any | null>(null);
 
@@ -400,9 +398,9 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
     fetchNodes();
     fetchModules();
     const interval = setInterval(() => { fetchNodes(); fetchProject(); fetchModules(); }, 3000);
-    const unlistenStatusPromise = listen<string>('pipeline-status', (event) => {
-      setStatusMessage(event.payload);
-      setTimeout(() => setStatusMessage(null), 5000);
+    const unlistenStatusPromise = listen<string>('pipeline-status', () => {
+      // setStatusMessage(event.payload);
+      // setTimeout(() => setStatusMessage(null), 5000);
     });
     
     const unlistenNodesPromise = listen<void>('nodes-updated', () => {

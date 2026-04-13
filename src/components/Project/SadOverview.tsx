@@ -61,7 +61,7 @@ const SadOverview: React.FC<SadOverviewProps> = ({
         setGlobalIters(result);
         if (result.length > 0 && !selectedGlobalIterId) {
           // 확정된(Passed) 리비전이 있으면 그것을 선택, 없으면 가장 최근 리비전을 선택(단순 프리뷰)
-          const passIter = result.find(it => it.is_pass === 1 || it.is_pass === true);
+          const passIter = result.find(it => it.is_pass === true);
           const defaultIter = passIter || result[result.length - 1];
           setSelectedGlobalIterId(defaultIter.iteration_id);
         }
@@ -74,7 +74,7 @@ const SadOverview: React.FC<SadOverviewProps> = ({
         const result = await invoke<GenerationIteration[]>('get_node_iterations', { nodeId: moduleNode.node_id });
         setModuleIters(result);
         if (result.length > 0 && !selectedModuleIterId) {
-          const passIter = result.find(it => it.is_pass === 1 || it.is_pass === true);
+          const passIter = result.find(it => it.is_pass === true);
           const defaultIter = passIter || result[result.length - 1];
           setSelectedModuleIterId(defaultIter.iteration_id);
         }
@@ -140,8 +140,8 @@ const SadOverview: React.FC<SadOverviewProps> = ({
     setLoading(true);
     try {
       await invoke('confirm_sad_iteration', { projectId, iterationId: iterId });
-      await fetchContexts();
       await fetchIterations();
+      await fetchContexts();
       onRefresh();
     } catch (err: any) {
       alert("확정 실패: " + err.toString());
@@ -348,14 +348,14 @@ const SadOverview: React.FC<SadOverviewProps> = ({
                 disabled={loading || currentNode?.node_state === 'IN_PROGRESS' || (activeStage === 'MODULE' && !isGlobalDone) || isCurrentStageLocked}
                 variant={(currentNode?.node_state === 'PAUSED_HITL' || currentNode?.node_state === 'COMPLETED') ? 'ghost' : 'primary'}
                 className="proceed-btn"
-                isLoading={loading || currentNode?.node_state === 'IN_PROGRESS' || currentNode?.node_state === 'RUNNING'}
+                isLoading={loading || currentNode?.node_state === 'IN_PROGRESS'}
                 leftIcon={<span className="material-symbols-outlined">auto_awesome</span>}
                 title={isCurrentStageLocked ? (activeStage === 'GLOBAL' && isModuleStarted ? "모듈 분리 단계가 이미 시작되었습니다." : "다음 단계가 진행 중입니다.") : ""}
               >
-                {(loading || currentNode?.node_state === 'IN_PROGRESS' || currentNode?.node_state === 'RUNNING') ? '진행 중' : ((currentNode?.node_state === 'PAUSED_HITL' || currentNode?.node_state === 'COMPLETED') ? '재생성' : '생성 시작')}
+                {(loading || currentNode?.node_state === 'IN_PROGRESS') ? '진행 중' : ((currentNode?.node_state === 'PAUSED_HITL' || currentNode?.node_state === 'COMPLETED') ? '재생성' : '생성 시작')}
               </Button>
 
-              {(loading || currentNode?.node_state === 'IN_PROGRESS' || currentNode?.node_state === 'RUNNING') && (
+              {(loading || currentNode?.node_state === 'IN_PROGRESS') && (
                 <Button
                   onClick={() => currentNode && handleStop(currentNode.node_id)}
                   variant="danger"
@@ -456,7 +456,7 @@ const SadOverview: React.FC<SadOverviewProps> = ({
         </div>
         <div className="revisions-list custom-scrollbar">
           {currentIters.map((it) => {
-            const isConfirmed = it.is_pass === 1 || it.is_pass === true;
+            const isConfirmed = it.is_pass === true;
 
             return (
               <div
@@ -485,7 +485,7 @@ const SadOverview: React.FC<SadOverviewProps> = ({
           </div>
           <div className="tech-specs-header__actions">
 
-            {currentNode?.node_state === 'PAUSED_HITL' && !(activeIteration?.is_pass === 1 || activeIteration?.is_pass === true) && (
+            {currentNode?.node_state === 'PAUSED_HITL' && !activeIteration?.is_pass && (
               <Button
                 onClick={() => handleConfirmIteration(activeStage)}
                 disabled={loading || isCurrentStageLocked}

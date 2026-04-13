@@ -20,6 +20,27 @@ Genesis PRD를 기반으로 시스템 전역 에러 통신 규격 및 공통 페
 
 3. **마이크로 설계 배제**: 개별 비즈니스 API의 엔드포인트 경로, 특정 API 전용 요청/응답 필드 등 마이크로 명세는 다루지 마십시오.
 
-[출력 형식]
+[출력 형식 가이드]
+```json
+{
+  "api_protocol": "REST / GraphQL / gRPC 등",
+  "common_header": {
+    "key": "value",
+    "description": "..."
+  },
+  "common_response": {
+    "success_format": "...",
+    "error_format": "..."
+  },
+  "error_codes": [
+    {
+      "code": "ERR_CODE_XXX",
+      "message": "...",
+      "http_status": 400
+    }
+  ]
+}
+```
+
 반드시 마크다운 백틱(```json)이나 인사말 없이, 순수하고 유효한 JSON 객체 1개만 출력하십시오.
 인사말이나 부연 설명을 절대 붙이지 마십시오.

@@ -28,13 +28,13 @@ Genesis PRD를 기반으로 시스템 전역 권한 체계(RBAC) 및 인증 프�
 [출력 형식 가이드]
 ```json
 {
-  "auth_protocol": "PRD의 프로토콜 값",
+  "auth_method": "OAuth2 / JWT / Session 등",
+  "token_strategy": "Access/Refresh Token / HTTP-only Cookie 등",
   "roles": [
     {
-      "role_id": "ROLE-XXXX (PRD에서 복사)",
+      "role_name": "ROLE-XXXX (PRD에서 복사)",
       "description": "...",
-      "inherits_from": "상위 role_id",
-      "global_permissions": ["..."]
+      "permissions": ["..."]
     }
   ]
 }

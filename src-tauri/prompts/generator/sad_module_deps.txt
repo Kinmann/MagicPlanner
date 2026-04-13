@@ -22,6 +22,19 @@
 
 3. **고립 방지**: 모든 모듈은 시스템 전체 토폴로지 내에서 최소 하나 이상의 Inbound 또는 Outbound 의존성을 가져야 합니다. 단독 실행 마이크로서비스가 아니라면 고립된 모듈은 존재할 수 없습니다.
 
-[출력 형식]
+[출력 형식 가이드]
+```json
+{
+  "dependencies": [
+    {
+      "from_module": "MOD-XXXX",
+      "to_module": "MOD-YYYY",
+      "dep_type": "SYNC_HTTP / ASYNC_EVENT / DB_SHARED 등",
+      "description": "..."
+    }
+  ]
+}
+```
+
 반드시 마크다운 백틱(```json)이나 인사말 없이, 순수하고 유효한 JSON 객체 1개만 출력하십시오.
 인사말이나 부연 설명을 절대 붙이지 마십시오.

@@ -693,6 +693,7 @@ async fn trigger_next_nodes(app_handle: tauri::AppHandle, project_id: &str, comp
         ("IA", vec!["Wireframe"]),
         ("ERD", vec!["API_Spec"]),
         ("API_Spec", vec!["TC"]),
+        ("SAD_Global", vec!["SAD_Module"]),
     ];
 
     let mut nodes_to_check = Vec::new();
@@ -715,6 +716,7 @@ async fn trigger_next_nodes(app_handle: tauri::AppHandle, project_id: &str, comp
             "API_Spec" => vec!["FSD", "ERD"],
             "TC" => vec!["PRD", "FSD", "API_Spec"],
             "SAD_Global" => vec!["Genesis_PRD"],
+            "SAD_Module" => vec!["SAD_Global"],
             _ => vec![],
         };
 

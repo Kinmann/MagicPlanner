@@ -31,23 +31,26 @@ Genesis PRD를 기반으로 전체 시스템의 데이터베이스 표준 및 �
 [출력 형식 가이드]
 ```json
 {
-  "global_meta_info": {
-    "naming_convention": "snake_case",
-    "common_columns": ["id", "created_at", "updated_at", "is_deleted"],
-    "description": "전체 시스템에 공통 적용될 데이터 표준 정의"
-  },
-  "core_entities": [
+  "entities": [
     {
       "entity_name": "...",
-      "attributes": ["속성명1", "속성명2", "속성명3"],
+      "attributes": [
+        {
+          "name": "...",
+          "data_type": "...",
+          "is_primary_key": false,
+          "is_nullable": false,
+          "description": "..."
+        }
+      ],
       "description": "..."
     }
   ],
   "relationships": [
     {
-      "from": "Entity A",
-      "to": "Entity B",
-      "type": "1:N",
+      "from_entity": "Entity A",
+      "to_entity": "Entity B",
+      "relationship_type": "1:N",
       "description": "..."
     }
   ]

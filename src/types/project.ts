@@ -5,6 +5,12 @@ export type PipelinePhase = 'GENESIS_PRD' | 'SAD' | 'MODULE_GENERATION' | 'COMPL
 
 // v2: Module State
 export type ModuleState = 'PENDING' | 'ACTIVE' | 'COMPLETED';
+ 
+ export interface EvaluationIssue {
+   code: string;
+   location: string;
+   description: string;
+ }
 
 export interface DocumentNode {
   node_id: string;

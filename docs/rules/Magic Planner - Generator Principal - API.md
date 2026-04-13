@@ -10,37 +10,28 @@
 
 ## 2. API 명세서 특화 작성 통제 원칙 (Domain Principles)
 
-### A. RESTful 아키텍처 제약 (RESTful Design Constraints)
+### A. 식별자 맵핑 및 추적성 강제
 
-- **자원(Resource) 중심의 URI 설계**: URI는 동사가 아닌 **명사(복수형 권장)**로 구성하며, [5] ERD에서 정의된 `table_name`을 자원명으로 우선 차용할 것. (예: `/api/v1/users/{user_id}`).
-- **행위와 메서드 분리**: 행위는 URI에 포함하지 않으며, 표준 HTTP Method(GET, POST, PUT, PATCH, DELETE)를 통해 정의함.
-    - `POST`: 자원 생성 (Insert)
-    - `GET`: 자원 조회 (Select)
-    - `PUT/PATCH`: 자원 수정 (Update - 전체/부분)
-    - `DELETE`: 자원 삭제 (Delete)
+- **엔드포인트 맵핑:** 산출되는 모든 API 엔드포인트는 반드시 선행 FSD에 정의된 `FUNC-XXX` 식별자를 1:1 또는 1:N으로 참조(`func_id` 배열 등)하여 존재의 당위성을 입증해야 함.
+    
+- **물리 모델 동기화:** 요청/응답 페이로드의 필드명, 데이터 타입, `Nullable`, 길이 제한 등은 주입된 `ERD`의 테이블/컬럼 스키마와 100% 일치해야 함. 임의의 데이터 필드 창조를 엄격히 금지함.
+    
 
-### B. 데이터 정합성 및 의존성 강제 (Data Consistency & Dependency)
+### B. RESTful 아키텍처 제약 (RESTful Design Constraints)
 
-- **기능 매핑 강제**: 모든 API 엔드포인트는 [2] FSD에 정의된 `FUNC-{NNN}` 식별자와 1:1 또는 N:1로 반드시 매핑되어야 함.
-- **Zero-Hallucination 및 물리적 제약 동기화 (파라미터 통제)**:
-    - 요청(Request) 및 응답(Response) 페이로드에 포함되는 모든 필드는 **[5] ERD에 명시된 `column_name`과 데이터 타입을 정확히 계승**해야 함.
-    - **제약 조건 일치**: 데이터 타입뿐만 아니라 ERD에 정의된 `Nullable` 여부, 데이터 길이(`Length` 또는 `Max/Min`) 제약 사항을 API 요청의 유효성 검증(Validation) 규격으로 100% 일치시켜 설계할 것.
-    - ERD나 FSD에 존재하지 않는 임의의 필드 창조를 엄격히 금지함. (예: ERD에 없는 `nickname` 필드를 API 응답에 임의 추가 불가).
-- **명명 규칙 계승**: JSON 페이로드의 모든 Key는 ERD의 원칙을 따라 **영문 소문자 스네이크 케이스(snake_case)** 표기법을 유지할 것.
+- **URI 설계:** 자원(Resource) 중심의 복수형 명사로 구성할 것. (예: `/api/v1/users`). ERD의 `table_name`을 차용함. URI 내에 동사(행위) 포함을 금지함.
+- **메서드 시맨틱:** 행위는 HTTP Method (GET, POST, PUT, PATCH, DELETE)로만 표현함.
+- **명명 규칙:** 모든 API 파라미터와 Key는 영문 소문자 스네이크 케이스(snake_case)를 고수함.
 
-### C. 권한 및 보안 명세 (Auth & Security Specification)
+### C. 인터페이스 및 보안 규격 통제
 
-- **인증 요건 동기화**: FSD의 `pre_condition`을 검토하여 시스템 접근 주체(Actor)의 인증이 필요한 기능인 경우, API 요청의 `Headers` 영역에 인증 토큰(예: Bearer Token) 요구 사항을 명시할 것.
+- **권한 상속:** FSD의 `pre_condition`에 명시된 인가(Authorization) 요구 수준에 맞춰, API 명세의 `headers` 블록에 인증 토큰(예: Bearer Token) 요구 사항을 명시할 것.
+- **글로벌 에러 규격 상속 (Global Error Standard Inheritance):** 예외 상황(Exception/Unhappy Path) 발생 시의 HTTP 상태 코드 분기 및 에러 응답 페이로드(Payload) 구조는 SAD에서 주입된 `sad_interface_error` 규격을 100% 상속하여 적용해야 함. 개별 API 수준에서의 임의적인 에러 응답 객체 창조를 엄격히 금지함.
+- **정규화된 성공 응답 래퍼 (Normalized Success Wrapper):** 성공 응답(2xx)의 본문(`response_body`)은 반드시 최상위에 `status`(integer), `message`(string), `data`(object/array/null) 구조를 갖는 표준 래퍼 포맷으로 감싸 데이터 반환의 일관성을 유지할 것.
 
-### D. 예외 처리 및 상태 코드 표준화 (Exception & Status Codes)
+### D. 데이터 제어 기제 강제
 
-- **예외 흐름 기반 응답 설계**: FSD의 `Exception Flow`에 기술된 예외 상황들을 분석하여, 각 상황에 부합하는 표준 HTTP Status Code와 에러 메시지 규격을 도출할 것.
-    - `200/201/204`: 정상 처리 (Success)
-    - `400`: 잘못된 요청 (Validation 실패, 파라미터 누락 등)
-    - `401`: 인증 실패 (토큰 누락/만료)
-    - `403`: 인가 실패 (권한 부족)
-    - `404`: 자원 탐색 실패
-    - `409`: 리소스 충돌 (중복 데이터 생성 시도 등)
+- **다건 조회 제어:** 목록 조회(GET) API의 경우, 시스템 성능 방어를 위한 `limit`, `offset`(또는 `page`), 정렬을 위한 `sort_by`, `order` 파라미터를 강제 포함할 것.
 
 ## 3. 스키마 및 데이터 작성 규칙 (Data Rules)
 

@@ -6,6 +6,7 @@ import { DocumentNode } from '../../types/project';
 import Button from '../common/Button';
 import Spinner from '../common/Spinner';
 import BaseModal from '../common/BaseModal';
+import FeedbackRenderer from '../common/FeedbackRenderer';
 import './GenesisPrdView.scss';
 
 interface GenesisPrdViewProps {
@@ -761,7 +762,10 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
                   <h4>Critical Issues</h4>
                 </div>
                 <div className="card-content">
-                  <p>{iterations[selectedIdx].critical_errors_array}</p>
+                  <FeedbackRenderer 
+                    feedback={iterations[selectedIdx].critical_errors_array} 
+                    type="error" 
+                  />
                 </div>
               </div>
             )}
@@ -772,7 +776,10 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
                   <h4>Optimization Guidance</h4>
                 </div>
                 <div className="card-content">
-                  <p>{iterations[selectedIdx].actionable_feedback_text}</p>
+                  <FeedbackRenderer 
+                    feedback={iterations[selectedIdx].actionable_feedback_text} 
+                    type="info" 
+                  />
                 </div>
               </div>
             )}

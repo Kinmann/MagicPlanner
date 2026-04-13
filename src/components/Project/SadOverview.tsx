@@ -5,6 +5,7 @@ import { Store } from '@tauri-apps/plugin-store';
 import { GlobalContext, CONTEXT_TYPE_LABELS, DocumentNode, GenerationIteration } from '../../types/project';
 import Button from '../common/Button';
 import BaseModal from '../common/BaseModal';
+import FeedbackRenderer from '../common/FeedbackRenderer';
 import SadSpecRenderer from './SadSpecRenderer';
 import './SadOverview.scss';
 
@@ -511,18 +512,17 @@ const SadOverview: React.FC<SadOverviewProps> = ({
               {activeIteration.actionable_feedback_text && (
                 <div className="feedback-card feedback-card--info">
                   <h3 className="feedback-title">AI Recommendation</h3>
-                  <p className="feedback-body">{activeIteration.actionable_feedback_text}</p>
+                  <div className="feedback-body">
+                    <FeedbackRenderer feedback={activeIteration.actionable_feedback_text} type="info" />
+                  </div>
                 </div>
               )}
               {activeIteration.critical_errors_array && (
                 <div className="feedback-card feedback-card--error">
                   <h3 className="feedback-title">Priority Refinements</h3>
-                  <p className="feedback-body">{(() => {
-                    try {
-                      const parsed = JSON.parse(activeIteration.critical_errors_array);
-                      return Array.isArray(parsed) ? parsed.join(', ') : activeIteration.critical_errors_array;
-                    } catch { return activeIteration.critical_errors_array; }
-                  })()}</p>
+                  <div className="feedback-body">
+                    <FeedbackRenderer feedback={activeIteration.critical_errors_array} type="error" />
+                  </div>
                 </div>
               )}
             </div>

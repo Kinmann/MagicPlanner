@@ -265,15 +265,28 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
         )}
 
         {node.node_state === 'COMPLETED' && (
-          <button 
-            className="btn btn-ghost" 
-            onClick={(e) => {
-              e.stopPropagation();
-              onView(node);
-            }}
-          >
-            <span className="material-symbols-outlined">visibility</span> Inspect Output
-          </button>
+          <>
+            <button 
+              className="btn btn-square" 
+              disabled={isLocked}
+              onClick={(e) => {
+                e.stopPropagation();
+                onHITLAction(node.node_id, 'RETRY');
+              }}
+              title={isLocked ? "다음 노드가 진행 중이므로 작업할 수 없습니다." : "추가 이터레이션 돌리기"}
+            >
+              <span className="material-symbols-outlined">refresh</span>
+            </button>
+            <button 
+              className="btn btn-ghost" 
+              onClick={(e) => {
+                e.stopPropagation();
+                onView(node);
+              }}
+            >
+              <span className="material-symbols-outlined">visibility</span> Inspect Output
+            </button>
+          </>
         )}
       </div>
       

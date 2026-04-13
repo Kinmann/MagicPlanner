@@ -12,41 +12,35 @@
 - 각 Metric의 최종 점수 산출 공식: `MAX(0, 기본 점수 - 누적 감점)`
 - 감점 발생 시 해당 사유를 반드시 최종 출력의 `critical_errors` 배열에 기록하십시오.
 
-### Metric D: RESTful 아키텍처 및 엔드포인트 설계 무결성 (RESTful Architecture Integrity)
-
-URI가 리소스 중심의 명사형으로 설계되었으며, HTTP 메서드(GET, POST, PUT/PATCH, DELETE)가 멱등성(Idempotency) 원칙에 맞게 매핑되었는지 검증합니다.
-
-- **기본 점수:** 20점
-- **[감점 트리거]**
-    - **[-10점] 행위 중심의 URI (Verb in URI):** 엔드포인트가 리소스의 고유 식별자가 아닌 행위를 나타내는 동사(예: `/api/getUsers`, `/api/createProject`)로 설계되어 REST 규격을 위반한 경우.
-    - **[-10점] HTTP 메서드 오용 (Method Misuse):** 데이터 조회에 POST를 사용하거나, 데이터 생성에 GET을 사용하는 등 HTTP 메서드의 시맨틱(Semantic)을 명백히 위반한 경우.
-    - **[-5점/건] 계층 구조 논리 오류:** 상위 리소스와 하위 리소스 간의 종속 관계(예: `/projects/{projectId}/documents`)가 ERD의 관계 모델과 불일치하거나 경로 계층이 비논리적으로 파편화된 경우.
-
-### Metric E: 요청/응답 페이로드 스키마 정합성 (Payload Schema Consistency)
-
-FSD의 `data_requirements` 및 ERD의 컬럼 구조가 API의 Request/Response Body 또는 Query/Path Parameter로 누락 없이 엄밀하게 매핑되었는지 평가합니다.
-
-- **기본 점수:** 20점
-- **[감점 트리거]**
-    - **[-10점] 스키마 타입 불일치 (Type Mismatch):** API 페이로드의 데이터 타입이 ERD에 명시된 컬럼 타입(예: ERD는 Integer이나 API 응답은 String)과 충돌하여 직렬화/역직렬화 오류를 유발하는 경우.
-    - **[-10점] 필수 파라미터 누락 (Missing Required Parameters):** ERD에서 `NOT NULL`로 지정된 필수 값이나, 대상을 특정하기 위한 식별자(PK, FK)가 Request Body 또는 Parameter 명세에서 누락된 경우.
-    - **[-5점/건] 블랙박스형 응답 구조:** Response Body가 구체적인 속성 명세 없이 "성공 시 데이터 반환", "프로젝트 JSON 반환" 등 파싱 불가능한 자연어로 모호하게 처리된 경우.
-
-### Metric F: 상태 코드 및 예외 메타데이터 세분화 (Granularity of Status Codes & Exceptions)
-
-FSD에 정의된 엣지 케이스와 오류 흐름이 적절한 HTTP 상태 코드(4xx, 5xx) 및 에러 페이로드로 구체화되었는지 검증합니다.
-
-- **기본 점수:** 15점
-- **[감점 트리거]**
-    - **[-10점] 해피 패스 편향 (Happy Path Bias):** 모든 엔드포인트에 200(OK) 또는 201(Created) 등의 성공 상태 코드만 명세되어 있고, FSD에서 파생되는 실패 상황(Validation Error, Not Found 등)에 대한 상태 코드가 전무한 경우.
-    - **[-10점] 에러 메타데이터 누락 (Missing Error Metadata):** 4xx 또는 5xx 오류 반환 시, 클라이언트가 오류 원인을 파악하고 복구 동선을 탈 수 있도록 돕는 구체적인 에러 메시지(또는 에러 코드) 스키마가 정의되지 않은 경우.
-    - **[-5점/건] 상태 코드 오용:** 권한 없음(401/403) 상황에 400을 반환하거나, 리소스 부재(404)에 500을 반환하는 등 표준 HTTP 상태 코드의 의미를 오용하여 명세한 경우.
-
-### Metric G: 대규모 데이터 제어 및 시스템 방어 기제 (Data Control & System Defense)
-
-배열(Array) 또는 다수의 레코드를 반환하는 리스트 조회 API에서 시스템 메모리 초과를 방지하기 위한 제어 장치가 마련되었는지 검증합니다.
-
-- **기본 점수:** 15점
-- **[감점 트리거]**
-    - **[-10점] 페이징/리미트 부재 (Missing Pagination/Limit):** N개의 목록을 반환하는 GET 엔드포인트(예: 목록 조회)에 `page`, `limit`, `cursor`, `offset` 등의 쿼리 파라미터가 명세되지 않아 전체 테이블 스캔(Full Table Scan)을 유발하는 경우.
-    - **[-5점/건] 정렬/필터링 기준 누락:** 다건 데이터 반환 시 클라이언트가 데이터를 유의미하게 활용할 수 있도록 지원하는 최소한의 정렬 기준(예: `sort_by`, `order`) 명세가 누락된 경우.
+### Metric D: RESTful 아키텍처 및 식별자 추적성 (RESTful & Traceability)
+- **Objective:** URI 설계 원칙 준수 여부 및 FSD 기능 식별자(`FUNC-XXX`)와의 맵핑 무결성 스캔.
+- **Base Score:** 20점
+- **Deduction Triggers:**
+    - **Code D-1 비표준 URI 및 메서드 (-10점):** - `IF` URI 경로에 동사(예: `/getUsers`, `/create`)가 포함됨 `OR` HTTP 메서드 사용이 목적에 어긋남(조회 목적에 POST 사용 등).
+        - `THEN` -10점
+    - **Code D-2 기능 추적성 단절 (-10점):** - `IF` 정의된 API 엔드포인트에 선행 FSD의 어떤 기능(`FUNC-XXX`)을 처리하기 위함인지 참조 식별자가 누락됨.
+        - `THEN` -10점
+### Metric E: 데이터 스키마 및 래퍼 정합성 (Schema & Wrapper Consistency)
+- **Objective:** ERD와의 컬럼 정합성 및 응답 페이로드 정규화 래퍼(Wrapper) 준수 여부 스캔.
+- **Base Score:** 20점
+- **Deduction Triggers:**
+    - **Code E-1 ERD 타입/필드 불일치 (-10점):** - `IF` Request/Response 페이로드의 필드명 또는 데이터 타입이 `$SOURCE_DOCUMENTS`(ERD)의 테이블 컬럼 스펙과 충돌함 `OR` 필수(`NOT NULL`) 컬럼이 명세에서 누락됨.
+        - `THEN` -10점
+    - **Code E-2 정규화 래퍼 위반 (-10점):** - `IF` API 성공/실패 응답 본문의 최상위 구조가 지정된 규격(`status`, `message`, `data`)을 준수하지 않고 데이터 객체를 직접 반환하거나 비표준 키를 사용함.
+        - `THEN` -10점
+### Metric F: 보안 및 예외 메타데이터 통제 (Security & Exception Metadata)
+- **Objective:** 헤더 인증 명세 및 예외 상황(Unhappy Path)에 대한 상태 코드 분기 스캔.
+- **Base Score:** 15점
+- **Deduction Triggers:**
+    - **Code F-1 인증 헤더 명세 누락 (-10점):** - `IF` FSD 기준 권한이 필요한 기능임에도 API 명세의 `headers` 파라미터 요구사항에 인증 토큰(Auth) 규격이 누락됨.
+        - `THEN` -10점
+    - **Code F-2 해피 패스 편향 및 오용 (-5점):** - `IF` 성공 응답(2xx)만 명세되고 비즈니스 제약에 따른 실패 응답(4xx) 명세가 전무함 `OR` 401(권한없음) 상황에 400(잘못된요청)을 매핑하는 등 상태 코드 시맨틱을 위반함.
+        - `THEN` -5점
+### Metric G: 대규모 데이터 제어 기제 (Data Control Mechanism)
+- **Objective:** 다건 데이터 처리 시 시스템 부하 방지를 위한 제어 파라미터 스캔.
+- **Base Score:** 15점
+- **Deduction Triggers:**
+    - **Code G-1 페이징 제어 부재 (-10점):** - `IF` 목록(List) 형식의 복수 데이터를 반환하는 GET API임 `AND` `limit`, `offset`(또는 `page`) 등의 페이징 제어 쿼리 파라미터가 명세되지 않음.
+        - `THEN` -10점
+    - **Code G-2 정렬 필터 기준 누락 (-5점):** - `IF` 복수 데이터 조회 API임 `AND` 클라이언트 측 데이터 활용을 위한 최소한의 정렬 파라미터(`sort_by`, `order`) 명세가 누락됨.
+        - `THEN` -5점

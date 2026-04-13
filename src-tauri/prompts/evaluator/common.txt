@@ -34,6 +34,10 @@
     - **비결정론적 서술:** 모호한 부사/형용사("적절히", "효율적으로") 사용.
     - **아키텍처 위반:** 주입된 컨텍스트($GLOBAL_CONTEXT) 및 아키텍처 제약 조건에서 실현 불가능한 로직 명세. (단, Genesis PRD 단계는 기술 스택을 제안하는 단계이므로 본 항목 평가에서 제외)
 
-## 4. 평가 결과 출력 규격 (Output Specification)
+## 5. 핵심 지침: 위치(Location) 명시 (Crucial: Issue Location)
 
-요청 시 주입된 Targeted JSON Schema에 맞추어 평가 대상 문서를 채점하고 피드백을 작성하십시오.
+- 모든 `critical_errors` 및 `feedback` 항목에는 반드시 해당 이슈가 발생한 구체적인 **`location`**을 기재해야 합니다.
+- **포맷**: 표준 JSON Path 형식을 따르십시오. (예: `metadata.version`, `endpoints[0].path`, `core_features[2].priority` 등)
+- 만약 특정 필드가 아닌 문서 전체 혹은 논리적 누락에 대한 피드백이라면, 관련 있는 가장 가까운 부모 객체 또는 ROOT를 지정하십시오.
+- 이 위치 정보는 '작성 엔진(Generator)'이 해당 부위를 타겟팅하여 정밀 수정하는 데 사용됩니다. 정확하지 않은 위치 정보는 파이프라인의 품질을 저하시킵니다.
+

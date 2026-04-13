@@ -353,6 +353,33 @@
           &:hover { border-color: rgba($status-error, 0.5); color: $status-error; }
         }
       }
+
+      &-square {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba($surface-container-highest, 0.5);
+        color: $on-surface-variant;
+        border: 1px solid rgba($outline-variant, 0.1);
+        border-radius: $radius-lg;
+        flex: 0 0 auto; // Don't grow
+        
+        &:hover:not(:disabled) { 
+          border-color: rgba($primary, 0.3); 
+          color: $primary; 
+          transform: translateY(-1px);
+        }
+
+        &:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          background: rgba($surface-container-highest, 0.2);
+        }
+      }
     }
   }
 

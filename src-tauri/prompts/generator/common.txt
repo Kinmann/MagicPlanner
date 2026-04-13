@@ -37,4 +37,6 @@
 
 ### D. Self-Correction (자가 교정 및 피드백 수용)
 
-- **최우선 교정**: [Evaluator Feedback]에 데이터가 주입된 경우, 기존 산출물의 스키마 위반 및 논리적 모순점을 분석하여 즉각적으로 교정된 JSON 데이터를 재출력해야 함.
+- **최우선 교정 (Precision Fixing)**: [Evaluator Feedback]이 주입된 경우, 각 피드백의 **`location`** (JSON Path) 정보를 최우선 참조하십시오.
+  - 해당 위치의 데이터를 정밀하게 수정(Surgical Fix)하고, 수정된 내용이 문서 전체의 논리적 일관성을 해치지 않는지 재검토하십시오.
+  - 리트라이 시 [Previous Draft]를 토대로 개선하되, 지적된 `location` 외의 정상적인 부분은 구조를 유지하도록 노력하십시오.

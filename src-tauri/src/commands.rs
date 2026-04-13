@@ -439,14 +439,24 @@ pub async fn run_pipeline(
         println!(">>> Resuming from previous iteration context (Node: {})", node_type);
         previous_draft = it.generated_draft_json;
         
-        // 피드백 복원 (Critical Errors + Actionable Feedback)
+        // 피드백 복원 (하위 호환성: String vs EvaluationIssue)
         if let Some(errors_json) = it.critical_errors_array {
-            if let Ok(errors) = serde_json::from_str::<Vec<String>>(&errors_json) {
+            if let Ok(issues) = serde_json::from_str::<Vec<crate::schemas::EvaluationIssue>>(&errors_json) {
+                for issue in issues {
+                    previous_feedback.push(format!("[위치: {}] {} : {}", issue.location, issue.code, issue.description));
+                }
+            } else if let Ok(errors) = serde_json::from_str::<Vec<String>>(&errors_json) {
+                // 구버전 호환
                 previous_feedback.extend(errors);
             }
         }
         if let Some(action_json) = it.actionable_feedback_text {
-            if let Ok(feedback) = serde_json::from_str::<Vec<String>>(&action_json) {
+            if let Ok(issues) = serde_json::from_str::<Vec<crate::schemas::EvaluationIssue>>(&action_json) {
+                for issue in issues {
+                    previous_feedback.push(format!("[보강 필요 - 위치: {}] {} : {}", issue.location, issue.code, issue.description));
+                }
+            } else if let Ok(feedback) = serde_json::from_str::<Vec<String>>(&action_json) {
+                // 구버전 호환
                 for f in feedback {
                     previous_feedback.push(format!("보강 필요: {}", f));
                 }
@@ -547,10 +557,12 @@ pub async fn run_pipeline(
         
         // 다음 회차 피드백 반영을 위해 루프 내 피드백 조합
         previous_draft = draft;
-        previous_feedback = eval.critical_errors.clone();
-        // 리스트 형태의 피드백을 모두 추가
-        for f in eval.feedback {
-            previous_feedback.push(format!("보강 필요: {}", f));
+        previous_feedback.clear();
+        for issue in &eval.critical_errors {
+            previous_feedback.push(format!("[위치: {}] {} : {}", issue.location, issue.code, issue.description));
+        }
+        for issue in &eval.feedback {
+            previous_feedback.push(format!("[보강 필요 - 위치: {}] {} : {}", issue.location, issue.code, issue.description));
         }
     }
 
@@ -1395,12 +1407,20 @@ pub async fn run_sad_global_pipeline(
                 let iter_id = Uuid::new_v4().to_string();
                 let now = Utc::now().to_rfc3339();
 
-                let feedback_text = eval["feedback"].as_array()
-                    .map(|arr| arr.iter().map(|v| v.as_str().unwrap_or("")).collect::<Vec<_>>().join("\n"))
-                    .unwrap_or_default();
-                let critical_errors_text = eval["critical_errors"].as_array()
-                    .map(|arr| arr.iter().map(|v| v.as_str().unwrap_or("")).collect::<Vec<_>>().join("\n"))
-                    .unwrap_or_default();
+                let feedback_text = if let Ok(issues) = serde_json::from_value::<Vec<crate::schemas::EvaluationIssue>>(eval["feedback"].clone()) {
+                    issues.iter().map(|i| format!("[보강 필요 - 위치: {}] {} : {}", i.location, i.code, i.description)).collect::<Vec<_>>().join("\n")
+                } else {
+                    eval["feedback"].as_array().map(|arr| arr.iter().map(|v| v.as_str().unwrap_or("")).collect::<Vec<_>>().join("\n")).unwrap_or_default()
+                };
+
+                let critical_errors_text = if let Ok(issues) = serde_json::from_value::<Vec<crate::schemas::EvaluationIssue>>(eval["critical_errors"].clone()) {
+                    issues.iter().map(|i| format!("[위치: {}] {} : {}", i.location, i.code, i.description)).collect::<Vec<_>>().join("\n")
+                } else {
+                    eval["critical_errors"].as_array().map(|arr| arr.iter().map(|v| v.as_str().unwrap_or("")).collect::<Vec<_>>().join("\n")).unwrap_or_default()
+                };
+
+                let feedback_json = serde_json::to_string(&eval["feedback"]).unwrap_or_default();
+                let critical_json = serde_json::to_string(&eval["critical_errors"]).unwrap_or_default();
 
                 // 트랜잭션 사용: 부모(generation_iteration) 먼저 저장 후 자식(global_context) 저장
                 let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
@@ -1414,8 +1434,8 @@ pub async fn run_sad_global_pipeline(
                 .bind(stage_context_json.to_string())
                 .bind(score)
                 .bind(false)
-                .bind(&critical_errors_text)
-                .bind(&feedback_text)
+                .bind(&critical_json)
+                .bind(&feedback_json)
                 .bind(&now)
                 .bind(&now)
                 .execute(&mut *tx).await.map_err(|e| e.to_string())?;
@@ -1435,8 +1455,11 @@ pub async fn run_sad_global_pipeline(
 
                 tx.commit().await.map_err(|e| e.to_string())?;
 
-                // [피드백 업데이트] 다음 회차를 위해 피드백 저장
+                // [피드백 업데이트] 다음 회차를 위해 피드백 저장 (지식 주입용 텍스트)
                 last_feedback = feedback_text.clone();
+                if !critical_errors_text.is_empty() {
+                    last_feedback = format!("{}\n{}", critical_errors_text, last_feedback);
+                }
 
                 if !is_global_success {
                     last_error = eval["feedback"].as_str().unwrap_or("품질 미달").to_string();
@@ -1622,7 +1645,9 @@ pub async fn run_sad_module_pipeline(
     if let Some(it) = latest_iter {
         println!(">>> Resuming SAD Module Split from previous iteration feedback");
         if let Some(fb) = it.actionable_feedback_text {
-             if let Ok(fb_list) = serde_json::from_str::<Vec<String>>(&fb) {
+             if let Ok(issues) = serde_json::from_str::<Vec<crate::schemas::EvaluationIssue>>(&fb) {
+                 last_feedback = issues.iter().map(|i| format!("[보강 필요 - 위치: {}] {} : {}", i.location, i.code, i.description)).collect::<Vec<_>>().join("\n");
+             } else if let Ok(fb_list) = serde_json::from_str::<Vec<String>>(&fb) {
                  last_feedback = fb_list.join("\n");
              }
         }
@@ -1747,12 +1772,17 @@ pub async fn run_sad_module_pipeline(
                 let iter_id = Uuid::new_v4().to_string();
                 let now = Utc::now().to_rfc3339();
 
-                let feedback_text = eval["feedback"].as_array()
-                    .map(|arr| arr.iter().map(|v| v.as_str().unwrap_or("")).collect::<Vec<_>>().join("\n"))
-                    .unwrap_or_default();
-                let critical_errors_text = eval["critical_errors"].as_array()
-                    .map(|arr| arr.iter().map(|v| v.as_str().unwrap_or("")).collect::<Vec<_>>().join("\n"))
-                    .unwrap_or_default();
+                let feedback_text = if let Ok(issues) = serde_json::from_value::<Vec<crate::schemas::EvaluationIssue>>(eval["feedback"].clone()) {
+                    issues.iter().map(|i| format!("[보강 필요 - 위치: {}] {} : {}", i.location, i.code, i.description)).collect::<Vec<_>>().join("\n")
+                } else {
+                    eval["feedback"].as_array().map(|arr| arr.iter().map(|v| v.as_str().unwrap_or("")).collect::<Vec<_>>().join("\n")).unwrap_or_default()
+                };
+
+                let critical_errors_text = if let Ok(issues) = serde_json::from_value::<Vec<crate::schemas::EvaluationIssue>>(eval["critical_errors"].clone()) {
+                    issues.iter().map(|i| format!("[위치: {}] {} : {}", i.location, i.code, i.description)).collect::<Vec<_>>().join("\n")
+                } else {
+                    eval["critical_errors"].as_array().map(|arr| arr.iter().map(|v| v.as_str().unwrap_or("")).collect::<Vec<_>>().join("\n")).unwrap_or_default()
+                };
                 
                 // Stage 2 결과는 Stage 1 결과와 합쳐서 저장 (완결된 SAD 뷰 제공)
                 let mut combined_bundle = all_context_json.clone();
@@ -1761,6 +1791,9 @@ pub async fn run_sad_module_pipeline(
                         obj.insert(k.clone(), v.clone());
                     }
                 }
+
+                let feedback_json = serde_json::to_string(&eval["feedback"]).unwrap_or_default();
+                let critical_json = serde_json::to_string(&eval["critical_errors"]).unwrap_or_default();
 
                 // 트랜잭션 사용: 부모(generation_iteration) 먼저 저장 후 자식(global_context) 저장
                 let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
@@ -1774,8 +1807,8 @@ pub async fn run_sad_module_pipeline(
                 .bind(combined_bundle.to_string())
                 .bind(score)
                 .bind(false)
-                .bind(&critical_errors_text)
-                .bind(&feedback_text)
+                .bind(&critical_json)
+                .bind(&feedback_json)
                 .bind(&now)
                 .bind(&now)
                 .execute(&mut *tx).await.map_err(|e| e.to_string())?;
@@ -1795,8 +1828,8 @@ pub async fn run_sad_module_pipeline(
 
                 tx.commit().await.map_err(|e| e.to_string())?;
 
-                // [피드백 업데이트] 다음 회차를 위해 저장
-                last_feedback = feedback_text.clone();
+                // [피드백 업데이트] 다음 회차를 위해 저장 (패키징된 텍스트)
+                last_feedback = feedback_text.clone(); if !critical_errors_text.is_empty() { last_feedback = format!("{}\n{}", critical_errors_text, last_feedback); }
 
                 if !is_module_success {
                     last_error = eval["feedback"].as_str().unwrap_or("품질 미달").to_string();
@@ -2285,8 +2318,8 @@ pub async fn run_module_pipeline(
         }
 
         previous_draft = draft;
-        previous_feedback = eval.critical_errors.clone();
-        for f in eval.feedback { previous_feedback.push(format!("보강 필요: {}", f)); }
+        previous_feedback = eval.critical_errors.iter().map(|i| format!("[위치: {}] {} : {}", i.location, i.code, i.description)).collect();
+        for i in eval.feedback { previous_feedback.push(format!("[보강 필요 - 위치: {}] {} : {}", i.location, i.code, i.description)); }
 
         if eval.score >= threshold { break; }
     }

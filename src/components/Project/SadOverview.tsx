@@ -63,9 +63,8 @@ const SadOverview: React.FC<SadOverviewProps> = ({
         const result = await invoke<GenerationIteration[]>('get_node_iterations', { nodeId: globalNode.node_id });
         setGlobalIters(result);
         if (result.length > 0 && !selectedGlobalIterId) {
-          // 확정된(Passed) 리비전이 있으면 그것을 선택, 없으면 가장 최근 리비전을 선택(단순 프리뷰)
-          const passIter = result.find(it => it.is_pass === true);
-          const defaultIter = passIter || result[result.length - 1];
+          // 최신 리비전을 기본으로 선택 (Genesis PRD와 동일하게 자동 확정/선택 방지)
+          const defaultIter = result[result.length - 1];
           setSelectedGlobalIterId(defaultIter.iteration_id);
         }
       }
@@ -77,8 +76,7 @@ const SadOverview: React.FC<SadOverviewProps> = ({
         const result = await invoke<GenerationIteration[]>('get_node_iterations', { nodeId: moduleNode.node_id });
         setModuleIters(result);
         if (result.length > 0 && !selectedModuleIterId) {
-          const passIter = result.find(it => it.is_pass === true);
-          const defaultIter = passIter || result[result.length - 1];
+          const defaultIter = result[result.length - 1];
           setSelectedModuleIterId(defaultIter.iteration_id);
         }
       }
@@ -155,6 +153,39 @@ const SadOverview: React.FC<SadOverviewProps> = ({
       onRefresh();
     } catch (err: any) {
       alert("확정 실패: " + err.toString());
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUnconfirmIteration = async (stage: 'GLOBAL' | 'MODULE') => {
+    const iterId = stage === 'GLOBAL' ? selectedGlobalIterId : selectedModuleIterId;
+    if (!iterId || !projectId || loading || isCurrentStageLocked) return;
+    
+    try {
+      setLoading(true);
+      await invoke('unconfirm_iteration', { projectId, iterationId: iterId });
+      await fetchIterations();
+      await fetchContexts();
+      onRefresh();
+    } catch (err: any) {
+      alert("확정 해제 실패: " + err.toString());
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApproveStage = async () => {
+    if (!currentNode) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await invoke('approve_sad_node', { projectId, nodeId: currentNode.node_id });
+      await fetchIterations();
+      await fetchContexts();
+      onRefresh();
+    } catch (err: any) {
+      setError(err.toString());
     } finally {
       setLoading(false);
     }
@@ -407,6 +438,19 @@ const SadOverview: React.FC<SadOverviewProps> = ({
                 {(loading || currentNode?.node_state === 'IN_PROGRESS') ? '진행 중' : ((currentNode?.node_state === 'PAUSED_HITL' || currentNode?.node_state === 'COMPLETED') ? '재생성' : '생성 시작')}
               </Button>
 
+              {(currentNode?.node_state === 'PAUSED_HITL' || (currentNode?.node_state === 'COMPLETED' && activeStage === 'GLOBAL')) && currentIters.some(it => it.is_pass) && (
+                <Button
+                  onClick={handleApproveStage}
+                  disabled={loading || isCurrentStageLocked}
+                  variant="primary"
+                  className="proceed-btn"
+                  isLoading={loading}
+                  leftIcon={<span className="material-symbols-outlined">send</span>}
+                >
+                  다음 스텝
+                </Button>
+              )}
+
               {(loading || currentNode?.node_state === 'IN_PROGRESS') && (
                 <Button
                   onClick={() => currentNode && handleStop(currentNode.node_id)}
@@ -537,26 +581,40 @@ const SadOverview: React.FC<SadOverviewProps> = ({
           </div>
           <div className="tech-specs-header__actions">
 
-            {currentNode?.node_state === 'PAUSED_HITL' && !activeIteration?.is_pass && (
+            {currentNode?.node_state === 'PAUSED_HITL' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Button
-                  onClick={handleDeleteIteration}
-                  disabled={loading || isCurrentStageLocked}
-                  variant="ghost"
-                  className="delete-btn"
-                  title="이 리비전 삭제"
-                  iconOnly
-                  leftIcon={<span className="material-symbols-outlined" style={{ color: '#ef4444' }}>delete</span>}
-                />
-                <Button
-                  onClick={() => handleConfirmIteration(activeStage)}
-                  disabled={loading || isCurrentStageLocked}
-                  variant="secondary"
-                  leftIcon={<span className="material-symbols-outlined">check_circle</span>}
-                  title={isCurrentStageLocked ? "이미 다음 단계로 진행되었습니다." : ""}
-                >
-                  Draft 확정
-                </Button>
+                {activeIteration?.is_pass ? (
+                  <Button
+                    onClick={() => handleUnconfirmIteration(activeStage)}
+                    disabled={loading || isCurrentStageLocked}
+                    variant="ghost"
+                    leftIcon={<span className="material-symbols-outlined">undo</span>}
+                    title={isCurrentStageLocked ? "이미 다음 단계로 진행되었습니다." : ""}
+                  >
+                    확정 해제
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      onClick={handleDeleteIteration}
+                      disabled={loading || isCurrentStageLocked}
+                      variant="ghost"
+                      className="delete-btn"
+                      title="이 리비전 삭제"
+                      iconOnly
+                      leftIcon={<span className="material-symbols-outlined" style={{ color: '#ef4444' }}>delete</span>}
+                    />
+                    <Button
+                      onClick={() => handleConfirmIteration(activeStage)}
+                      disabled={loading || isCurrentStageLocked}
+                      variant="secondary"
+                      leftIcon={<span className="material-symbols-outlined">check_circle</span>}
+                      title={isCurrentStageLocked ? "이미 다음 단계로 진행되었습니다." : ""}
+                    >
+                      Draft 확정
+                    </Button>
+                  </>
+                )}
               </div>
             )}
           </div>

@@ -517,6 +517,9 @@ pub async fn run_pipeline(
         let errors_json = serde_json::to_string(&eval.critical_errors).unwrap_or_default();
         let feedback_json = serde_json::to_string(&eval.feedback).unwrap_or_default();
         
+        // [기계적 판단] 점수와 치명적 오류 유무를 기반으로 통과 여부 결정
+        let is_passed = eval.score >= threshold && eval.critical_errors.is_empty();
+
         sqlx::query(
             "INSERT INTO generation_iteration (iteration_id, node_id, iteration_number, generated_draft_json, calculated_score, is_pass, critical_errors_array, actionable_feedback_text, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"
         )
@@ -525,7 +528,7 @@ pub async fn run_pipeline(
         .bind(i)
         .bind(&draft)
         .bind(eval.score)
-        .bind(false)
+        .bind(is_passed)
         .bind(errors_json)
         .bind(feedback_json)
         .bind(Utc::now().to_rfc3339())
@@ -601,7 +604,7 @@ pub async fn run_pipeline(
                 return Err(msg);
             }
         }
-    } else if current_best_score < threshold {
+    } else if node_type == "Genesis_PRD" || current_best_score < threshold {
         NodeState::PausedHitl
     } else {
         NodeState::Completed
@@ -1391,11 +1394,14 @@ pub async fn run_sad_global_pipeline(
             Ok(eval_json) => {
                 let eval: serde_json::Value = serde_json::from_str(&eval_json).unwrap_or_default();
                 let score = eval["score"].as_i64().unwrap_or(0) as i32;
-                let is_pass = eval["is_pass"].as_bool().unwrap_or(false);
                 
-                if is_pass || (current_iter == max_iters) {
-                    is_global_success = is_pass;
-                    if !is_pass && current_iter == max_iters {
+                // [기계적 판단] AI의 is_pass 값을 무시하고 백엔드에서 직접 계산
+                let has_critical_errors = eval["critical_errors"].as_array().map_or(false, |arr| !arr.is_empty());
+                let is_passed = score >= threshold && !has_critical_errors;
+                
+                if is_passed || (current_iter == max_iters) {
+                    is_global_success = is_passed;
+                    if !is_passed && current_iter == max_iters {
                         let _ = app_handle.emit("pipeline-status", format!("SAD Stage 1 품질 미달이나 최대 횟수 도달로 중단 (점수: {})", score));
                     } else {
                         _all_context_json = stage_context_json.clone();
@@ -1433,7 +1439,7 @@ pub async fn run_sad_global_pipeline(
                 .bind(current_iter)
                 .bind(stage_context_json.to_string())
                 .bind(score)
-                .bind(is_pass)
+                .bind(is_passed)
                 .bind(&critical_json)
                 .bind(&feedback_json)
                 .bind(&now)
@@ -1770,11 +1776,14 @@ pub async fn run_sad_module_pipeline(
             Ok(eval_json) => {
                 let eval: serde_json::Value = serde_json::from_str(&eval_json).unwrap_or_default();
                 let score = eval["score"].as_i64().unwrap_or(0) as i32;
-                let is_pass = eval["is_pass"].as_bool().unwrap_or(false);
                 
-                if is_pass || (current_iter == max_iters) {
-                    is_module_success = is_pass;
-                    if !is_pass && current_iter == max_iters {
+                // [기계적 판단] AI의 is_pass 값을 무시하고 백엔드에서 직접 계산
+                let has_critical_errors = eval["critical_errors"].as_array().map_or(false, |arr| !arr.is_empty());
+                let is_passed = score >= threshold && !has_critical_errors;
+                
+                if is_passed || (current_iter == max_iters) {
+                    is_module_success = is_passed;
+                    if !is_passed && current_iter == max_iters {
                         let _ = app_handle.emit("pipeline-status", format!("SAD Stage 2 품질 미달이나 최대 횟수 도달로 중단 (점수: {})", score));
                     } else {
                         let _ = app_handle.emit("pipeline-status", format!("SAD Stage 2 통과 (점수: {})", score));
@@ -1819,7 +1828,7 @@ pub async fn run_sad_module_pipeline(
                 .bind(current_iter)
                 .bind(combined_bundle.to_string())
                 .bind(score)
-                .bind(is_pass)
+                .bind(is_passed)
                 .bind(&critical_json)
                 .bind(&feedback_json)
                 .bind(&now)
@@ -2027,7 +2036,7 @@ pub async fn confirm_sad_iteration(
         }
     }
 
-    // 6. 노드의 상태 및 최적 점수 업데이트
+    // 6. 노드의 최적 점수 업데이트 (상태는 PAUSED_HITL 유지하여 명시적 승인 대기)
     let node = sqlx::query_as::<_, DocumentNode>(
         "SELECT * FROM document_node WHERE node_id = ?"
     )
@@ -2037,14 +2046,112 @@ pub async fn confirm_sad_iteration(
     .map_err(|e| e.to_string())?;
 
     sqlx::query(
-        "UPDATE document_node SET current_best_score = ?, node_state = 'COMPLETED', updated_at = ? WHERE node_id = ?"
+        "UPDATE document_node SET current_best_score = ?, updated_at = ? WHERE node_id = ?"
     )
     .bind(iteration.calculated_score)
     .bind(&now)
     .bind(&iteration.node_id)
     .execute(&mut *tx).await.map_err(|e| e.to_string())?;
 
-    // 7. 다음 단계 활성화 처리
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    let _ = _app_handle.emit("nodes-updated", ());
+    println!(">>> SAD Iteration {} confirmed (is_pass=1) for project: {}", iteration_id, project_id);
+    Ok(())
+}
+
+/// 확정된 이터레이션을 취소
+#[tauri::command]
+pub async fn unconfirm_iteration(
+    app_handle: tauri::AppHandle,
+    pool: tauri::State<'_, SqlitePool>,
+    project_id: String,
+    iteration_id: String,
+) -> Result<(), String> {
+    println!(">>> Unconfirming iteration: {} for project: {}", iteration_id, project_id);
+    let now = Utc::now().to_rfc3339();
+
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
+    // 1. 해당 이터레이션 정보 조회
+    let iteration = sqlx::query_as::<_, GenerationIteration>(
+        "SELECT * FROM generation_iteration WHERE iteration_id = ?"
+    )
+    .bind(&iteration_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?
+    .ok_or_else(|| "회차 정보를 찾을 수 없습니다.".to_string())?;
+
+    // 2. is_pass를 0으로 변경
+    sqlx::query("UPDATE generation_iteration SET is_pass = 0, updated_at = ? WHERE iteration_id = ?")
+        .bind(&now)
+        .bind(&iteration_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 3. SAD 관련 리비전일 경우 연결된 global_context 논리 삭제
+    // version(iteration_number)와 iteration_id를 기반으로 삭제
+    sqlx::query("UPDATE global_context SET is_deleted = 1, updated_at = ? WHERE project_id = ? AND iteration_id = ?")
+        .bind(&now)
+        .bind(&project_id)
+        .bind(&iteration_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    let _ = app_handle.emit("nodes-updated", ());
+    println!(">>> Iteration {} unconfirmed (is_pass=0) for project: {}", iteration_id, project_id);
+    Ok(())
+}
+
+/// SAD 단계의 노드(Global 또는 Module)를 최종 승인 처리
+#[tauri::command]
+pub async fn approve_sad_node(
+    app_handle: tauri::AppHandle,
+    pool: tauri::State<'_, SqlitePool>,
+    project_id: String,
+    node_id: String,
+) -> Result<(), String> {
+    println!(">>> Approving SAD node: {} for project: {}", node_id, project_id);
+    let now = Utc::now().to_rfc3339();
+
+    // 1. 노드 정보 조회
+    let node = sqlx::query_as::<_, DocumentNode>(
+        "SELECT * FROM document_node WHERE node_id = ?"
+    )
+    .bind(&node_id)
+    .fetch_optional(&*pool)
+    .await
+    .map_err(|e| e.to_string())?
+    .ok_or_else(|| "노드 정보를 찾을 수 없습니다.".to_string())?;
+
+    // 2. 확정된(is_pass=1) 이터레이션이 있는지 확인
+    let confirmed_iter = sqlx::query_as::<_, GenerationIteration>(
+        "SELECT * FROM generation_iteration WHERE node_id = ? AND is_pass = 1 AND is_deleted = 0 LIMIT 1"
+    )
+    .bind(&node_id)
+    .fetch_optional(&*pool)
+    .await
+    .map_err(|e| e.to_string())?
+    .ok_or_else(|| "확정된 리비전이 없습니다. 먼저 리비전을 확정해 주세요.".to_string())?;
+
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
+    // 3. 노드 상태를 COMPLETED로 변경
+    sqlx::query(
+        "UPDATE document_node SET node_state = 'COMPLETED', updated_at = ? WHERE node_id = ?"
+    )
+    .bind(&now)
+    .bind(&node_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 4. 다음 단계 활성화 처리
     if node.target_node_type == "SAD_Global" {
         // SAD_Module 노드를 READY로 전환
         sqlx::query(
@@ -2053,30 +2160,71 @@ pub async fn confirm_sad_iteration(
         .bind(&now)
         .bind(&project_id)
         .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+        println!(">>> SAD_Global approved. SAD_Module is now READY.");
+    } else if node.target_node_type == "SAD_Module" {
+        println!(">>> SAD_Module approved. Triggering local module creation...");
+        // 확정된 이터레이션의 데이터를 파싱하여 로컬 모듈 생성 호출
+        let bundle: serde_json::Value = serde_json::from_str(&confirmed_iter.generated_draft_json)
+            .map_err(|e| format!("데이터 파싱 오류: {}", e))?;
+
+        if let Some(modules_val) = bundle.get("sad_module_list") {
+            let modules_json = if modules_val.is_array() {
+                serde_json::to_string(modules_val).unwrap_or_else(|_| "[]".to_string())
+            } else if let Some(arr) = modules_val.get("modules") {
+                serde_json::to_string(arr).unwrap_or_else(|_| "[]".to_string())
+            } else {
+                modules_val.to_string()
+            };
+            
+            // create_local_modules에 필요한 데이터 키 매핑 재조정 (name, description, responsibility)
+            let raw_modules: Vec<serde_json::Value> = serde_json::from_str(&modules_json).unwrap_or_default();
+            let modules_to_create: Vec<serde_json::Value> = raw_modules.iter().map(|m| {
+                serde_json::json!({
+                    "name": m.get("module_name").or(m.get("name")),
+                    "description": m.get("description"),
+                    "responsibility": m.get("core_responsibility").or(m.get("responsibility")),
+                    "priority_order": m.get("priority_order")
+                })
+            }).collect();
+
+            let final_json = serde_json::to_string(&modules_to_create).unwrap_or_else(|_| "[]".to_string());
+            
+            // 주의: create_local_modules 내부에서 트랜잭션을 다시 시작할 수 없으므로 
+            // 여기서는 트랜잭션 커밋 후 호출하거나, 로직을 인라인화해야 함.
+            // 일단 확정 후 호출하는 방식으로 진행.
+        }
     }
 
     tx.commit().await.map_err(|e| e.to_string())?;
 
-    // 8. 만약 SAD_Module이 확정된 것이라면, 로컬 모듈 생성 트리거
+    // Module 생성 트리거 (트랜잭션 밖에서 실행)
     if node.target_node_type == "SAD_Module" {
-        println!(">>> SAD_Module confirmed. Triggering local module creation...");
-        // internal_create_local_modules 등을 호출하거나, 
-        // 여기서 직접 create_local_modules에 필요한 데이터를 파싱해서 처리
-        // (create_local_modules는 #[tauri::command]이므로 내부 로직을 분리하는게 좋지만, 
-        // 여기서는 직접 로직을 수행하거나 간단히 trigger 함수를 호출)
-        
-        // stage_module_json (모듈 리스트)은 bundle 안에 "module_split" 키 등으로 들어있을 것임.
-        // SAD_Module 단계의 산출물 구조를 확인해야 함.
-        if let Some(modules_val) = bundle.get("module_split") {
-            if let Some(modules_arr) = modules_val.as_array() {
-                let modules_json = serde_json::to_string(modules_arr).unwrap_or_else(|_| "[]".to_string());
-                create_local_modules(pool.clone(), project_id.clone(), modules_json, _app_handle.clone()).await?;
-            }
-        }
+         let bundle: serde_json::Value = serde_json::from_str(&confirmed_iter.generated_draft_json).unwrap_or_default();
+         if let Some(modules_val) = bundle.get("sad_module_list") {
+            let modules_json = if modules_val.is_array() {
+                serde_json::to_string(modules_val).unwrap_or_else(|_| "[]".to_string())
+            } else if let Some(arr) = modules_val.get("modules") {
+                serde_json::to_string(arr).unwrap_or_else(|_| "[]".to_string())
+            } else {
+                "[]".to_string()
+            };
+
+            let raw_modules: Vec<serde_json::Value> = serde_json::from_str(&modules_json).unwrap_or_default();
+            let modules_to_create: Vec<serde_json::Value> = raw_modules.iter().map(|m| {
+                serde_json::json!({
+                    "name": m.get("module_name").or(m.get("name")),
+                    "description": m.get("description"),
+                    "responsibility": m.get("core_responsibility").or(m.get("responsibility")),
+                    "priority_order": m.get("priority_order")
+                })
+            }).collect();
+
+            let final_json = serde_json::to_string(&modules_to_create).unwrap_or_else(|_| "[]".to_string());
+            create_local_modules(pool, project_id, final_json, app_handle.clone()).await?;
+         }
     }
-    
-    let _ = _app_handle.emit("nodes-updated", ());
-    println!(">>> SAD Iteration {} confirmed for project: {}", iteration_id, project_id);
+
+    let _ = app_handle.emit("nodes-updated", ());
     Ok(())
 }
 
@@ -2316,10 +2464,13 @@ pub async fn run_module_pipeline(
         let errors_json = serde_json::to_string(&eval.critical_errors).unwrap_or_default();
         let feedback_json = serde_json::to_string(&eval.feedback).unwrap_or_default();
 
+        // [기계적 판단] AI의 is_pass 대신 백엔드 공식을 사용
+        let is_passed = eval.score >= threshold && eval.critical_errors.is_empty();
+
         sqlx::query(
             "INSERT INTO generation_iteration (iteration_id, node_id, iteration_number, generated_draft_json, calculated_score, is_pass, critical_errors_array, actionable_feedback_text, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"
         )
-        .bind(iter_id).bind(&node.node_id).bind(i).bind(&draft).bind(eval.score).bind(eval.is_pass)
+        .bind(iter_id).bind(&node.node_id).bind(i).bind(&draft).bind(eval.score).bind(is_passed)
         .bind(errors_json).bind(feedback_json).bind(Utc::now().to_rfc3339()).bind(Utc::now().to_rfc3339())
         .execute(&*pool).await.map_err(|e| e.to_string())?;
 
@@ -2338,7 +2489,7 @@ pub async fn run_module_pipeline(
         previous_feedback = eval.critical_errors.iter().map(|i| format!("[위치: {}] {} : {}", i.location, i.code, i.description)).collect();
         for i in eval.feedback { previous_feedback.push(format!("[보강 필요 - 위치: {}] {} : {}", i.location, i.code, i.description)); }
 
-        if eval.is_pass {
+        if is_passed {
             any_passed = true;
             break; 
         }

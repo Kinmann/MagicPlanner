@@ -159,6 +159,22 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
     }
   };
 
+  const handleUnconfirmIteration = async (idx: number) => {
+    const it = iterations[idx];
+    if (!it || !projectId || loading || isLocked) return;
+    
+    setLoading(true);
+    try {
+      await invoke('unconfirm_iteration', { projectId, iterationId: it.iteration_id });
+      await loadContent();
+      onRefresh();
+    } catch (e: any) {
+      setError(e.toString());
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDeleteIteration = async (idx: number) => {
     const it = iterations[idx];
     if (!it) return;
@@ -432,25 +448,39 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
           </div>
 
           {/* Draft 확정 버튼 하단 배치 */}
-          {iterations[selectedIdx] && !iterations[selectedIdx].is_pass && (
+          {iterations[selectedIdx] && !isCompleted && !isLocked && (
             <div className="revisions-action" style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', paddingTop: '0.5rem', paddingRight: '0.25rem' }}>
-              <Button
-                onClick={() => handleDeleteIteration(selectedIdx)}
-                disabled={loading || isLocked}
-                variant="ghost"
-                className="delete-btn"
-                title="이 리비전 삭제"
-                iconOnly
-                leftIcon={<span className="material-symbols-outlined" style={{ color: '#ef4444' }}>delete</span>}
-              />
-              <Button
-                onClick={() => handleConfirmIteration(selectedIdx)}
-                disabled={loading || isLocked}
-                variant="secondary"
-                leftIcon={<span className="material-symbols-outlined">check_circle</span>}
-              >
-                Draft 확정
-              </Button>
+              {iterations[selectedIdx].is_pass ? (
+                <Button
+                  onClick={() => handleUnconfirmIteration(selectedIdx)}
+                  disabled={loading || isLocked}
+                  variant="ghost"
+                  leftIcon={<span className="material-symbols-outlined">undo</span>}
+                  title={isLocked ? "이미 다음 단계로 진행되었습니다." : ""}
+                >
+                  확정 해제
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    onClick={() => handleDeleteIteration(selectedIdx)}
+                    disabled={loading || isLocked}
+                    variant="ghost"
+                    className="delete-btn"
+                    title="이 리비전 삭제"
+                    iconOnly
+                    leftIcon={<span className="material-symbols-outlined" style={{ color: '#ef4444' }}>delete</span>}
+                  />
+                  <Button
+                    onClick={() => handleConfirmIteration(selectedIdx)}
+                    disabled={loading || isLocked}
+                    variant="secondary"
+                    leftIcon={<span className="material-symbols-outlined">check_circle</span>}
+                  >
+                    Draft 확정
+                  </Button>
+                </>
+              )}
             </div>
           )}
         </div>

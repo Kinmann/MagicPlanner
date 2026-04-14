@@ -38,7 +38,7 @@
 
 {
   "score": 0, // Metric A~F 합산값 (0-100)
-  "is_pass": false, // score >= 85 이고 critical_errors가 없을 때만 true
+  "is_pass": false, // 시스템(Machine)이 score 및 critical_errors를 기반으로 최종 결정하므로, 여기서는 기본값인 false로 두거나 AI의 권고값으로 기술하십시오.
   "critical_errors": [], // 감점 사유 명시
   "feedback": [] // 다음 Iteration에서 수정해야 할 Action Item 목록
 }

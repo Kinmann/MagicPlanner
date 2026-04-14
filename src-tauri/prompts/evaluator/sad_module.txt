@@ -38,7 +38,7 @@
 
 {
   "score": 0, // Metric A~F 합산값 (0-100)
-  "is_pass": false, // score >= 85 인 경우에만 true
+  "is_pass": false, // score >= 85 이고 critical_errors가 없을 때만 true
   "critical_errors": [], // 감점 사유 명시
   "feedback": [] // 다음 Iteration에서 수정해야 할 Action Item 목록
 }

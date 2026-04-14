@@ -10,73 +10,69 @@ interface FeedbackRendererProps {
 const FeedbackRenderer: React.FC<FeedbackRendererProps> = ({ feedback, type = 'info' }) => {
   if (!feedback) return null;
 
-  let issues: EvaluationIssue[] = [];
-  let plainText: string | null = null;
-
-  // 1. 이미 배열인 경우 처리
-  if (Array.isArray(feedback)) {
-    issues = feedback as any[];
-  } 
-  // 2. 문자열인 경우 처리
-  else if (typeof feedback === 'string') {
-    const trimmed = feedback.trim();
-    if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (Array.isArray(parsed)) {
-          issues = parsed;
-        } else if (typeof parsed === 'object' && parsed !== null) {
-          // 단일 객체인 경우 배열로 감싸줌
-          issues = [parsed as any];
-        } else {
-          plainText = feedback;
+  // 재귀적 JSON 파싱 함수 (이중 직렬화 대응)
+  const parseRecursively = (data: any): any => {
+    if (typeof data !== 'string') return data;
+    try {
+      const parsed = JSON.parse(data);
+      if (typeof parsed === 'string') {
+        const trimmed = parsed.trim();
+        if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+          return parseRecursively(parsed);
         }
-      } catch {
-        plainText = feedback;
       }
-    } else {
-      plainText = feedback;
+      return parsed;
+    } catch {
+      return data;
     }
-  } 
-  // 3. 단일 객체인 경우 처리
-  else if (typeof feedback === 'object' && feedback !== null) {
-    issues = [feedback as any];
+  };
+
+  const parsedData = parseRecursively(feedback);
+  let issues: EvaluationIssue[] = [];
+  let isPlainString = false;
+
+  if (Array.isArray(parsedData)) {
+    // EvaluationIssue 구조를 가진 객체들만 필터링 (최소한 description은 있어야 함)
+    issues = parsedData.filter(item => 
+      item && typeof item === 'object' && (item.description || item.code)
+    );
+    if (issues.length === 0 && parsedData.length > 0) {
+      // 배열이지만 이슈 구조가 아닌 경우 문자열 리스트로 간주하여 변환 시도
+      isPlainString = true;
+    }
+  } else if (typeof parsedData === 'string') {
+    isPlainString = true;
   }
 
-  // 4. 평문 텍스트 렌더링
-  if (plainText) {
-    return <p className="feedback-text-plain">{plainText}</p>;
+  if (isPlainString) {
+    const textContent = typeof parsedData === 'string' ? parsedData : JSON.stringify(parsedData, null, 2);
+    return (
+      <div className={`feedback-text-wrapper feedback-text-wrapper--${type}`}>
+        <p className="feedback-text-plain">{textContent}</p>
+      </div>
+    );
   }
 
-  // 5. 이슈 목록 렌더링 (방어적 접근)
   if (issues.length === 0) return null;
 
   return (
     <div className={`feedback-issues-list feedback-issues-list--${type}`}>
-      {issues.map((issue, idx) => {
-        // 혹시나 각 필드가 객체일 경우를 대비해 문자열로 안전하게 변환
-        const safeCode = typeof issue.code === 'object' ? JSON.stringify(issue.code) : String(issue.code || '');
-        const safeLocation = typeof issue.location === 'object' ? JSON.stringify(issue.location) : String(issue.location || '');
-        const safeDescription = typeof issue.description === 'object' ? JSON.stringify(issue.description) : String(issue.description || '');
-
-        // 데이터가 유효하지 않은 경우 (모든 필드가 비어있음) 건너뜀
-        if (!safeCode && !safeLocation && !safeDescription) return null;
-
-        return (
-          <div key={idx} className="feedback-issue-item">
-            <div className="issue-header">
-              <span className="issue-code">{safeCode}</span>
-              {safeLocation && (
-                <span className="issue-location">
-                  <span className="material-symbols-outlined">location_on</span>
-                  {safeLocation}
-                </span>
-              )}
-            </div>
-            {safeDescription && <p className="issue-description">{safeDescription}</p>}
+      {issues.map((issue, idx) => (
+        <div key={idx} className="feedback-issue-item">
+          <div className="issue-header">
+            {issue.code && <span className="issue-code">{issue.code}</span>}
+            {issue.location && (
+              <span className="issue-location">
+                <span className="material-symbols-outlined">location_on</span>
+                {issue.location}
+              </span>
+            )}
           </div>
-        );
-      })}
+          <p className="issue-description">
+            {issue.description || '상세 설명 없음'}
+          </p>
+        </div>
+      ))}
     </div>
   );
 };

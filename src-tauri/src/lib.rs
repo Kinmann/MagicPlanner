@@ -279,6 +279,7 @@ pub fn run() {
             commands::stop_node_pipeline,
             commands::resume_node_pipeline,
             commands::get_all_active_nodes,
+            commands::delete_generation_iteration,
         ])
         .plugin(tauri_plugin_dialog::init())
         .run(tauri::generate_context!())

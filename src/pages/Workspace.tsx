@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { Store } from '@tauri-apps/plugin-store';
-import { save } from '@tauri-apps/plugin-dialog';
+import { save, ask } from '@tauri-apps/plugin-dialog';
 import { DocumentNode, Project, LocalModule, PipelinePhase } from '../types/project';
 import PipelineBoard from '../components/Project/PipelineBoard';
 import PhaseProgressBar from '../components/Project/PhaseProgressBar';
@@ -13,6 +13,7 @@ import ModuleTree from '../components/Project/ModuleTree';
 import Button from '../components/common/Button';
 import Header from "../components/layout/Header";
 import BaseModal from '../components/common/BaseModal';
+import FeedbackRenderer from '../components/common/FeedbackRenderer';
 import SadSpecRenderer from '../components/Project/SadSpecRenderer';
 import CriticalErrorModal from '../components/Project/CriticalErrorModal';
 import HitlWarningModal from '../components/Project/HitlWarningModal';
@@ -537,6 +538,45 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
     setNodeContent(iteration.generated_draft_json);
   };
 
+  const handleDeleteIteration = async (iteration: any) => {
+    if (!iteration) return;
+
+    const confirmed = await ask(`Draft #${iteration.iteration_number} 리비전을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`, {
+      title: '리비전 삭제',
+      kind: 'warning'
+    });
+
+    if (!confirmed) return;
+
+    setLoading(true);
+    try {
+      await invoke('delete_generation_iteration', { iterationId: iteration.iteration_id });
+      // 리비전 목록 다시 불러오기
+      if (selectedNodeId) {
+        const iters = await invoke<any[]>('get_node_iterations', { nodeId: selectedNodeId }) || [];
+        const sortedIters = [...iters].sort((a, b) => 
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+        setIterations(sortedIters);
+        
+        // 다음 선택할 리비전 결정
+        if (sortedIters.length > 0) {
+          const oldIdx = iterations.findIndex(i => i.iteration_id === iteration.iteration_id);
+          const nextIdx = Math.min(oldIdx >= 0 ? oldIdx : 0, sortedIters.length - 1);
+          handleSelectIteration(sortedIters[nextIdx]);
+        } else {
+          setSelectedIteration(null);
+          setNodeContent("생성된 내용이 없습니다.");
+        }
+      }
+      fetchNodes();
+    } catch (err: any) {
+      setError(err.toString());
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDownload = async () => {
     if (!selectedNode || !nodeContent) return;
     try {
@@ -774,6 +814,15 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
                               </span>
                               {showRawSpec ? 'Visual' : 'RAW SPEC'}
                             </button>
+                            <Button
+                              onClick={() => handleDeleteIteration(selectedIteration)}
+                              disabled={loading || !selectedIteration}
+                              variant="ghost"
+                              className="delete-btn"
+                              title="이 리비전 삭제"
+                              iconOnly
+                              leftIcon={<span className="material-symbols-outlined" style={{ color: '#ef4444' }}>delete</span>}
+                            />
                           </div>
                         </div>
                         <div className="revisions-list custom-scrollbar">
@@ -985,31 +1034,28 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
               {selectedIteration.critical_errors_array && (
                 <div className="feedback-card error">
                   <div className="card-header">
-                    <span className="material-symbols-outlined">report_problem</span>
+                    <span className="material-symbols-outlined">error</span>
                     <h4>Critical Issues</h4>
                   </div>
                   <div className="card-content">
-                    <p className="feedback-body">
-                      {(() => {
-                        try {
-                          const parsed = JSON.parse(selectedIteration.critical_errors_array);
-                          return Array.isArray(parsed) ? parsed.join(', ') : selectedIteration.critical_errors_array;
-                        } catch {
-                          return selectedIteration.critical_errors_array;
-                        }
-                      })()}
-                    </p>
+                    <FeedbackRenderer 
+                      feedback={selectedIteration.critical_errors_array} 
+                      type="error" 
+                    />
                   </div>
                 </div>
               )}
               {selectedIteration.actionable_feedback_text && (
                 <div className="feedback-card info">
                   <div className="card-header">
-                    <span className="material-symbols-outlined">lightbulb</span>
+                    <span className="material-symbols-outlined">tips_and_updates</span>
                     <h4>Optimization Guidance</h4>
                   </div>
                   <div className="card-content">
-                    <p>{selectedIteration.actionable_feedback_text}</p>
+                    <FeedbackRenderer 
+                      feedback={selectedIteration.actionable_feedback_text} 
+                      type="info" 
+                    />
                   </div>
                 </div>
               )}

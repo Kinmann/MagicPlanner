@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
 import { Store } from '@tauri-apps/plugin-store';
+import { ask } from '@tauri-apps/plugin-dialog';
 import { DocumentNode } from '../../types/project';
 import Button from '../common/Button';
 import Spinner from '../common/Spinner';
@@ -151,6 +152,29 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
         }
         setContent(normalizeKeys(rawData));
       }
+    } catch (e: any) {
+      setError(e.toString());
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteIteration = async (idx: number) => {
+    const it = iterations[idx];
+    if (!it) return;
+
+    const confirmed = await ask(`Draft #${it.iteration_number} 리비전을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`, {
+      title: '리비전 삭제',
+      kind: 'warning'
+    });
+
+    if (!confirmed) return;
+
+    setLoading(true);
+    try {
+      await invoke('delete_generation_iteration', { iterationId: it.iteration_id });
+      await loadContent();
+      onRefresh();
     } catch (e: any) {
       setError(e.toString());
     } finally {
@@ -409,7 +433,16 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
 
           {/* Draft 확정 버튼 하단 배치 */}
           {iterations[selectedIdx] && !iterations[selectedIdx].is_pass && (
-            <div className="revisions-action" style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '0.5rem', paddingRight: '0.25rem' }}>
+            <div className="revisions-action" style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', paddingTop: '0.5rem', paddingRight: '0.25rem' }}>
+              <Button
+                onClick={() => handleDeleteIteration(selectedIdx)}
+                disabled={loading || isLocked}
+                variant="ghost"
+                className="delete-btn"
+                title="이 리비전 삭제"
+                iconOnly
+                leftIcon={<span className="material-symbols-outlined" style={{ color: '#ef4444' }}>delete</span>}
+              />
               <Button
                 onClick={() => handleConfirmIteration(selectedIdx)}
                 disabled={loading || isLocked}

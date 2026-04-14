@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
 import { Store } from '@tauri-apps/plugin-store';
+import { ask } from '@tauri-apps/plugin-dialog';
 import { GlobalContext, CONTEXT_TYPE_LABELS, DocumentNode, GenerationIteration } from '../../types/project';
 import Button from '../common/Button';
 import BaseModal from '../common/BaseModal';
@@ -46,6 +47,7 @@ const SadOverview: React.FC<SadOverviewProps> = ({
   const [isMaxFocused, setIsMaxFocused] = useState(false);
   const [isAiGuidanceOpen, setIsAiGuidanceOpen] = useState(false);
   const [showRawView, setShowRawView] = useState(false);
+  const [targetCount, setTargetCount] = useState(8);
 
 
   const fetchContexts = async () => {
@@ -122,7 +124,11 @@ const SadOverview: React.FC<SadOverviewProps> = ({
       if (!apiKeyValue?.value) throw new Error('API 키가 설정되지 않았습니다.');
 
       const cmd = stage === 'GLOBAL' ? 'run_sad_global_pipeline' : 'run_sad_module_pipeline';
-      await invoke(cmd, { projectId, apiKey: apiKeyValue.value });
+      const args: any = { projectId, apiKey: apiKeyValue.value };
+      if (stage === 'MODULE') {
+        args.targetModuleCount = targetCount;
+      }
+      await invoke(cmd, args);
 
       await fetchContexts();
       await fetchIterations();
@@ -130,10 +136,13 @@ const SadOverview: React.FC<SadOverviewProps> = ({
     } catch (err: any) {
       setError(err.toString());
     } finally {
+      // 에러가 나더라도 생성된 이터레이션이나 컨텍스트가 있을 수 있으므로 동기화
+      await fetchContexts();
+      await fetchIterations();
+      onRefresh();
       setLoading(false);
     }
   };
-
   const handleConfirmIteration = async (stage: 'GLOBAL' | 'MODULE') => {
     const iterId = stage === 'GLOBAL' ? selectedGlobalIterId : selectedModuleIterId;
     if (!iterId) return;
@@ -146,6 +155,31 @@ const SadOverview: React.FC<SadOverviewProps> = ({
       onRefresh();
     } catch (err: any) {
       alert("확정 실패: " + err.toString());
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteIteration = async () => {
+    const iterId = activeStage === 'GLOBAL' ? selectedGlobalIterId : selectedModuleIterId;
+    const it = currentIters.find(i => i.iteration_id === iterId);
+    if (!it) return;
+
+    const confirmed = await ask(`Draft #${it.iteration_number} 리비전을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`, {
+      title: '리비전 삭제',
+      kind: 'warning'
+    });
+
+    if (!confirmed) return;
+
+    setLoading(true);
+    try {
+      await invoke('delete_generation_iteration', { iterationId: it.iteration_id });
+      await fetchIterations();
+      await fetchContexts();
+      onRefresh();
+    } catch (err: any) {
+      setError(err.toString());
     } finally {
       setLoading(false);
     }
@@ -343,6 +377,23 @@ const SadOverview: React.FC<SadOverviewProps> = ({
               </div>
             </div>
 
+            {activeStage === 'MODULE' && (
+              <div className="iteration-field target-count-field">
+                <span className="label">TARGET MODULES</span>
+                <div className="iteration-control-group">
+                  <input
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={targetCount}
+                    onChange={(e) => setTargetCount(parseInt(e.target.value) || 1)}
+                    disabled={loading || currentNode?.node_state === 'IN_PROGRESS' || isCurrentStageLocked}
+                    title="생성할 모듈의 목표 개수를 설정합니다."
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="button-group">
               <Button
                 onClick={() => handleRunStage(activeStage)}
@@ -487,15 +538,26 @@ const SadOverview: React.FC<SadOverviewProps> = ({
           <div className="tech-specs-header__actions">
 
             {currentNode?.node_state === 'PAUSED_HITL' && !activeIteration?.is_pass && (
-              <Button
-                onClick={() => handleConfirmIteration(activeStage)}
-                disabled={loading || isCurrentStageLocked}
-                variant="secondary"
-                leftIcon={<span className="material-symbols-outlined">check_circle</span>}
-                title={isCurrentStageLocked ? "이미 다음 단계로 진행되었습니다." : ""}
-              >
-                Draft 확정
-              </Button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Button
+                  onClick={handleDeleteIteration}
+                  disabled={loading || isCurrentStageLocked}
+                  variant="ghost"
+                  className="delete-btn"
+                  title="이 리비전 삭제"
+                  iconOnly
+                  leftIcon={<span className="material-symbols-outlined" style={{ color: '#ef4444' }}>delete</span>}
+                />
+                <Button
+                  onClick={() => handleConfirmIteration(activeStage)}
+                  disabled={loading || isCurrentStageLocked}
+                  variant="secondary"
+                  leftIcon={<span className="material-symbols-outlined">check_circle</span>}
+                  title={isCurrentStageLocked ? "이미 다음 단계로 진행되었습니다." : ""}
+                >
+                  Draft 확정
+                </Button>
+              </div>
             )}
           </div>
         </div>

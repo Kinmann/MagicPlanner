@@ -72,7 +72,7 @@
   },
   "is_pass": {
     "type": "boolean",
-    "description": "최종 score가 85 이상이면 true, 85 미만이면 false"
+    "description": "최종 score가 85 이상이고 critical_errors가 빈 배열([])인 경우에만 true, 그 이외는 false"
   },
   "critical_errors": {
     "type": "array",

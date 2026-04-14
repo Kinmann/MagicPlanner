@@ -355,7 +355,6 @@ pub async fn run_pipeline(
     api_key: String,
 ) -> Result<String, String> {
     println!(">>> run_pipeline started for project: {}, node: {}", project_id, node_type);
-    let client = Client::new();
 
     // 1. 노드 정보 조회
     let node = sqlx::query_as::<_, DocumentNode>(
@@ -1394,13 +1393,14 @@ pub async fn run_sad_global_pipeline(
                 let score = eval["score"].as_i64().unwrap_or(0) as i32;
                 let is_pass = eval["is_pass"].as_bool().unwrap_or(false);
                 
-                if is_pass || score >= threshold || (current_iter == max_iters) {
-                    is_global_success = true;
-                    if !is_pass && score < threshold {
-                        let _ = app_handle.emit("pipeline-status", format!("SAD Stage 1 품질 미달이나 최대 횟수 도달로 강제 진행 (점수: {})", score));
+                if is_pass || (current_iter == max_iters) {
+                    is_global_success = is_pass;
+                    if !is_pass && current_iter == max_iters {
+                        let _ = app_handle.emit("pipeline-status", format!("SAD Stage 1 품질 미달이나 최대 횟수 도달로 중단 (점수: {})", score));
+                    } else {
+                        _all_context_json = stage_context_json.clone();
+                        let _ = app_handle.emit("pipeline-status", format!("SAD Stage 1 통과 (점수: {})", score));
                     }
-                    _all_context_json = stage_context_json.clone();
-                    let _ = app_handle.emit("pipeline-status", format!("SAD Stage 1 통과 (점수: {})", score));
                 }
 
                 // [회차 저장] 모든 이터레이션 결과를 히스토리 테이블에 저장
@@ -1433,7 +1433,7 @@ pub async fn run_sad_global_pipeline(
                 .bind(current_iter)
                 .bind(stage_context_json.to_string())
                 .bind(score)
-                .bind(false)
+                .bind(is_pass)
                 .bind(&critical_json)
                 .bind(&feedback_json)
                 .bind(&now)
@@ -1479,12 +1479,15 @@ pub async fn run_sad_global_pipeline(
     }
 
     if !is_global_success {
-        sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', updated_at = ? WHERE node_id = ?")
+        // [수정] 실패 시에도 이터레이션 정보는 업데이트
+        sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', current_iteration = ?, updated_at = ? WHERE node_id = ?")
+            .bind(current_iter)
             .bind(Utc::now().to_rfc3339())
             .bind(&sad_node.node_id)
             .execute(&*pool)
             .await
             .map_err(|e| e.to_string())?;
+
         let _ = app_handle.emit("nodes-updated", ());
         return Err(format!("SAD 글로벌 컨텍스트 생성 불가: {}", last_error));
     }
@@ -1519,8 +1522,9 @@ pub async fn run_sad_module_pipeline(
     active_tasks: tauri::State<'_, ActiveTasks>,
     project_id: String,
     api_key: String,
+    target_module_count: Option<i32>,
 ) -> Result<String, String> {
-    println!(">>> SAD Module Split Pipeline started for project: {}", project_id);
+    println!(">>> SAD Module Split Pipeline started for project: {}, target_count: {:?}", project_id, target_module_count);
     let client = reqwest::Client::new();
 
     // SAD_Module 노드 정보 조회 (중복 실행 체크용)
@@ -1706,10 +1710,18 @@ pub async fn run_sad_module_pipeline(
             };
 
             let sys_prompt = format!("$COMMON_RULES\n{}\n\n$DOMAIN_SPECIFIC_RULE\n{}", common_prompt, type_prompt);
-            let user_prompt = format!(
+            let mut user_prompt = format!(
                 "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$GLOBAL_CONTEXT\n{}\n\n$PREVIOUS_ARCHITECTURAL_DECISIONS\n{}\n\n$PREVIOUS_DRAFT\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n위 정보를 기반으로 {}을(를) 작성하십시오.",
                 ctx_type, current_iter, genesis_prd_content, global_context_str, prev_context_str, prev_draft_str, last_feedback, ctx_type
             );
+
+            // 모듈 개수 제약 조건 주입
+            if let Some(count) = target_module_count {
+                user_prompt = format!(
+                    "{}\n\n[제약 사항: 시스템의 전체 모듈 개수를 반드시 {}개 내외로 구성하십시오. 중요도가 낮은 기능은 다른 모듈에 병합하여 개수를 맞추십시오.]",
+                    user_prompt, count
+                );
+            }
 
             let result = call_gemini(&client, &api_key, &sys_prompt, &user_prompt, schema_obj).await;
             let part_json = match result {
@@ -1760,12 +1772,13 @@ pub async fn run_sad_module_pipeline(
                 let score = eval["score"].as_i64().unwrap_or(0) as i32;
                 let is_pass = eval["is_pass"].as_bool().unwrap_or(false);
                 
-                if is_pass || score >= threshold || (current_iter == max_iters) {
-                    is_module_success = true;
-                    if !is_pass && score < threshold {
-                        let _ = app_handle.emit("pipeline-status", format!("SAD Stage 2 품질 미달이나 최대 횟수 도달로 강제 진행 (점수: {})", score));
+                if is_pass || (current_iter == max_iters) {
+                    is_module_success = is_pass;
+                    if !is_pass && current_iter == max_iters {
+                        let _ = app_handle.emit("pipeline-status", format!("SAD Stage 2 품질 미달이나 최대 횟수 도달로 중단 (점수: {})", score));
+                    } else {
+                        let _ = app_handle.emit("pipeline-status", format!("SAD Stage 2 통과 (점수: {})", score));
                     }
-                    let _ = app_handle.emit("pipeline-status", format!("SAD Stage 2 통과 (점수: {})", score));
                 }
 
                 // [회차 저장] Stage 2 결과도 히스토리 테이블에 저장
@@ -1806,7 +1819,7 @@ pub async fn run_sad_module_pipeline(
                 .bind(current_iter)
                 .bind(combined_bundle.to_string())
                 .bind(score)
-                .bind(false)
+                .bind(is_pass)
                 .bind(&critical_json)
                 .bind(&feedback_json)
                 .bind(&now)
@@ -1849,12 +1862,15 @@ pub async fn run_sad_module_pipeline(
     }
 
     if !is_module_success {
-        sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', updated_at = ? WHERE node_id = ?")
+        // [수정] 실패 시에도 이터레이션 정보 반영
+        sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', current_iteration = ?, updated_at = ? WHERE node_id = ?")
+            .bind(current_iter)
             .bind(Utc::now().to_rfc3339())
             .bind(&sad_node.node_id)
             .execute(&*pool)
             .await
             .map_err(|e| e.to_string())?;
+
         let _ = app_handle.emit("nodes-updated", ());
         return Err(format!("SAD 모듈 분할 생성 불가: {}", last_error));
     }
@@ -2255,6 +2271,7 @@ pub async fn run_module_pipeline(
     );
 
     let start_iter = node.current_iteration + 1;
+    let mut any_passed = false;
     for i in start_iter..=max_iters {
         final_iteration_count = i;
         let _ = app_handle.emit("pipeline-status", format!("[{}] {} 생성 중 (반복 {}/{})", module.module_name, node_type, i, max_iters));
@@ -2321,7 +2338,10 @@ pub async fn run_module_pipeline(
         previous_feedback = eval.critical_errors.iter().map(|i| format!("[위치: {}] {} : {}", i.location, i.code, i.description)).collect();
         for i in eval.feedback { previous_feedback.push(format!("[보강 필요 - 위치: {}] {} : {}", i.location, i.code, i.description)); }
 
-        if eval.score >= threshold { break; }
+        if eval.is_pass {
+            any_passed = true;
+            break; 
+        }
     }
 
     // 최종 상태 결정
@@ -2348,7 +2368,7 @@ pub async fn run_module_pipeline(
         return Ok(current_best_content);
     }
 
-    let final_state = if current_best_score < threshold { NodeState::PausedHitl } else { NodeState::Completed };
+    let final_state = if !any_passed { NodeState::PausedHitl } else { NodeState::Completed };
 
     sqlx::query("UPDATE document_node SET node_state = ?, current_iteration = ?, current_best_score = ?, updated_at = ? WHERE node_id = ?")
     .bind(final_state.to_string()).bind(final_iteration_count).bind(current_best_score).bind(Utc::now().to_rfc3339()).bind(&node.node_id)
@@ -2603,4 +2623,100 @@ pub async fn get_all_active_nodes(
     .map_err(|e| e.to_string())?;
 
     Ok(active_nodes)
+}
+
+/// 생성된 특정 리비전(이터레이션)을 삭제하고 노드 상태를 동기화합니다.
+#[tauri::command]
+pub async fn delete_generation_iteration(
+    handle: tauri::AppHandle,
+    iteration_id: String,
+) -> Result<(), String> {
+    let pool = handle.state::<SqlitePool>();
+
+    // 1. 해당 이터레이션 정보 조회 (노드 및 타입 확인용)
+    let iter_row = sqlx::query(
+        "SELECT i.node_id, n.target_node_type, i.is_pass, n.project_id 
+         FROM generation_iteration i 
+         JOIN document_node n ON i.node_id = n.node_id 
+         WHERE i.iteration_id = ?"
+    )
+    .bind(&iteration_id)
+    .fetch_one(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let node_id: String = iter_row.get(0);
+    let node_type: String = iter_row.get(1);
+    let project_id: String = iter_row.get(3);
+
+    // 2. Lock Policy 체크 (후행 작업 진행 중이면 삭제 불가)
+    // - Genesis PRD: SAD 단계 이상 진행 확인
+    if node_type == "Genesis_PRD" {
+        let sad_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM document_node WHERE project_id = ? AND target_node_type LIKE 'SAD_%' AND node_state != 'PENDING'")
+            .bind(&project_id)
+            .fetch_one(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+        if sad_count > 0 { return Err("SAD 단계가 이미 진행 중이므로 PRD 리비전을 삭제할 수 없습니다.".into()); }
+    }
+    // - SAD_Global: SAD_Module 진행 확인
+    else if node_type == "SAD_Global" {
+         let mod_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM document_node WHERE project_id = ? AND target_node_type = 'SAD_Module' AND node_state != 'PENDING'")
+            .bind(&project_id)
+            .fetch_one(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+        if mod_count > 0 { return Err("모듈 분할 단계가 이미 진행 중이므로 SAD Global 리비전을 삭제할 수 없습니다.".into()); }
+    }
+    // - SAD_Module: 하위 모듈 실제 데이터 생성 확인
+    else if node_type == "SAD_Module" {
+         let sub_mod_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM document_node WHERE project_id = ? AND target_node_type NOT LIKE 'SAD_%' AND target_node_type != 'Genesis_PRD' AND node_state != 'PENDING'")
+            .bind(&project_id)
+            .fetch_one(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+        if sub_mod_count > 0 { return Err("실제 모듈 기획이 이미 진행 중이므로 모듈 분할 리비전을 삭제할 수 없습니다.".into()); }
+    }
+
+    // 3. Soft Delete 수행
+    sqlx::query("UPDATE generation_iteration SET is_deleted = 1, updated_at = ? WHERE iteration_id = ?")
+        .bind(Utc::now().to_rfc3339())
+        .bind(&iteration_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 4. 노드 상태 및 최신 정보 업데이트
+    let remaining_iters: Vec<(String, i32)> = sqlx::query_as::<_, (String, i32)>(
+        "SELECT iteration_id, calculated_score FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY iteration_number DESC"
+    )
+    .bind(&node_id)
+    .fetch_all(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if remaining_iters.is_empty() {
+        // 모든 리비전이 삭제됨 -> READY 상태로 리셋
+        sqlx::query("UPDATE document_node SET node_state = 'READY', current_iteration = 0, current_best_score = 0, updated_at = ? WHERE node_id = ?")
+            .bind(Utc::now().to_rfc3339())
+            .bind(&node_id)
+            .execute(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    } else {
+        // 남은 것 중 최고점 및 개수 업데이트
+        let best_score = remaining_iters.iter().map(|(_, s)| *s).max().unwrap_or(0);
+        let count = remaining_iters.len() as i32;
+        sqlx::query("UPDATE document_node SET current_iteration = ?, current_best_score = ?, updated_at = ? WHERE node_id = ?")
+            .bind(count)
+            .bind(best_score)
+            .bind(Utc::now().to_rfc3339())
+            .bind(&node_id)
+            .execute(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    let _ = handle.emit("nodes-updated", ());
+    Ok(())
 }

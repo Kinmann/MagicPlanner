@@ -132,6 +132,22 @@ pub async fn get_project_nodes(
     pool: tauri::State<'_, SqlitePool>,
     project_id: String,
 ) -> Result<Vec<DocumentNode>, String> {
+    // [자가 치유] 진행률 100%인데 완료되지 않은 모듈이 있는지 확인 및 보정
+    let modules = sqlx::query_as::<_, LocalModule>(
+        "SELECT * FROM local_module WHERE project_id = ? AND is_deleted = 0"
+    )
+    .bind(&project_id)
+    .fetch_all(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    for m in modules {
+        if m.module_state != "COMPLETED" {
+            // 정합성 체크 및 보정 (emit은 fetch 후 리턴되므로 생략 가능)
+            let _ = sync_module_completion_status(&*pool, None, &m.module_id).await;
+        }
+    }
+
     let nodes = sqlx::query_as::<_, DocumentNode>(
         "SELECT * FROM document_node WHERE project_id = ? AND is_deleted = 0 ORDER BY created_at ASC"
     )
@@ -677,8 +693,12 @@ pub async fn handle_hitl_action(
             .await
             .map_err(|e| e.to_string())?;
 
-            // 다음 노드 트리거
-            trigger_next_nodes(app_handle, &node.project_id, &node.target_node_type).await?;
+            // 다음 노드 트리거 - 모듈 유무에 따라 분기 처리
+            if let Some(mid) = &node.module_id {
+                trigger_module_next_nodes(&app_handle, mid, &node.target_node_type).await?;
+            } else {
+                trigger_next_nodes(app_handle, &node.project_id, &node.target_node_type).await?;
+            }
         }
         "RETRY" => {
             sqlx::query(
@@ -699,15 +719,10 @@ pub async fn handle_hitl_action(
 async fn trigger_next_nodes(app_handle: tauri::AppHandle, project_id: &str, completed_node_type: &str) -> Result<(), String> {
     let pool = app_handle.state::<SqlitePool>();
 
-    // Phase 1-4 명세 기반 의존성 맵 정의 (트리거 후보들)
+    // 프로젝트 레벨 명세 기반 의존성 맵 정의 (전역 노드만 담당)
     let next_map = vec![
-        ("PRD", vec!["FSD"]),
-        ("FSD", vec!["User Flow", "ERD", "Wireframe", "API_Spec", "TC"]),
-        ("User Flow", vec!["IA", "Wireframe"]),
-        ("IA", vec!["Wireframe"]),
-        ("ERD", vec!["API_Spec"]),
-        ("API_Spec", vec!["TC"]),
         ("SAD_Global", vec!["SAD_Module"]),
+        ("Genesis_PRD", vec!["SAD_Global"]),
     ];
 
     let mut nodes_to_check = Vec::new();
@@ -722,13 +737,6 @@ async fn trigger_next_nodes(app_handle: tauri::AppHandle, project_id: &str, comp
     // 각 후보 노드에 대해 모든 선행 조건이 충족되었는지 확인
     for target in nodes_to_check {
         let prerequisites = match target {
-            "FSD" => vec!["PRD"],
-            "User Flow" => vec!["FSD"],
-            "ERD" => vec!["FSD"],
-            "IA" => vec!["User Flow"],
-            "Wireframe" => vec!["FSD", "User Flow", "IA"],
-            "API_Spec" => vec!["FSD", "ERD"],
-            "TC" => vec!["PRD", "FSD", "API_Spec"],
             "SAD_Global" => vec!["Genesis_PRD"],
             "SAD_Module" => vec!["SAD_Global"],
             _ => vec![],
@@ -2589,6 +2597,63 @@ async fn generate_draft_with_context(
     call_gemini(client, api_key, &combined_sys_prompt, &user_prompt, schema_obj).await
 }
 
+/// 모듈의 모든 노드가 완료되었는지 확인하고 모듈/프로젝트 상태를 동기화하는 헬퍼
+async fn sync_module_completion_status(
+    pool: &SqlitePool,
+    app_handle: Option<&tauri::AppHandle>,
+    module_id: &str,
+) -> Result<(), String> {
+    let all_module_nodes = sqlx::query_as::<_, DocumentNode>(
+        "SELECT * FROM document_node WHERE module_id = ? AND is_deleted = 0"
+    )
+    .bind(module_id).fetch_all(pool).await.map_err(|e| e.to_string())?;
+
+    if !all_module_nodes.is_empty() && all_module_nodes.iter().all(|n| n.node_state == "COMPLETED") {
+        let module = sqlx::query_as::<_, LocalModule>(
+            "SELECT * FROM local_module WHERE module_id = ?"
+        )
+        .bind(module_id).fetch_optional(pool).await.map_err(|e| e.to_string())?;
+
+        if let Some(m) = module {
+            // 이미 완료 상태라면 스킵
+            if m.module_state == "COMPLETED" {
+                return Ok(());
+            }
+
+            let now = Utc::now().to_rfc3339();
+
+            // 1. 현재 모듈 완료 처리
+            sqlx::query("UPDATE local_module SET module_state = 'COMPLETED', updated_at = ? WHERE module_id = ?")
+            .bind(&now).bind(module_id).execute(pool).await.map_err(|e| e.to_string())?;
+
+            // 2. 다음 대기 중인(PENDING) 모듈이 있는지 확인하여 활성화
+            let next_module = sqlx::query_as::<_, LocalModule>(
+                "SELECT * FROM local_module WHERE project_id = ? AND module_state = 'PENDING' AND is_deleted = 0 ORDER BY priority_order ASC LIMIT 1"
+            )
+            .bind(&m.project_id).fetch_optional(pool).await.map_err(|e| e.to_string())?;
+
+            if let Some(nm) = next_module {
+                sqlx::query("UPDATE local_module SET module_state = 'ACTIVE', updated_at = ? WHERE module_id = ?")
+                .bind(&now).bind(&nm.module_id).execute(pool).await.map_err(|e| e.to_string())?;
+                
+                // 다음 모듈의 첫 번째 노드(PRD)를 READY로 전환
+                sqlx::query("UPDATE document_node SET node_state = 'READY', updated_at = ? WHERE module_id = ? AND target_node_type = 'PRD' AND node_state = 'PENDING'")
+                .bind(&now).bind(&nm.module_id).execute(pool).await.map_err(|e| e.to_string())?;
+            } else {
+                // 더 이상 남은 모듈이 없으면 프로젝트 전체 완료 처리
+                sqlx::query("UPDATE project SET pipeline_phase = 'COMPLETED', updated_at = ? WHERE project_id = ?")
+                .bind(&now).bind(&m.project_id).execute(pool).await.map_err(|e| e.to_string())?;
+            }
+
+            // UI 갱신 방송
+            if let Some(h) = app_handle {
+                let _ = h.emit("nodes-updated", ());
+            }
+        }
+    }
+    Ok(())
+}
+
 /// 모듈 내 DAG 전이 (module_id 기준)
 async fn trigger_module_next_nodes(app_handle: &tauri::AppHandle, module_id: &str, completed_node_type: &str) -> Result<(), String> {
     let pool = app_handle.state::<SqlitePool>();
@@ -2642,44 +2707,9 @@ async fn trigger_module_next_nodes(app_handle: &tauri::AppHandle, module_id: &st
         }
     }
 
-    // 모든 노드 완료 체크하여 모듈 및 프로젝트 상태 업데이트
-    let all_module_nodes = sqlx::query_as::<_, DocumentNode>(
-        "SELECT * FROM document_node WHERE module_id = ? AND is_deleted = 0"
-    )
-    .bind(module_id).fetch_all(&*pool).await.map_err(|e| e.to_string())?;
+    // 모든 노드 완료 체크하여 모듈 및 프로젝트 상태 업데이트 (공통 헬퍼 사용)
+    sync_module_completion_status(&*pool, Some(app_handle), module_id).await?;
 
-    if !all_module_nodes.is_empty() && all_module_nodes.iter().all(|n| n.node_state == "COMPLETED") {
-        let now = Utc::now().to_rfc3339();
-        
-        // 현재 모듈 완료 처리
-        sqlx::query("UPDATE local_module SET module_state = 'COMPLETED', updated_at = ? WHERE module_id = ?")
-        .bind(&now).bind(module_id).execute(&*pool).await.map_err(|e| e.to_string())?;
-
-        // 프로젝트 ID 조회
-        let project_id = all_module_nodes[0].project_id.clone();
-
-        // 다음 모듈 탐색 (priority_order 기준)
-        let next_module = sqlx::query_as::<_, LocalModule>(
-            "SELECT * FROM local_module WHERE project_id = ? AND module_state = 'PENDING' AND is_deleted = 0 ORDER BY priority_order ASC LIMIT 1"
-        )
-        .bind(&project_id).fetch_optional(&*pool).await.map_err(|e| e.to_string())?;
-
-        if let Some(nm) = next_module {
-            // 다음 모듈 활성화
-            sqlx::query("UPDATE local_module SET module_state = 'ACTIVE', updated_at = ? WHERE module_id = ?")
-            .bind(&now).bind(&nm.module_id).execute(&*pool).await.map_err(|e| e.to_string())?;
-            
-            // 다음 모듈의 PRD 노드를 READY로 전환
-            sqlx::query("UPDATE document_node SET node_state = 'READY', updated_at = ? WHERE module_id = ? AND target_node_type = 'PRD' AND node_state = 'PENDING'")
-            .bind(&now).bind(&nm.module_id).execute(&*pool).await.map_err(|e| e.to_string())?;
-        } else {
-            // 더 이상 남은 모듈이 없으면 프로젝트 전체 완료
-            sqlx::query("UPDATE project SET pipeline_phase = 'COMPLETED', updated_at = ? WHERE project_id = ?")
-            .bind(&now).bind(&project_id).execute(&*pool).await.map_err(|e| e.to_string())?;
-        }
-    }
-
-    let _ = app_handle.emit("nodes-updated", ());
     Ok(())
 }
 

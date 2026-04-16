@@ -179,70 +179,7 @@ pub fn run() {
                 }
 
 
-                // ============================================================
-                // [HOTFIX] SAD/PRD 중복 번호 및 아이콘 오표시 긴급 보정
-                // ============================================================
-                println!(">>> Running DB Data Cleanup...");
-                // [HOTFIX] 데이터 자동 보정 (SAD/PRD 제외, 모듈 내 노드만 자동 확정)
-                let _ = sqlx::query("
-                    -- 1. 이터레이션 번호 재부여 (생성순)
-                    UPDATE generation_iteration
-                    SET iteration_number = (
-                        SELECT new_num 
-                        FROM (
-                            SELECT iteration_id, row_number() OVER (PARTITION BY node_id ORDER BY created_at ASC) as new_num
-                            FROM generation_iteration
-                        ) AS Ranked
-                        WHERE Ranked.iteration_id = generation_iteration.iteration_id
-                    );
-                ").execute(&pool).await;
 
-                let _ = sqlx::query("
-                    -- 2. SAD/PRD를 제외한 모듈 내 노드들만 is_pass 초기화 후 최고점 리비전 자동 확정
-                    UPDATE generation_iteration 
-                    SET is_pass = 0 
-                    WHERE node_id IN (
-                        SELECT node_id FROM document_node 
-                        WHERE target_node_type NOT IN ('Genesis_PRD', 'SAD_Global', 'SAD_Module')
-                    );
-                ").execute(&pool).await;
-
-                let _ = sqlx::query("
-                    UPDATE generation_iteration 
-                    SET is_pass = 1
-                    WHERE iteration_id IN (
-                        SELECT it.iteration_id FROM (
-                            SELECT iteration_id, node_id, row_number() OVER (PARTITION BY node_id ORDER BY calculated_score DESC, created_at DESC) as rank
-                            FROM generation_iteration
-                        ) it
-                        JOIN document_node dn ON it.node_id = dn.node_id
-                        WHERE it.rank = 1 
-                        AND dn.target_node_type NOT IN ('Genesis_PRD', 'SAD_Global', 'SAD_Module')
-                    );
-                ").execute(&pool).await;
-
-                let _ = sqlx::query("
-                    -- 3. 노드 테이블의 current_iteration 동기화
-                    UPDATE document_node
-                    SET current_iteration = (
-                        SELECT COUNT(*) 
-                        FROM generation_iteration 
-                        WHERE generation_iteration.node_id = document_node.node_id 
-                        AND is_deleted = 0
-                    );
-                ").execute(&pool).await;
-
-                let _ = sqlx::query("
-                    -- 4. 확정된 문서(global_context)의 버전을 이터레이션 번호와 동기화
-                    UPDATE global_context
-                    SET version = (
-                        SELECT iteration_number 
-                        FROM generation_iteration 
-                        WHERE generation_iteration.iteration_id = global_context.iteration_id
-                    )
-                    WHERE iteration_id IS NOT NULL;
-                ").execute(&pool).await;
-                println!(">>> DB Data Cleanup Completed.");
                 
                 Ok::<sqlx::SqlitePool, String>(pool)
             })?;

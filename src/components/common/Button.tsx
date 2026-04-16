@@ -7,6 +7,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   isLoading?: boolean;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
+  iconOnly?: boolean;
 }
 
 const Button: React.FC<ButtonProps> = ({
@@ -16,6 +17,7 @@ const Button: React.FC<ButtonProps> = ({
   isLoading = false,
   leftIcon,
   rightIcon,
+  iconOnly = false,
   className = '',
   disabled,
   ...props
@@ -40,7 +42,7 @@ const Button: React.FC<ButtonProps> = ({
         </span>
       )}
       {!isLoading && leftIcon && <span className="btn__icon btn__icon--left">{leftIcon}</span>}
-      <span className="btn__text">{children}</span>
+      {!iconOnly && <span className="btn__text">{children}</span>}
       {!isLoading && rightIcon && <span className="btn__icon btn__icon--right">{rightIcon}</span>}
     </button>
   );

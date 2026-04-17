@@ -633,6 +633,14 @@
         border-color: rgba($outline-variant, 0.2);
         
         &.active { opacity: 0.8; }
+
+        &.up-to-date {
+          opacity: 1;
+          background: linear-gradient(135deg, #059669, #10b981); // Emerald/Green gradient
+          color: white;
+          border-color: transparent;
+          cursor: default;
+        }
       }
 
       .material-symbols-outlined {

@@ -51,6 +51,10 @@ pub struct Project {
     pub updated_at: String,
     #[sqlx(default)]
     pub current_node_type: Option<String>,
+    #[sqlx(default)]
+    pub is_indexed: bool,
+    #[sqlx(default)]
+    pub needs_indexing: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
@@ -247,7 +251,25 @@ pub async fn get_project(
     project_id: String,
 ) -> Result<Project, String> {
     let project = sqlx::query_as::<_, Project>(
-        "SELECT * FROM project WHERE project_id = ? AND is_deleted = 0"
+        "SELECT 
+            p.*,
+            (SELECT COUNT(*) FROM embedding_metadata WHERE project_id = p.project_id) > 0 as is_indexed,
+            (
+                (SELECT COUNT(*) FROM embedding_metadata WHERE project_id = p.project_id) = 0
+                OR
+                EXISTS (
+                    SELECT 1 FROM document_node dn
+                    WHERE dn.project_id = p.project_id 
+                    AND dn.node_state = 'COMPLETED'
+                    AND dn.updated_at > (
+                        SELECT COALESCE(MAX(created_at), '1970-01-01') 
+                        FROM embedding_metadata 
+                        WHERE project_id = p.project_id
+                    )
+                )
+            ) as needs_indexing
+         FROM project p 
+         WHERE p.project_id = ? AND p.is_deleted = 0"
     )
     .bind(project_id)
     .fetch_optional(&*pool)
@@ -3372,6 +3394,20 @@ async fn store_document_embeddings(
     document_json: &str,
     score: i32,
 ) -> Result<(), String> {
+    // [중복 방지] 새로운 임베딩을 저장하기 전, 해당 노드(node_id)의 기존 데이터를 먼저 삭제
+    // vec0 테이블과 metadata 테이블 모두에서 삭제 처리
+    sqlx::query("DELETE FROM document_embeddings WHERE rowid IN (SELECT rowid FROM embedding_metadata WHERE node_id = ?)")
+        .bind(node_id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Existing embeddings (vec0) cleanup error: {}", e))?;
+
+    sqlx::query("DELETE FROM embedding_metadata WHERE node_id = ?")
+        .bind(node_id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Existing metadata cleanup error: {}", e))?;
+
     let chunks = chunk_json_document(document_json, node_type);
     
     for (idx, chunk) in chunks.iter().enumerate() {
@@ -3442,21 +3478,10 @@ pub async fn index_project_embeddings(
         .map_err(|e| e.to_string())?;
         
         if let Some(iter) = best_iter {
-            // 3. 중복 방지: 해당 iteration_id 기반 기존 데이터 삭제
-            // vec0 테이블과 metadata 테이블 연동 삭제
-            sqlx::query("DELETE FROM document_embeddings WHERE rowid IN (SELECT rowid FROM embedding_metadata WHERE iteration_id = ?)")
-                .bind(&iter.iteration_id)
-                .execute(&*pool)
-                .await
-                .map_err(|e| e.to_string())?;
-
-            sqlx::query("DELETE FROM embedding_metadata WHERE iteration_id = ?")
-                .bind(&iter.iteration_id)
-                .execute(&*pool)
-                .await
-                .map_err(|e| e.to_string())?;
+            // [RAG] 이제 store_document_embeddings 내부에서 node_id 기반으로 중복 방지를 처리하므로
+            // 여기서 별도의 DELETE를 수행할 필요가 없음.
             
-            // 4. 색인 실행
+            // 색인 실행
             store_document_embeddings(
                 &*pool, &*client, &api_key,
                 &project_id, node.module_id.as_deref(),

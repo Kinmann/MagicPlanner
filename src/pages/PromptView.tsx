@@ -113,6 +113,10 @@ const PromptView: React.FC<PromptViewProps> = ({ projectId, onBack, onHome }) =>
     try {
       await invoke("index_project_embeddings", { projectId: project?.project_id, apiKey: apiKey });
       alert("Project context has been indexed successfully.");
+      // 로컬 상태 업데이트: 즉각적인 UI 반영
+      if (project) {
+        setProject({ ...project, is_indexed: true, needs_indexing: false });
+      }
     } catch (err: any) {
       alert(`Index error: ${err}`);
     } finally {
@@ -335,14 +339,18 @@ const PromptView: React.FC<PromptViewProps> = ({ projectId, onBack, onHome }) =>
 
         <div className="sidebar-footer">
           <button 
-            className="index-button" 
+            className={`index-button ${!project.needs_indexing ? 'up-to-date' : ''}`} 
             onClick={handleIndexProject}
-            disabled={project.pipeline_phase !== 'COMPLETED' || indexing}
+            disabled={project.pipeline_phase !== 'COMPLETED' || indexing || !project.needs_indexing}
           >
             <span className="material-symbols-outlined">
-              {indexing ? 'sync' : 'database'}
+              {indexing ? 'sync' : (project.needs_indexing ? 'database' : 'verified')}
             </span>
-            {indexing ? 'INDEXING...' : 'SAVE AS CONTEXT'}
+            {indexing ? 'INDEXING...' : (
+                project.needs_indexing 
+                    ? (project.is_indexed ? 'UPDATE CONTEXT' : 'SAVE AS CONTEXT')
+                    : 'CONTEXT UP TO DATE'
+            )}
           </button>
           <button className="delete-button" onClick={handleDeleteProject}>
             <span className="material-symbols-outlined">delete_forever</span>

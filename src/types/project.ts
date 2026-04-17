@@ -53,6 +53,8 @@ export interface Project {
   created_at: string;
   updated_at: string;
   current_node_type?: string;
+  is_indexed: boolean;
+  needs_indexing: boolean;
 }
 
 // v2: Global Context

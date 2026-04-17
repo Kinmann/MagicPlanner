@@ -489,7 +489,7 @@ pub async fn run_pipeline(
             .bind("문서 생성 중...").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
             .execute(&*pool).await.map_err(|e| e.to_string())?;
 
-        let draft_res = generate_draft(&app_handle, &client, &api_key, &node_type, &project.raw_input_text, &previous_draft, &previous_feedback, i).await;
+        let draft_res = generate_draft(&app_handle, &pool, &client, &api_key, &project.project_id, &node_type, &project.raw_input_text, &previous_draft, &previous_feedback, i).await;
         let draft = match draft_res {
             Ok(d) => d,
             Err(e) => {
@@ -513,7 +513,7 @@ pub async fn run_pipeline(
 
         let input_text_for_eval = if node_type == "Genesis_PRD" { Some(project.raw_input_text.clone()) } else { None };
         let empty_feedback = Vec::new(); // run_pipeline에서는 개별 피드백 추적 안 하므로 빈 값 전달
-        let eval_res = evaluate_draft(&app_handle, &client, &api_key, &node_type, &draft, input_text_for_eval, "", "", &empty_feedback, i).await;
+        let eval_res = evaluate_draft(&app_handle, &pool, &client, &api_key, &project.project_id, &node_type, &draft, input_text_for_eval, "", "", &empty_feedback, i).await;
         let eval = match eval_res {
             Ok(e) => e,
             Err(e) => {
@@ -640,6 +640,25 @@ pub async fn run_pipeline(
 
     // 5. [중요] 완료된 경우에만 DAG 전이 처리
     if final_state == NodeState::Completed {
+        // [RAG] 완료된 산출물을 벡터 DB에 임베딩 저장
+        let best_iter = sqlx::query_as::<_, GenerationIteration>(
+            "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY calculated_score DESC, created_at DESC LIMIT 1"
+        )
+        .bind(&node.node_id)
+        .fetch_optional(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+        
+        if let Some(iter) = best_iter {
+            let _ = store_document_embeddings(
+                &*pool, &client, &api_key,
+                &project_id, None,
+                &node.node_id, &node_type,
+                &iter.iteration_id, &iter.generated_draft_json,
+                iter.calculated_score.unwrap_or(0),
+            ).await.map_err(|e| println!(">>> [RAG] Embedding storage failed (non-fatal): {}", e));
+        }
+
         trigger_next_nodes(app_handle, &project_id, &node_type).await?;
     }
 
@@ -782,14 +801,23 @@ async fn trigger_next_nodes(app_handle: tauri::AppHandle, project_id: &str, comp
 
 async fn generate_draft(
     app_handle: &tauri::AppHandle,
+    pool: &SqlitePool,
     client: &Client,
     api_key: &str,
+    project_id: &str,
     node_type: &str,
     input_text: &str,
     previous_draft: &str,
     previous_feedback: &Vec<String>,
     iteration: i32,
 ) -> Result<String, PipelineError> {
+    // Phase 2: RAG 컨텐츠 검색
+    let rag_query = format!("{} : {}", node_type, input_text);
+    let rag_context = get_rag_context(pool, client, api_key, project_id, &rag_query, 3).await
+        .unwrap_or_else(|e| {
+            println!(">>> [RAG] Search failed (non-fatal): {}", e);
+            String::new()
+        });
     let node_normalized = node_type.to_lowercase().replace(" ", "_");
     let resource_dir = app_handle.path().resource_dir().map_err(|e: tauri::Error| PipelineError::Internal(e.to_string()))?;
     
@@ -808,8 +836,8 @@ async fn generate_draft(
     println!(">>> System Prompt Loaded! Length: {} chars", combined_sys_prompt.len());
     
     let mut user_prompt = format!(
-        "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}",
-        node_type, iteration, input_text
+        "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}{}",
+        node_type, iteration, input_text, rag_context
     );
 
     if !previous_feedback.is_empty() {
@@ -825,8 +853,10 @@ async fn generate_draft(
 
 async fn evaluate_draft(
     app_handle: &tauri::AppHandle,
+    pool: &SqlitePool,
     client: &Client,
     api_key: &str,
+    project_id: &str,
     node_type: &str,
     draft: &str,
     input_text: Option<String>,
@@ -835,6 +865,13 @@ async fn evaluate_draft(
     previous_feedback: &Vec<String>,
     iteration: i32,
 ) -> Result<crate::schemas::EvaluationResult, PipelineError> {
+    // Phase 2: RAG 컨텐츠 검색 (평가 시에도 참고)
+    let rag_query = format!("{} : {}", node_type, draft);
+    let rag_context = get_rag_context(pool, client, api_key, project_id, &rag_query, 3).await
+        .unwrap_or_else(|e| {
+            println!(">>> [RAG] Search failed (non-fatal): {}", e);
+            String::new()
+        });
     let node_normalized = node_type.to_lowercase().replace(" ", "_");
     let resource_dir = app_handle.path().resource_dir().map_err(|e: tauri::Error| PipelineError::Internal(e.to_string()))?;
 
@@ -851,8 +888,8 @@ async fn evaluate_draft(
     println!(">>> Evaluator Prompt Loaded! Length: {} chars", combined_sys_prompt.len());
 
     let mut user_prompt = format!(
-        "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$GENERATED_DOCUMENT\n{}",
-        node_type, iteration, draft
+        "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$GENERATED_DOCUMENT\n{}{}",
+        node_type, iteration, draft, rag_context
     );
 
     // 모듈 PRD가 아닐 때만 사용자 아이디어 참조
@@ -1344,10 +1381,17 @@ pub async fn run_sad_global_pipeline(
                 String::new()
             });
 
+            let rag_query = format!("{} : {}", ctx_type, genesis_prd_content);
+            let rag_context = get_rag_context(&*pool, &client, &api_key, &project_id, &rag_query, 3).await
+                .unwrap_or_else(|e| {
+                    println!(">>> [RAG] SAD Global Search failed: {}", e);
+                    String::new()
+                });
+
             let sys_prompt = format!("$COMMON_RULES\n{}\n\n$DOMAIN_SPECIFIC_RULE\n{}", common_prompt, type_prompt);
             let user_prompt = format!(
-                "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$PREVIOUS_ARCHITECTURAL_DECISIONS\n{}\n\n$PREVIOUS_DRAFT\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n위 정보를 기반으로 {}을(를) 작성하십시오.",
-                ctx_type, current_iter, genesis_prd_content, prev_context_str, prev_draft_str, last_feedback, ctx_type
+                "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$PREVIOUS_ARCHITECTURAL_DECISIONS\n{}\n\n$PREVIOUS_DRAFT\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n{}\n\n위 정보를 기반으로 {}을(를) 작성하십시오.",
+                ctx_type, current_iter, genesis_prd_content, prev_context_str, prev_draft_str, last_feedback, rag_context, ctx_type
             );
 
             let result = call_gemini(&client, &api_key, &sys_prompt, &user_prompt, schema_obj).await;
@@ -1723,10 +1767,17 @@ pub async fn run_sad_module_pipeline(
                 "{}".to_string()
             };
 
+            let rag_query = format!("{} : {} : {}", ctx_type, genesis_prd_content, global_context_str);
+            let rag_context = get_rag_context(&*pool, &client, &api_key, &project_id, &rag_query, 3).await
+                .unwrap_or_else(|e| {
+                    println!(">>> [RAG] SAD Module Search failed: {}", e);
+                    String::new()
+                });
+
             let sys_prompt = format!("$COMMON_RULES\n{}\n\n$DOMAIN_SPECIFIC_RULE\n{}", common_prompt, type_prompt);
             let mut user_prompt = format!(
-                "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$GLOBAL_CONTEXT\n{}\n\n$PREVIOUS_ARCHITECTURAL_DECISIONS\n{}\n\n$PREVIOUS_DRAFT\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n위 정보를 기반으로 {}을(를) 작성하십시오.",
-                ctx_type, current_iter, genesis_prd_content, global_context_str, prev_context_str, prev_draft_str, last_feedback, ctx_type
+                "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$GLOBAL_CONTEXT\n{}\n\n$PREVIOUS_ARCHITECTURAL_DECISIONS\n{}\n\n$PREVIOUS_DRAFT\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n{}\n\n위 정보를 기반으로 {}을(를) 작성하십시오.",
+                ctx_type, current_iter, genesis_prd_content, global_context_str, prev_context_str, prev_draft_str, last_feedback, rag_context, ctx_type
             );
 
             // 모듈 개수 제약 조건 주입
@@ -2437,7 +2488,7 @@ pub async fn run_module_pipeline(
             .execute(&*pool).await.map_err(|e| e.to_string())?;
 
         // 3. Draft 생성 (원본 아이디어 제외, 통합 컨텍스트 주입)
-        let draft_res = generate_draft_with_context(&app_handle, &client, &api_key, &node_type, "", &previous_draft, &previous_feedback, &combined_context, i).await;
+        let draft_res = generate_draft_with_context(&app_handle, &pool, &client, &api_key, &project_id, &node_type, "", &previous_draft, &previous_feedback, &combined_context, i).await;
         let draft = match draft_res {
             Ok(d) => d,
             Err(e) => { loop_error = Some(e); break; }
@@ -2456,7 +2507,7 @@ pub async fn run_module_pipeline(
             .execute(&*pool).await.map_err(|e| e.to_string())?;
 
         // 4. Draft 평가 (통합 컨텍스트 및 이전 피드백 주입)
-        let eval_res = evaluate_draft(&app_handle, &client, &api_key, &node_type, &draft, None, &combined_context, &module_context, &previous_feedback, i).await;
+        let eval_res = evaluate_draft(&app_handle, &pool, &client, &api_key, &project_id, &node_type, &draft, None, &combined_context, &module_context, &previous_feedback, i).await;
         let eval = match eval_res {
             Ok(e) => e,
             Err(e) => { loop_error = Some(e); break; }
@@ -2534,6 +2585,25 @@ pub async fn run_module_pipeline(
     .execute(&*pool).await.map_err(|e| e.to_string())?;
 
     if final_state == NodeState::Completed {
+        // [RAG] 완료된 산출물을 벡터 DB에 임베딩 저장
+        let best_iter = sqlx::query_as::<_, GenerationIteration>(
+            "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY calculated_score DESC, created_at DESC LIMIT 1"
+        )
+        .bind(&node.node_id)
+        .fetch_optional(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+        
+        if let Some(iter) = best_iter {
+            let _ = store_document_embeddings(
+                &*pool, &client, &api_key,
+                &module.project_id, Some(&module_id),
+                &node.node_id, &node_type,
+                &iter.iteration_id, &iter.generated_draft_json,
+                iter.calculated_score.unwrap_or(0),
+            ).await.map_err(|e| println!(">>> [RAG] Embedding storage failed (non-fatal): {}", e));
+        }
+
         trigger_module_next_nodes(&app_handle, &module_id, &node_type).await?;
     }
 
@@ -2543,8 +2613,10 @@ pub async fn run_module_pipeline(
 /// 글로벌 컨텍스트를 포함한 generate_draft
 async fn generate_draft_with_context(
     app_handle: &tauri::AppHandle,
+    pool: &SqlitePool,
     client: &Client,
     api_key: &str,
+    project_id: &str,
     node_type: &str,
     input_text: &str,
     previous_draft: &str,
@@ -2552,6 +2624,13 @@ async fn generate_draft_with_context(
     global_context: &str,
     iteration: i32,
 ) -> Result<String, PipelineError> {
+    // Phase 2: RAG 컨텐츠 검색
+    let rag_query = format!("{} : {} : {}", node_type, input_text, global_context);
+    let rag_context = get_rag_context(pool, client, api_key, project_id, &rag_query, 3).await
+        .unwrap_or_else(|e| {
+            println!(">>> [RAG] Search failed (non-fatal): {}", e);
+            String::new()
+        });
     let node_normalized = node_type.to_lowercase().replace(" ", "_");
     let resource_dir = app_handle.path().resource_dir().map_err(|e: tauri::Error| PipelineError::Internal(e.to_string()))?;
     
@@ -2563,8 +2642,8 @@ async fn generate_draft_with_context(
     
     let mut user_prompt = if node_type != "PRD" {
         format!(
-            "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n위 정보를 바탕으로 기획서를 작성하십시오.",
-            node_type, iteration, input_text
+            "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}{}\n\n위 정보를 바탕으로 기획서를 작성하십시오.",
+            node_type, iteration, input_text, rag_context
         )
     } else {
         format!(
@@ -2900,4 +2979,584 @@ pub async fn delete_generation_iteration(
 
     let _ = handle.emit("nodes-updated", ());
     Ok(())
+}
+
+// ============================================================
+// RAG Utilities (Phase 1)
+// ============================================================
+
+/// Gemini Embedding API 호출
+async fn call_gemini_embedding(
+    client: &Client,
+    api_key: &str,
+    text: &str,
+    task_type: &str, // "RETRIEVAL_DOCUMENT" or "RETRIEVAL_QUERY"
+) -> Result<Vec<f32>, String> {
+    let url = format!(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key={}",
+        api_key
+    );
+    let body = serde_json::json!({
+        "model": "models/gemini-embedding-001",
+        "content": { "parts": [{ "text": text }] },
+        "taskType": task_type,
+    });
+    
+    let resp = client.post(&url).json(&body).send().await.map_err(|e| e.to_string())?;
+    
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let err_text = resp.text().await.unwrap_or_default();
+        return Err(format!("Embedding API Error: {} - {}", status, err_text));
+    }
+    
+    let result: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let values = result["embedding"]["values"]
+        .as_array()
+        .ok_or("No embedding values in response")?
+        .iter()
+        .map(|v| v.as_f64().unwrap_or(0.0) as f32)
+        .collect();
+    
+    Ok(values)
+}
+
+/// JSON 산출물을 의미 단위 청크로 분할 (노드 타입별 특화 전략)
+fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
+    let val: serde_json::Value = serde_json::from_str(json_str).unwrap_or_default();
+    let mut chunks = Vec::new();
+    
+    match node_type.to_lowercase().replace(" ", "_").as_str() {
+        // ── Genesis PRD: 비즈니스 컨텍스트 / 역할 / 에픽 / 기술스택 분리 ──
+        "genesis_prd" => {
+            // 비즈니스 컨텍스트 + 메타데이터 (프로젝트 개요)
+            if let (Some(meta), Some(biz)) = (val.get("metadata"), val.get("business_context")) {
+                chunks.push(format!("[GENESIS_PRD:OVERVIEW]\nmetadata: {}\nbusiness_context: {}",
+                    serde_json::to_string_pretty(meta).unwrap_or_default(),
+                    serde_json::to_string_pretty(biz).unwrap_or_default()));
+            }
+            // 사용자 역할별 개별 청크
+            if let Some(roles) = val.get("user_roles").and_then(|v| v.as_array()) {
+                for role in roles {
+                    let role_name = role.get("role_name").and_then(|n| n.as_str()).unwrap_or("unknown");
+                    chunks.push(format!("[GENESIS_PRD:ROLE:{}]\n{}",
+                        role_name, serde_json::to_string_pretty(role).unwrap_or_default()));
+                }
+            }
+            // 에픽별 개별 청크 (가장 핵심적인 검색 단위)
+            if let Some(epics) = val.get("core_epics").and_then(|v| v.as_array()) {
+                for epic in epics {
+                    let epic_id = epic.get("epic_id").and_then(|e| e.as_str()).unwrap_or("unknown");
+                    let title = epic.get("title").and_then(|t| t.as_str()).unwrap_or("");
+                    chunks.push(format!("[GENESIS_PRD:EPIC:{}:{}]\n{}",
+                        epic_id, title, serde_json::to_string_pretty(epic).unwrap_or_default()));
+                }
+            }
+            // 글로벌 제약사항
+            if let Some(constraints) = val.get("global_constraints") {
+                chunks.push(format!("[GENESIS_PRD:CONSTRAINTS]\n{}",
+                    serde_json::to_string_pretty(constraints).unwrap_or_default()));
+            }
+            // 기술 스택 전체
+            if let Some(tech) = val.get("tech_stack") {
+                chunks.push(format!("[GENESIS_PRD:TECH_STACK]\n{}",
+                    serde_json::to_string_pretty(tech).unwrap_or_default()));
+            }
+        }
+
+        // ── PRD (모듈): 개요 / 기능별 / 사용자 스토리 / 제약사항 분리 ──
+        "prd" => {
+            // 프로젝트 개요
+            if let Some(overview) = val.get("overview") {
+                let name = val.get("project_name").and_then(|n| n.as_str()).unwrap_or("");
+                chunks.push(format!("[PRD:OVERVIEW:{}]\n{}",
+                    name, serde_json::to_string_pretty(overview).unwrap_or_default()));
+            }
+            // 핵심 기능별 개별 청크
+            if let Some(features) = val.get("core_features").and_then(|v| v.as_array()) {
+                for feat in features {
+                    let fname = feat.get("feature_name").and_then(|n| n.as_str()).unwrap_or("unknown");
+                    let priority = feat.get("priority").and_then(|p| p.as_str()).unwrap_or("P1");
+                    chunks.push(format!("[PRD:FEATURE:{}:{}]\n{}",
+                        fname, priority, serde_json::to_string_pretty(feat).unwrap_or_default()));
+                }
+            }
+            // 사용자 스토리 묶음
+            if let Some(stories) = val.get("user_stories") {
+                chunks.push(format!("[PRD:USER_STORIES]\n{}",
+                    serde_json::to_string_pretty(stories).unwrap_or_default()));
+            }
+            // 제약사항
+            if let Some(constraints) = val.get("constraints") {
+                chunks.push(format!("[PRD:CONSTRAINTS]\n{}",
+                    serde_json::to_string_pretty(constraints).unwrap_or_default()));
+            }
+        }
+
+        // ── FSD: 기능 명세 단위 분리 (개별 FUNC-ID가 검색 단위) ──
+        "fsd" => {
+            if let Some(features) = val.get("features").and_then(|v| v.as_array()) {
+                for feat in features {
+                    let func_id = feat.get("func_id").and_then(|f| f.as_str()).unwrap_or("unknown");
+                    let module = feat.get("module").and_then(|m| m.as_str()).unwrap_or("");
+                    let summary = feat.get("summary").and_then(|s| s.as_str()).unwrap_or("");
+                    chunks.push(format!("[FSD:{}:{}:{}]\n{}",
+                        func_id, module, summary,
+                        serde_json::to_string_pretty(feat).unwrap_or_default()));
+                }
+            }
+        }
+
+        // ── User Flow: 시나리오(노드 그룹) 단위 분리 ──
+        "user_flow" => {
+            // 각 노드를 개별 시나리오 스텝으로 청킹
+            if let Some(nodes) = val.get("nodes").and_then(|v| v.as_array()) {
+                for node in nodes {
+                    let id = node.get("id").and_then(|i| i.as_str()).unwrap_or("");
+                    let ntype = node.get("node_type").and_then(|t| t.as_str()).unwrap_or("");
+                    let label = node.get("label").and_then(|l| l.as_str()).unwrap_or("");
+                    let func_ids = node.get("mapped_func_ids")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(","))
+                        .unwrap_or_default();
+                    chunks.push(format!("[USER_FLOW:STEP:{}:{}:{}] mapped_funcs=[{}]\n{}",
+                        id, ntype, label, func_ids,
+                        serde_json::to_string_pretty(node).unwrap_or_default()));
+                }
+            }
+            // 엣지(전이) 정보는 하나의 청크로 묶어 관계 맵 제공
+            if let Some(edges) = val.get("edges") {
+                chunks.push(format!("[USER_FLOW:EDGES]\n{}",
+                    serde_json::to_string_pretty(edges).unwrap_or_default()));
+            }
+        }
+
+        // ── IA: 화면 계층 + 화면별 엘리먼트 분리 ──
+        "ia" => {
+            // 전체 화면 계층 트리 (네비게이션 구조 검색용)
+            if let Some(hierarchy) = val.get("hierarchy") {
+                chunks.push(format!("[IA:HIERARCHY]\n{}",
+                    serde_json::to_string_pretty(hierarchy).unwrap_or_default()));
+            }
+            // 각 화면의 엘리먼트를 화면 단위로 청킹
+            if let Some(screens) = val.get("screen_elements").and_then(|v| v.as_array()) {
+                for screen in screens {
+                    let sid = screen.get("screen_id").and_then(|s| s.as_str()).unwrap_or("unknown");
+                    chunks.push(format!("[IA:SCREEN:{}]\n{}",
+                        sid, serde_json::to_string_pretty(screen).unwrap_or_default()));
+                }
+            }
+        }
+
+        // ── ERD: 테이블별 + 관계별 분리 ──
+        "erd" => {
+            if let Some(tables) = val.get("tables").and_then(|v| v.as_array()) {
+                for table in tables {
+                    let tname = table.get("table_name").and_then(|n| n.as_str()).unwrap_or("unknown");
+                    chunks.push(format!("[ERD:TABLE:{}]\n{}",
+                        tname, serde_json::to_string_pretty(table).unwrap_or_default()));
+                }
+            }
+            // 각 관계도 개별 청크 (테이블 간 참조 관계 검색용)
+            if let Some(rels) = val.get("relationships").and_then(|v| v.as_array()) {
+                for rel in rels {
+                    let src = rel.get("source_table").and_then(|s| s.as_str()).unwrap_or("");
+                    let tgt = rel.get("target_table").and_then(|t| t.as_str()).unwrap_or("");
+                    chunks.push(format!("[ERD:REL:{}->{}]\n{}",
+                        src, tgt, serde_json::to_string_pretty(rel).unwrap_or_default()));
+                }
+            }
+        }
+
+        // ── Wireframe: 화면 단위 + 리전/컴포넌트 계층 분리 ──
+        "wireframe" => {
+            if let Some(screens) = val.get("screens").and_then(|v| v.as_array()) {
+                for screen in screens {
+                    let sid = screen.get("screen_id").and_then(|s| s.as_str()).unwrap_or("unknown");
+                    let sname = screen.get("screen_name").and_then(|n| n.as_str()).unwrap_or("");
+                    // 화면 전체를 하나의 청크로 (리전 포함)
+                    chunks.push(format!("[WIREFRAME:SCREEN:{}:{}]\n{}",
+                        sid, sname, serde_json::to_string_pretty(screen).unwrap_or_default()));
+                    // 추가로 각 리전을 개별 청크로 (세밀한 컴포넌트 검색용)
+                    if let Some(regions) = screen.get("layout_regions").and_then(|r| r.as_array()) {
+                        for region in regions {
+                            let rname = region.get("region_name").and_then(|r| r.as_str()).unwrap_or("unknown");
+                            chunks.push(format!("[WIREFRAME:REGION:{}:{}:{}]\n{}",
+                                sid, sname, rname,
+                                serde_json::to_string_pretty(region).unwrap_or_default()));
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── API Spec: 엔드포인트별 분리 (메서드+경로 태깅) ──
+        "api_spec" => {
+            if let Some(endpoints) = val.get("endpoints").and_then(|v| v.as_array()) {
+                for ep in endpoints {
+                    let method = ep.get("method").and_then(|m| m.as_str()).unwrap_or("GET");
+                    let path = ep.get("path").and_then(|p| p.as_str()).unwrap_or("/");
+                    let summary = ep.get("summary").and_then(|s| s.as_str()).unwrap_or("");
+                    chunks.push(format!("[API:{}:{}:{}]\n{}",
+                        method, path, summary,
+                        serde_json::to_string_pretty(ep).unwrap_or_default()));
+                }
+            }
+        }
+
+        // ── TC: 테스트 케이스별 분리 (TC-ID + 매핑된 기능 태깅) ──
+        "tc" => {
+            if let Some(cases) = val.get("test_cases").and_then(|v| v.as_array()) {
+                for tc in cases {
+                    let tc_id = tc.get("tc_id").and_then(|t| t.as_str()).unwrap_or("unknown");
+                    let func_id = tc.get("mapped_func_id").and_then(|f| f.as_str()).unwrap_or("");
+                    let title = tc.get("title").and_then(|t| t.as_str()).unwrap_or("");
+                    chunks.push(format!("[TC:{}:{}:{}]\n{}",
+                        tc_id, func_id, title,
+                        serde_json::to_string_pretty(tc).unwrap_or_default()));
+                }
+            }
+        }
+
+        // ── SAD Core ERD: 엔티티별 + 관계 전체 ──
+        "sad_core_erd" => {
+            if let Some(entities) = val.get("entities").and_then(|v| v.as_array()) {
+                for entity in entities {
+                    let ename = entity.get("entity_name").and_then(|n| n.as_str()).unwrap_or("unknown");
+                    chunks.push(format!("[SAD_ERD:ENTITY:{}]\n{}",
+                        ename, serde_json::to_string_pretty(entity).unwrap_or_default()));
+                }
+            }
+            if let Some(rels) = val.get("relationships").and_then(|v| v.as_array()) {
+                for rel in rels {
+                    let from = rel.get("from_entity").and_then(|f| f.as_str()).unwrap_or("");
+                    let to = rel.get("to_entity").and_then(|t| t.as_str()).unwrap_or("");
+                    chunks.push(format!("[SAD_ERD:REL:{}->{}]\n{}",
+                        from, to, serde_json::to_string_pretty(rel).unwrap_or_default()));
+                }
+            }
+        }
+
+        // ── SAD Auth & RBAC: 인증 전략 + 역할별 분리 ──
+        "sad_auth_rbac" => {
+            // 인증/토큰 전략 개요
+            let auth = val.get("auth_method").and_then(|a| a.as_str()).unwrap_or("");
+            let token = val.get("token_strategy").and_then(|t| t.as_str()).unwrap_or("");
+            let policies = val.get("access_policies")
+                .and_then(|p| serde_json::to_string_pretty(p).ok())
+                .unwrap_or_default();
+            chunks.push(format!("[SAD_AUTH:STRATEGY] auth={}, token={}\naccess_policies: {}",
+                auth, token, policies));
+            // 각 역할별 청크
+            if let Some(roles) = val.get("roles").and_then(|v| v.as_array()) {
+                for role in roles {
+                    let rname = role.get("role_name").and_then(|r| r.as_str()).unwrap_or("unknown");
+                    chunks.push(format!("[SAD_AUTH:ROLE:{}]\n{}",
+                        rname, serde_json::to_string_pretty(role).unwrap_or_default()));
+                }
+            }
+        }
+
+        // ── SAD Interface & Error: 전략 개요 + 에러 코드별 분리 ──
+        "sad_interface_error" => {
+            // API 규칙 전략 요약
+            let versioning = val.get("api_versioning_strategy").and_then(|v| v.as_str()).unwrap_or("");
+            let format = val.get("response_format").and_then(|f| f.as_str()).unwrap_or("");
+            let pagination = val.get("pagination_strategy").and_then(|p| p.as_str()).unwrap_or("");
+            chunks.push(format!("[SAD_IFACE:STRATEGY] versioning={}, format={}, pagination={}",
+                versioning, format, pagination));
+            // 에러 코드별 청크
+            if let Some(codes) = val.get("error_codes").and_then(|v| v.as_array()) {
+                for code in codes {
+                    let c = code.get("code").and_then(|c| c.as_str()).unwrap_or("");
+                    let status = code.get("http_status").and_then(|s| s.as_i64()).unwrap_or(0);
+                    chunks.push(format!("[SAD_IFACE:ERROR:{}:{}]\n{}",
+                        c, status, serde_json::to_string_pretty(code).unwrap_or_default()));
+                }
+            }
+        }
+
+        // ── SAD Tech Stack: 전체를 하나의 청크 (항목이 적음) ──
+        "sad_tech_stack" => {
+            chunks.push(format!("[SAD_TECH_STACK]\n{}",
+                serde_json::to_string_pretty(&val).unwrap_or_default()));
+        }
+
+        // ── SAD Non-Tech: 카테고리별 분리 ──
+        "sad_non_tech" => {
+            let categories = ["legal_constraints", "compliance_requirements",
+                "performance_targets", "scalability_requirements", "budget_constraints"];
+            for cat in categories {
+                if let Some(items) = val.get(cat) {
+                    let items_str = serde_json::to_string_pretty(items).unwrap_or_default();
+                    if items_str.len() > 10 {
+                        chunks.push(format!("[SAD_NON_TECH:{}]\n{}", cat.to_uppercase(), items_str));
+                    }
+                }
+            }
+        }
+
+        // ── SAD Module List: 모듈별 청크 ──
+        "sad_module_list" => {
+            if let Some(modules) = val.get("modules").and_then(|v| v.as_array()) {
+                for module in modules {
+                    let mname = module.get("module_name").and_then(|n| n.as_str()).unwrap_or("unknown");
+                    chunks.push(format!("[SAD_MODULE:{}]\n{}",
+                        mname, serde_json::to_string_pretty(module).unwrap_or_default()));
+                }
+            }
+        }
+
+        // ── SAD Epic Mapping: 매핑별 청크 ──
+        "sad_epic_mapping" => {
+            if let Some(mappings) = val.get("mappings").and_then(|v| v.as_array()) {
+                for mapping in mappings {
+                    let eid = mapping.get("epic_id").and_then(|e| e.as_str()).unwrap_or("unknown");
+                    let ename = mapping.get("epic_name").and_then(|n| n.as_str()).unwrap_or("");
+                    chunks.push(format!("[SAD_EPIC_MAP:{}:{}]\n{}",
+                        eid, ename, serde_json::to_string_pretty(mapping).unwrap_or_default()));
+                }
+            }
+        }
+
+        // ── SAD Module Deps: 의존 관계별 + 빌드 순서 분리 ──
+        "sad_module_deps" => {
+            if let Some(deps) = val.get("dependencies").and_then(|v| v.as_array()) {
+                for dep in deps {
+                    let from = dep.get("from_module").and_then(|f| f.as_str()).unwrap_or("");
+                    let to = dep.get("to_module").and_then(|t| t.as_str()).unwrap_or("");
+                    chunks.push(format!("[SAD_DEP:{}->{}]\n{}",
+                        from, to, serde_json::to_string_pretty(dep).unwrap_or_default()));
+                }
+            }
+            if let Some(order) = val.get("recommended_build_order") {
+                chunks.push(format!("[SAD_DEP:BUILD_ORDER]\n{}",
+                    serde_json::to_string_pretty(order).unwrap_or_default()));
+            }
+        }
+
+        // ── 폴백: 최상위 키 기준 분할 ──
+        _ => {
+            if let Some(obj) = val.as_object() {
+                for (key, value) in obj {
+                    let chunk_text = format!("[{}]\n{}", key, 
+                        serde_json::to_string_pretty(value).unwrap_or_default());
+                    if chunk_text.len() > 50 {
+                        chunks.push(chunk_text);
+                    }
+                }
+            }
+        }
+    }
+    
+    // 공통: 전체 문서 요약 청크 (최대 2000자, 문맥 파악용)
+    if let Ok(summary) = serde_json::to_string_pretty(&val) {
+        if summary.len() > 100 {
+            chunks.insert(0, format!("[FULL_DOCUMENT:{}]\n{}", node_type, 
+                summary.chars().take(2000).collect::<String>()));
+        }
+    }
+    chunks
+}
+
+/// 완료된 노드의 산출물을 임베딩하여 벡터 DB에 저장
+async fn store_document_embeddings(
+    pool: &SqlitePool,
+    client: &Client,
+    api_key: &str,
+    project_id: &str,
+    module_id: Option<&str>,
+    node_id: &str,
+    node_type: &str,
+    iteration_id: &str,
+    document_json: &str,
+    score: i32,
+) -> Result<(), String> {
+    let chunks = chunk_json_document(document_json, node_type);
+    
+    for (idx, chunk) in chunks.iter().enumerate() {
+        // 1. Gemini Embedding API 호출
+        let embedding = call_gemini_embedding(client, api_key, chunk, "RETRIEVAL_DOCUMENT").await?;
+        let embedding_json = serde_json::to_string(&embedding).unwrap_or_default();
+        
+        // 2. embedding_metadata에 메타 정보 먼저 삽입 → rowid 확보
+        let now = chrono::Utc::now().to_rfc3339();
+        let result = sqlx::query(
+            "INSERT INTO embedding_metadata (project_id, module_id, node_type, node_id, iteration_id, chunk_index, chunk_text, score, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(project_id)
+        .bind(module_id)
+        .bind(node_type)
+        .bind(node_id)
+        .bind(iteration_id)
+        .bind(idx as i32)
+        .bind(chunk)
+        .bind(score)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Metadata insert error: {}", e))?;
+        
+        let rowid = result.last_insert_rowid();
+        
+        // 3. vec0 가상 테이블에 임베딩 삽입 (같은 rowid)
+        sqlx::query("INSERT INTO document_embeddings (rowid, embedding) VALUES (?, ?)")
+            .bind(rowid)
+            .bind(&embedding_json)
+            .execute(pool)
+            .await
+            .map_err(|e| format!("Embedding insert error: {}", e))?;
+    }
+    
+    println!("[RAG] Stored {} embedding chunks for node {} ({})", chunks.len(), node_id, node_type);
+    Ok(())
+}
+
+/// 프로젝트의 모든 완료된 문서를 벡터 DB에 수동 색인
+#[tauri::command]
+pub async fn index_project_embeddings(
+    pool: State<'_, SqlitePool>,
+    client: State<'_, Client>,
+    project_id: String,
+    api_key: String,
+) -> Result<i32, String> {
+    // 1. 해당 프로젝트의 모든 완료된 노드 조회
+    let nodes = sqlx::query_as::<_, DocumentNode>(
+        "SELECT * FROM document_node WHERE project_id = ? AND node_state = 'COMPLETED'"
+    )
+    .bind(&project_id)
+    .fetch_all(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    
+    let mut indexed_count = 0;
+    
+    for node in nodes {
+        // 2. 각 노드의 최고 점수(최근) 리비전 조회
+        let best_iter = sqlx::query_as::<_, GenerationIteration>(
+            "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY calculated_score DESC, created_at DESC LIMIT 1"
+        )
+        .bind(&node.node_id)
+        .fetch_optional(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+        
+        if let Some(iter) = best_iter {
+            // 3. 중복 방지: 해당 iteration_id 기반 기존 데이터 삭제
+            // vec0 테이블과 metadata 테이블 연동 삭제
+            sqlx::query("DELETE FROM document_embeddings WHERE rowid IN (SELECT rowid FROM embedding_metadata WHERE iteration_id = ?)")
+                .bind(&iter.iteration_id)
+                .execute(&*pool)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            sqlx::query("DELETE FROM embedding_metadata WHERE iteration_id = ?")
+                .bind(&iter.iteration_id)
+                .execute(&*pool)
+                .await
+                .map_err(|e| e.to_string())?;
+            
+            // 4. 색인 실행
+            store_document_embeddings(
+                &*pool, &*client, &api_key,
+                &project_id, node.module_id.as_deref(),
+                &node.node_id, &node.target_node_type,
+                &iter.iteration_id, &iter.generated_draft_json,
+                iter.calculated_score.unwrap_or(0),
+            ).await?;
+            
+            indexed_count += 1;
+        }
+    }
+    
+    Ok(indexed_count as i32)
+}
+
+/// RAG 검색 결과를 정제된 텍스트 콘텍스트로 반환 (내부용)
+async fn get_rag_context(
+    pool: &SqlitePool,
+    client: &Client,
+    api_key: &str,
+    project_id: &str,
+    query_text: &str,
+    limit: i32,
+) -> Result<String, String> {
+    // 1. 임베딩 모델 호출 (RETRIEVAL_QUERY 형식)
+    let query_vector = call_gemini_embedding(client, api_key, query_text, "RETRIEVAL_QUERY").await
+        .map_err(|e| format!("Query embedding error: {}", e))?;
+    let query_json = serde_json::to_string(&query_vector).unwrap_or_default();
+
+    // 2. 유사도 검색 (k-NN)
+    let rows = sqlx::query(
+        "SELECT m.chunk_text, m.node_type, v.distance 
+         FROM document_embeddings v
+         JOIN embedding_metadata m ON v.rowid = m.rowid
+         WHERE v.embedding MATCH ? AND k = ? AND m.project_id = ?
+         ORDER BY v.distance ASC"
+    )
+    .bind(&query_json)
+    .bind(limit)
+    .bind(project_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("RAG search error: {}", e))?;
+
+    if rows.is_empty() {
+        return Ok("".to_string());
+    }
+
+    let mut context = String::from("\n[REFERENCE_DOCUMENTS]\n(The following are relevant snippets retrieved from existing documentation and past requirements. Use them for consistency and context.)\n");
+    for (i, row) in rows.iter().enumerate() {
+        let text: String = row.get(0);
+        let ntype: String = row.get(1);
+        let dist: f64 = row.get(2);
+        context.push_str(&format!("\n-- REFERENCE {} (Type: {}, Relevance: {:.2}%) --\n{}\n", 
+            i + 1, ntype, (1.0 - dist) * 100.0, text));
+    }
+
+    Ok(context)
+}
+
+/// RAG 검색 테스트용 Tauri 커맨드
+#[tauri::command]
+pub async fn search_similar_documents(
+    pool: State<'_, SqlitePool>,
+    client: State<'_, Client>,
+    project_id: String,
+    api_key: String,
+    query: String,
+    limit: i32,
+) -> Result<Vec<serde_json::Value>, String> {
+    let query_vector = call_gemini_embedding(&*client, &api_key, &query, "RETRIEVAL_QUERY").await
+        .map_err(|e| format!("Query embedding error: {}", e))?;
+    let query_json = serde_json::to_string(&query_vector).unwrap_or_default();
+
+    let rows = sqlx::query(
+        "SELECT m.chunk_text, m.node_type, m.node_id, v.distance 
+         FROM document_embeddings v
+         JOIN embedding_metadata m ON v.rowid = m.rowid
+         WHERE v.embedding MATCH ? AND k = ? AND m.project_id = ?
+         ORDER BY v.distance ASC"
+    )
+    .bind(&query_json)
+    .bind(limit)
+    .bind(project_id)
+    .fetch_all(&*pool)
+    .await
+    .map_err(|e| format!("Search error: {}", e))?;
+
+    let results = rows.into_iter().map(|row| {
+        let text: String = row.get(0);
+        let ntype: String = row.get(1);
+        let nid: String = row.get(2);
+        let dist: f64 = row.get(3);
+        serde_json::json!({
+            "text": text,
+            "node_type": ntype,
+            "node_id": nid,
+            "similarity": 1.0 - dist
+        })
+    }).collect();
+
+    Ok(results)
 }

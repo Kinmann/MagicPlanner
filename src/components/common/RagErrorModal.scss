@@ -1,0 +1,175 @@
+@import "../../styles/variables";
+@import "../../styles/mixins";
+
+.rag-error-modal {
+  // Hide default BaseModal header/close button if desired, 
+  // but here we keep the title and just adjust the layout.
+  
+  .error-content {
+    display: flex;
+    gap: 1.5rem;
+    padding: 1rem 0;
+
+    .error-icon {
+      flex-shrink: 0;
+      width: 48px;
+      height: 48px;
+      border-radius: $radius-xl;
+      background: rgba($status-error, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      span {
+        color: $status-error;
+        font-size: 32px;
+      }
+    }
+
+    .error-details {
+      flex: 1;
+
+      .main-msg {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: $on-surface;
+        margin-bottom: 0.5rem;
+        
+        strong {
+          color: $primary;
+        }
+      }
+
+      .sub-msg {
+        @include label-medium;
+        color: $on-surface-variant;
+        line-height: 1.5;
+        margin-bottom: 1rem;
+      }
+
+      .error-box {
+        background: $surface-container-lowest;
+        border: 1px solid rgba($outline-variant, 0.1);
+        border-radius: $radius-lg;
+        padding: 0.75rem;
+        max-height: 120px;
+        overflow-y: auto;
+        @include custom-scrollbar;
+
+        code {
+          font-family: $font-mono;
+          font-size: 0.85rem;
+          color: $error;
+          word-break: break-all;
+        }
+      }
+    }
+  }
+
+  // 3. Custom Action Area (HitlWarningModal 레이아웃 복제)
+  .custom-action-area {
+    margin-top: 1.5rem;
+    padding: 1.5rem 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    border-top: 1px solid rgba($outline-variant, 0.1);
+    
+    .button-row {
+      display: flex;
+      gap: 0.75rem;
+      align-items: stretch;
+      
+      button {
+        height: 3.5rem;
+        border-radius: $radius-xl;
+        font-weight: 700;
+        transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        cursor: pointer;
+        
+        &:active {
+          transform: scale(0.95);
+        }
+
+        &:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+      }
+
+      .btn-small {
+        flex: 0 0 4.5rem;
+        width: 4.5rem;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: $surface-container-highest;
+        border: 1px solid rgba($outline-variant, 0.1);
+        color: $on-surface;
+
+        &:hover:not(:disabled) {
+          background: $surface-bright;
+        }
+        
+        .material-symbols-outlined {
+          font-size: 1.5rem;
+        }
+      }
+
+      .btn-primary {
+        flex: 1;
+        background: linear-gradient(135deg, #059669 0%, #10b981 100%); // 초록색 그라데이션
+        border: none;
+        color: #fff;
+        box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.625rem;
+        
+        &:hover:not(:disabled) {
+          filter: brightness(1.1);
+        }
+
+        &.btn-success {
+          background: #10b981;
+        }
+
+        .material-symbols-outlined {
+          font-size: 1.25rem;
+        }
+
+        .spin {
+          animation: spin 1s linear infinite;
+        }
+      }
+    }
+
+    .dismiss-row {
+      display: flex;
+      justify-content: center;
+      
+      .btn-dismiss {
+        @include label-medium;
+        color: $on-surface-variant;
+        padding: 0.5rem 1rem;
+        border-radius: $radius-lg;
+        background: transparent;
+        border: none;
+        transition: all 0.2s ease;
+        cursor: pointer;
+        
+        &:hover {
+          color: $on-surface;
+          background: rgba($surface-container-highest, 0.5);
+        }
+      }
+    }
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

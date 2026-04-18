@@ -341,7 +341,7 @@ const PromptView: React.FC<PromptViewProps> = ({ projectId, onBack, onHome }) =>
           <button 
             className={`index-button ${!project.needs_indexing ? 'up-to-date' : ''}`} 
             onClick={handleIndexProject}
-            disabled={project.pipeline_phase !== 'COMPLETED' || indexing || !project.needs_indexing}
+            disabled={indexing || !project.needs_indexing}
           >
             <span className="material-symbols-outlined">
               {indexing ? 'sync' : (project.needs_indexing ? 'database' : 'verified')}

@@ -254,6 +254,7 @@ pub fn run() {
             commands::approve_sad_node,
             commands::unconfirm_iteration,
             commands::search_similar_documents,
+            commands::manually_trigger_next_nodes,
         ])
         .plugin(tauri_plugin_dialog::init())
         .run(tauri::generate_context!())

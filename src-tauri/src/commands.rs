@@ -372,14 +372,56 @@ pub async fn delete_project(
     pool: tauri::State<'_, SqlitePool>,
     project_id: String,
 ) -> Result<(), String> {
-    sqlx::query(
-        "UPDATE project SET is_deleted = 1 WHERE project_id = ?"
-    )
-    .bind(project_id)
-    .execute(&*pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    println!(">>> Hard deleting project and all associated data: {}", project_id);
+    
+    // 1. 벡터 데이터 삭제 (virtual table인 document_embeddings 먼저 처리)
+    // rowid가 embedding_metadata와 동기화되어 있으므로 서브쿼리 활용
+    sqlx::query("DELETE FROM document_embeddings WHERE rowid IN (SELECT rowid FROM embedding_metadata WHERE project_id = ?)")
+        .bind(&project_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| format!("Failed to delete vector embeddings: {}", e))?;
 
+    sqlx::query("DELETE FROM embedding_metadata WHERE project_id = ?")
+        .bind(&project_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| format!("Failed to delete embedding metadata: {}", e))?;
+
+    // 2. 상세 결과물(이터레이션) 삭제 - 노드 테이블과 조인 필요
+    sqlx::query("DELETE FROM generation_iteration WHERE node_id IN (SELECT node_id FROM document_node WHERE project_id = ?)")
+        .bind(&project_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| format!("Failed to delete generation iterations: {}", e))?;
+
+    // 3. 하위 요소 삭제 (노드, 모듈, 컨텍스트)
+    sqlx::query("DELETE FROM document_node WHERE project_id = ?")
+        .bind(&project_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| format!("Failed to delete document nodes: {}", e))?;
+
+    sqlx::query("DELETE FROM local_module WHERE project_id = ?")
+        .bind(&project_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| format!("Failed to delete local modules: {}", e))?;
+
+    sqlx::query("DELETE FROM global_context WHERE project_id = ?")
+        .bind(&project_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| format!("Failed to delete global contexts: {}", e))?;
+
+    // 4. 최종 프로젝트 본체 삭제 (Hard Delete)
+    sqlx::query("DELETE FROM project WHERE project_id = ?")
+        .bind(&project_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| format!("Failed to hard delete project: {}", e))?;
+
+    println!(">>> Project {} and all related data purged successfully.", project_id);
     Ok(())
 }
 
@@ -672,6 +714,16 @@ pub async fn run_pipeline(
         .map_err(|e| e.to_string())?;
         
         if let Some(iter) = best_iter {
+            let _ = app_handle.emit("pipeline-status", "RAG 임베딩 중...");
+            sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
+                .bind("RAG 임베딩 중...")
+                .bind(Utc::now().to_rfc3339())
+                .bind(&node.node_id)
+                .execute(&*pool)
+                .await
+                .map_err(|e| e.to_string())?;
+            let _ = app_handle.emit("nodes-updated", ());
+
             let _ = store_document_embeddings(
                 &*pool, &client, &api_key,
                 &project_id, None,
@@ -679,6 +731,8 @@ pub async fn run_pipeline(
                 &iter.iteration_id, &iter.generated_draft_json,
                 iter.calculated_score.unwrap_or(0),
             ).await.map_err(|e| println!(">>> [RAG] Embedding storage failed (non-fatal): {}", e));
+
+            let _ = app_handle.emit("pipeline-status", "RAG 임베딩 완료");
         }
 
         trigger_next_nodes(app_handle, &project_id, &node_type).await?;
@@ -725,6 +779,43 @@ pub async fn handle_hitl_action(
 
     match action.as_str() {
         "APPROVE" => {
+            // [RAG] 승인 전 임베딩을 위한 데이터 준비
+            let client = app_handle.state::<Client>();
+            let session = sqlx::query("SELECT api_key_encrypted FROM user_session WHERE session_id = 'default-session' AND is_deleted = 0")
+                .fetch_optional(&*pool).await.map_err(|e| e.to_string())?
+                .ok_or_else(|| "User session not found".to_string())?;
+            let api_key: String = session.get("api_key_encrypted");
+
+            let best_iter = sqlx::query_as::<_, GenerationIteration>(
+                "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY calculated_score DESC, created_at DESC LIMIT 1"
+            )
+            .bind(&node_id)
+            .fetch_optional(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+            if let Some(iter) = best_iter {
+                let _ = app_handle.emit("pipeline-status", "RAG 임베딩 중...");
+                sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
+                    .bind("RAG 임베딩 중...")
+                    .bind(Utc::now().to_rfc3339())
+                    .bind(&node_id)
+                    .execute(&*pool)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let _ = app_handle.emit("nodes-updated", ());
+
+                let _ = store_document_embeddings(
+                    &*pool, &*client, &api_key,
+                    &node.project_id, node.module_id.as_deref(),
+                    &node.node_id, &node.target_node_type,
+                    &iter.iteration_id, &iter.generated_draft_json,
+                    iter.calculated_score.unwrap_or(0),
+                ).await.map_err(|e| println!(">>> [RAG] HITL Embedding failed: {}", e));
+
+                let _ = app_handle.emit("pipeline-status", "RAG 임베딩 완료");
+            }
+
             sqlx::query(
                 "UPDATE document_node SET node_state = 'COMPLETED', updated_at = ? WHERE node_id = ?"
             )
@@ -1156,6 +1247,33 @@ pub async fn approve_genesis_prd(
     .map_err(|e| e.to_string())?;
 
     if let Some(it) = latest_it {
+        // [RAG] 승인된 PRD 임베딩
+        let client = app_handle.state::<Client>();
+        let session = sqlx::query("SELECT api_key_encrypted FROM user_session WHERE session_id = 'default-session' AND is_deleted = 0")
+            .fetch_optional(&*pool).await.map_err(|e| e.to_string())?
+            .ok_or_else(|| "User session not found".to_string())?;
+        let api_key: String = session.get("api_key_encrypted");
+
+        let _ = app_handle.emit("pipeline-status", "PRD RAG 임베딩 중...");
+        sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
+            .bind("RAG 임베딩 중...")
+            .bind(Utc::now().to_rfc3339())
+            .bind(&genesis_node.node_id)
+            .execute(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+        let _ = app_handle.emit("nodes-updated", ());
+
+        let _ = store_document_embeddings(
+            &*pool, &*client, &api_key,
+            &project_id, None,
+            &genesis_node.node_id, &genesis_node.target_node_type,
+            &it.iteration_id, &it.generated_draft_json,
+            it.calculated_score.unwrap_or(0),
+        ).await.map_err(|e| println!(">>> [RAG] Genesis PRD Embedding failed: {}", e));
+
+        let _ = app_handle.emit("pipeline-status", "PRD 임베딩 완료");
+
         let mut json: serde_json::Value = serde_json::from_str(&it.generated_draft_json)
             .map_err(|e| format!("Failed to parse PRD JSON for status update: {}", e))?;
         
@@ -2155,7 +2273,7 @@ pub async fn unconfirm_iteration(
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
     // 1. 해당 이터레이션 정보 조회
-    let iteration = sqlx::query_as::<_, GenerationIteration>(
+    let _iteration = sqlx::query_as::<_, GenerationIteration>(
         "SELECT * FROM generation_iteration WHERE iteration_id = ?"
     )
     .bind(&iteration_id)
@@ -2231,6 +2349,33 @@ pub async fn approve_sad_node(
     .execute(&mut *tx)
     .await
     .map_err(|e| e.to_string())?;
+
+    // [RAG] 승인된 SAD 노드 임베딩
+    let client = app_handle.state::<Client>();
+    let session = sqlx::query("SELECT api_key_encrypted FROM user_session WHERE session_id = 'default-session' AND is_deleted = 0")
+        .fetch_optional(&mut *tx).await.map_err(|e| e.to_string())?
+        .ok_or_else(|| "User session not found".to_string())?;
+    let api_key: String = session.get("api_key_encrypted");
+
+    let _ = app_handle.emit("pipeline-status", "SAD RAG 임베딩 중...");
+    sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
+        .bind("RAG 임베딩 중...")
+        .bind(&now)
+        .bind(&node_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    let _ = app_handle.emit("nodes-updated", ());
+
+    let _ = store_document_embeddings(
+        &pool, &*client, &api_key,
+        &project_id, None,
+        &node.node_id, &node.target_node_type,
+        &confirmed_iter.iteration_id, &confirmed_iter.generated_draft_json,
+        confirmed_iter.calculated_score.unwrap_or(0),
+    ).await.map_err(|e| println!(">>> [RAG] SAD Node Embedding failed: {}", e));
+
+    let _ = app_handle.emit("pipeline-status", "SAD 임베딩 완료");
 
     // 4. 다음 단계 활성화 처리
     if node.target_node_type == "SAD_Global" {
@@ -2617,6 +2762,16 @@ pub async fn run_module_pipeline(
         .map_err(|e| e.to_string())?;
         
         if let Some(iter) = best_iter {
+            let _ = app_handle.emit("pipeline-status", format!("[{}] RAG 임베딩 중...", module.module_name));
+            sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
+                .bind("RAG 임베딩 중...")
+                .bind(Utc::now().to_rfc3339())
+                .bind(&node.node_id)
+                .execute(&*pool)
+                .await
+                .map_err(|e| e.to_string())?;
+            let _ = app_handle.emit("nodes-updated", ());
+
             let _ = store_document_embeddings(
                 &*pool, &client, &api_key,
                 &module.project_id, Some(&module_id),
@@ -2624,6 +2779,8 @@ pub async fn run_module_pipeline(
                 &iter.iteration_id, &iter.generated_draft_json,
                 iter.calculated_score.unwrap_or(0),
             ).await.map_err(|e| println!(">>> [RAG] Embedding storage failed (non-fatal): {}", e));
+
+            let _ = app_handle.emit("pipeline-status", format!("[{}] 임베딩 완료", module.module_name));
         }
 
         trigger_module_next_nodes(&app_handle, &module_id, &node_type).await?;
@@ -2662,17 +2819,10 @@ async fn generate_draft_with_context(
     let schema_obj = crate::schemas::get_schema_for_node(&node_normalized);
     let combined_sys_prompt = format!("$COMMON_RULES\n{}\n\n$DOMAIN_SPECIFIC_RULE\n{}", common_prompt, domain_prompt);
     
-    let mut user_prompt = if node_type != "PRD" {
-        format!(
-            "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}{}\n\n위 정보를 바탕으로 기획서를 작성하십시오.",
-            node_type, iteration, input_text, rag_context
-        )
-    } else {
-        format!(
-            "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n제공된 글로벌 아키텍처 규칙과 모듈 명세를 바탕으로 상세 기획서(PRD)를 작성하십시오.",
-            node_type, iteration
-        )
-    };
+    let mut user_prompt = format!(
+        "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}{}\n\n위 정보를 바탕으로 기획서를 작성하십시오.",
+        node_type, iteration, input_text, rag_context
+    );
 
     // 글로벌 컨텍스트 주입
     if !global_context.is_empty() {

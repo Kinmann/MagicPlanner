@@ -399,9 +399,9 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
     fetchNodes();
     fetchModules();
     const interval = setInterval(() => { fetchNodes(); fetchProject(); fetchModules(); }, 3000);
-    const unlistenStatusPromise = listen<string>('pipeline-status', () => {
-      // setStatusMessage(event.payload);
-      // setTimeout(() => setStatusMessage(null), 5000);
+    const unlistenStatusPromise = listen<string>('pipeline-status', (event) => {
+      // 전역 상태가 필요한 경우 여기서 추가 처리 가능
+      console.log(">>> Global Pipeline Status:", event.payload);
     });
     
     const unlistenNodesPromise = listen<void>('nodes-updated', () => {

@@ -243,15 +243,54 @@ pub async fn save_api_key(
             is_api_key_valid = 1,
             updated_at = excluded.updated_at"
     )
-    .bind(session_id)
-    .bind(api_key) // 암호화 없이 저장 (MVP 수준)
-    .bind(&now)
-    .bind(&now)
     .execute(&*pool)
     .await
     .map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+/// 특정 노드 타입의 승인된(is_pass=1) 가장 최신 이터레이션 결과를 가져오는 헬퍼
+async fn get_approved_node_output(pool: &SqlitePool, project_id: &str, node_type: &str) -> String {
+    let res = sqlx::query(
+        "SELECT generated_draft_json FROM generation_iteration 
+         WHERE node_id = (SELECT node_id FROM document_node WHERE project_id = ? AND target_node_type = ?) 
+         AND is_pass = 1 AND is_deleted = 0 
+         ORDER BY created_at DESC LIMIT 1"
+    )
+    .bind(project_id)
+    .bind(node_type)
+    .fetch_optional(pool)
+    .await;
+
+    match res {
+        Ok(Some(row)) => row.get::<String, _>("generated_draft_json"),
+        _ => "{}".to_string(),
+    }
+}
+
+/// v2: GPRD 3단계(1-A, 1-B, 1-C)의 모든 승인된 내용을 가져와 하나의 객체로 병합하여 반환합니다.
+async fn get_full_approved_prd(pool: &SqlitePool, project_id: &str) -> String {
+    let types = vec!["GPRD_Context_Goal", "GPRD_Capability_Actor", "GPRD_Architecture_Schema"];
+    let mut merged = serde_json::json!({});
+
+    for t in types {
+        let output = get_approved_node_output(pool, project_id, t).await;
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&output) {
+            if let Some(obj) = json.as_object() {
+                for (k, v) in obj {
+                    merged[k] = v.clone();
+                }
+            }
+        }
+    }
+    
+    // 이전 버전(Genesis_PRD 단일 노드)과의 호환성 유지
+    if merged.as_object().map_or(true, |o| o.is_empty()) {
+        return get_approved_node_output(pool, project_id, "Genesis_PRD").await;
+    }
+
+    serde_json::to_string(&merged).unwrap_or_else(|_| "{}".to_string())
 }
 
 #[tauri::command]
@@ -360,12 +399,41 @@ pub async fn create_project(
     .await
     .map_err(|e| e.to_string())?;
 
-    // 2. v2: Genesis PRD 노드 1개만 생성 (기존 8개 → 1개)
-    let node_id = Uuid::new_v4().to_string();
+    // 2. v2 개편: Genesis PRD를 3개의 서브 노드로 분할 생성
+    let now = Utc::now().to_rfc3339();
+    
+    // 1-A: Context & Goal Builder (READY)
+    let node_id_1a = Uuid::new_v4().to_string();
     sqlx::query(
-        "INSERT INTO document_node (node_id, project_id, module_id, target_node_type, node_category, node_state, current_iteration, max_iterations, threshold_score, current_best_score, created_at, updated_at, is_deleted) VALUES (?, ?, NULL, 'Genesis_PRD', 'GENESIS', 'READY', 0, 10, 85, 0, ?, ?, 0)"
+        "INSERT INTO document_node (node_id, project_id, module_id, target_node_type, node_category, node_state, current_iteration, max_iterations, threshold_score, current_best_score, created_at, updated_at, is_deleted) VALUES (?, ?, NULL, 'GPRD_Context_Goal', 'GENESIS', 'READY', 0, 10, 85, 0, ?, ?, 0)"
     )
-    .bind(node_id)
+    .bind(node_id_1a)
+    .bind(&project_id)
+    .bind(&now)
+    .bind(&now)
+    .execute(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 1-B: Capability & Actor Brainstormer (PENDING)
+    let node_id_1b = Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO document_node (node_id, project_id, module_id, target_node_type, node_category, node_state, current_iteration, max_iterations, threshold_score, current_best_score, created_at, updated_at, is_deleted) VALUES (?, ?, NULL, 'GPRD_Capability_Actor', 'GENESIS', 'PENDING', 0, 10, 85, 0, ?, ?, 0)"
+    )
+    .bind(node_id_1b)
+    .bind(&project_id)
+    .bind(&now)
+    .bind(&now)
+    .execute(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 1-C: Architecture & Schema Assembler (PENDING)
+    let node_id_1c = Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO document_node (node_id, project_id, module_id, target_node_type, node_category, node_state, current_iteration, max_iterations, threshold_score, current_best_score, created_at, updated_at, is_deleted) VALUES (?, ?, NULL, 'GPRD_Architecture_Schema', 'GENESIS', 'PENDING', 0, 10, 85, 0, ?, ?, 0)"
+    )
+    .bind(node_id_1c)
     .bind(&project_id)
     .bind(&now)
     .bind(&now)
@@ -693,7 +761,7 @@ pub async fn run_pipeline(
                 return Err(msg);
             }
         }
-    } else if node_type == "Genesis_PRD" || current_best_score < threshold {
+    } else if node_type.starts_with("GPRD_") || node_type == "Genesis_PRD" || current_best_score < threshold {
         NodeState::PausedHitl
     } else {
         NodeState::Completed
@@ -893,6 +961,9 @@ async fn trigger_next_nodes(app_handle: tauri::AppHandle, project_id: &str, comp
 
     // 프로젝트 레벨 명세 기반 의존성 맵 정의 (전역 노드만 담당)
     let next_map = vec![
+        ("GPRD_Context_Goal", vec!["GPRD_Capability_Actor"]),
+        ("GPRD_Capability_Actor", vec!["GPRD_Architecture_Schema"]),
+        ("GPRD_Architecture_Schema", vec!["SAD_Global"]),
         ("SAD_Global", vec!["SAD_Module"]),
         ("Genesis_PRD", vec!["SAD_Global"]),
     ];
@@ -909,7 +980,15 @@ async fn trigger_next_nodes(app_handle: tauri::AppHandle, project_id: &str, comp
     // 각 후보 노드에 대해 모든 선행 조건이 충족되었는지 확인
     for target in nodes_to_check {
         let prerequisites = match target {
-            "SAD_Global" => vec!["Genesis_PRD"],
+            "GPRD_Capability_Actor" => vec!["GPRD_Context_Goal"],
+            "GPRD_Architecture_Schema" => vec!["GPRD_Capability_Actor"],
+            "SAD_Global" => {
+                if completed_node_type == "Genesis_PRD" {
+                    vec!["Genesis_PRD"]
+                } else {
+                    vec!["GPRD_Architecture_Schema"]
+                }
+            },
             "SAD_Module" => vec!["SAD_Global"],
             _ => vec![],
         };
@@ -952,6 +1031,41 @@ async fn trigger_next_nodes(app_handle: tauri::AppHandle, project_id: &str, comp
     Ok(())
 }
 
+fn get_prompts_dir(app_handle: &tauri::AppHandle) -> std::path::PathBuf {
+    #[cfg(debug_assertions)]
+    {
+        // 개발 환경(Debug 빌드)에서는 target 폴더의 캐시된 리소스 대신 원본 소스 경로를 최우선 탐색
+        if let Ok(cwd) = std::env::current_dir() {
+            let mut current = Some(cwd.as_path());
+            while let Some(path) = current {
+                let check_paths = vec![
+                    path.join("src-tauri").join("prompts"),
+                    path.join("prompts"),
+                ];
+                for p in check_paths {
+                    if p.exists() {
+                        return p;
+                    }
+                }
+                current = path.parent();
+            }
+        }
+    }
+
+    // 운영 환경(Release 빌드) 또는 소스 경로 탐색 실패 시 Tauri 리소스 경로 사용
+    if let Ok(resource_dir) = app_handle.path().resource_dir() {
+        let p = resource_dir.join("prompts");
+        if p.exists() {
+            return p;
+        }
+    }
+
+    // 최후의 수단
+    let fallback = app_handle.path().resource_dir().unwrap_or_default().join("prompts");
+    println!(">>> [DEBUG] get_prompts_dir: No prompts directory found. Fallback to: {:?}", fallback);
+    fallback
+}
+
 async fn generate_draft(
     app_handle: &tauri::AppHandle,
     pool: &SqlitePool,
@@ -973,34 +1087,63 @@ async fn generate_draft(
             String::new()
         });
     let node_normalized = node_type.to_lowercase().replace(" ", "_");
-    let resource_dir = app_handle.path().resource_dir().map_err(|e: tauri::Error| PipelineError::Internal(e.to_string()))?;
+    let prompts_dir = get_prompts_dir(&app_handle);
     
-    let common_prompt = std::fs::read_to_string(resource_dir.join("prompts/generator/common.txt")).unwrap_or_else(|e| {
+    let common_prompt = std::fs::read_to_string(prompts_dir.join("generator/common.txt")).unwrap_or_else(|e| {
         println!("!!! ERROR loading common schema: {}", e);
         String::new()
     });
-    let domain_prompt = std::fs::read_to_string(resource_dir.join(format!("prompts/generator/{}.txt", node_normalized))).unwrap_or_else(|e| {
-        println!("!!! ERROR loading domain schema: {}", e);
+    let gen_path = prompts_dir.join("generator").join(format!("{}.txt", node_normalized));
+    let mut domain_prompt = std::fs::read_to_string(&gen_path).unwrap_or_else(|e| {
+        println!("!!! ERROR loading domain schema at {:?}: {}", gen_path, e);
         String::new()
     });
     
+    // v2: GPRD 서브 노드 동적 변수 주입
+    if node_type.starts_with("GPRD_") {
+        domain_prompt = domain_prompt.replace("{{RAW_INPUT}}", input_text);
+        
+        if node_type == "GPRD_Capability_Actor" || node_type == "GPRD_Architecture_Schema" {
+            let approved_1a = get_approved_node_output(pool, project_id, "GPRD_Context_Goal").await;
+            domain_prompt = domain_prompt.replace("{{APPROVED_1A}}", &approved_1a);
+        }
+        
+        if node_type == "GPRD_Architecture_Schema" {
+            let approved_1b = get_approved_node_output(pool, project_id, "GPRD_Capability_Actor").await;
+            domain_prompt = domain_prompt.replace("{{APPROVED_1B}}", &approved_1b);
+        }
+
+        let feedback_text = if previous_feedback.is_empty() {
+            "없음".to_string()
+        } else {
+            previous_feedback.join("\n")
+        };
+        domain_prompt = domain_prompt.replace("{{EVALUATOR_FEEDBACK}}", &feedback_text);
+        domain_prompt = domain_prompt.replace("{{PREVIOUS_DRAFT}}", previous_draft);
+    }
+
     let schema_obj = crate::schemas::get_schema_for_node(&node_normalized);
     
     let combined_sys_prompt = format!("{}\n\n[DOMAIN SPECIFIC RULE]\n{}", common_prompt, domain_prompt);
     println!(">>> System Prompt Loaded! Length: {} chars", combined_sys_prompt.len());
     
-    let mut user_prompt = format!(
-        "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}{}",
-        node_type, iteration, input_text, rag_context
-    );
-
-    if !previous_feedback.is_empty() {
-        user_prompt = format!(
-            "{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n$PREVIOUS_DRAFT\n{}",
-            user_prompt, previous_feedback.join("\n"), previous_draft
+    let user_prompt = if node_type.starts_with("GPRD_") {
+        // GPRD 노드는 도메인 프롬프트 내에 모든 변수가 주입되었으므로 최소한의 구분자만 전달
+        format!("$DOCUMENT_TYPE: {}\n$ITERATION: {}", node_type, iteration)
+    } else {
+        let mut up = format!(
+            "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}{}",
+            node_type, iteration, input_text, rag_context
         );
-        println!(">>> Appending Previous Feedback to Generator Prompt");
-    }
+
+        if !previous_feedback.is_empty() {
+            up = format!(
+                "{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n$PREVIOUS_DRAFT\n{}",
+                up, previous_feedback.join("\n"), previous_draft
+            );
+        }
+        up
+    };
 
     call_gemini(client, api_key, &combined_sys_prompt, &user_prompt, schema_obj).await
 }
@@ -1028,16 +1171,37 @@ async fn evaluate_draft(
             String::new()
         });
     let node_normalized = node_type.to_lowercase().replace(" ", "_");
-    let resource_dir = app_handle.path().resource_dir().map_err(|e: tauri::Error| PipelineError::Internal(e.to_string()))?;
+    let prompts_dir = get_prompts_dir(&app_handle);
 
-    let common_rubric = std::fs::read_to_string(resource_dir.join("prompts/evaluator/common.txt")).unwrap_or_else(|e| {
+    let common_rubric = std::fs::read_to_string(prompts_dir.join("evaluator/common.txt")).unwrap_or_else(|e| {
         println!("!!! ERROR loading common rubric: {}", e);
         String::new()
     });
-    let domain_rubric = std::fs::read_to_string(resource_dir.join(format!("prompts/evaluator/{}.txt", node_normalized))).unwrap_or_else(|e| {
-        println!("!!! ERROR loading domain rubric: {}", e);
+    let eval_path = prompts_dir.join("evaluator").join(format!("{}.txt", node_normalized));
+    let mut domain_rubric = std::fs::read_to_string(&eval_path).unwrap_or_else(|e| {
+        println!("!!! ERROR loading domain rubric at {:?}: {}", eval_path, e);
         String::new()
     });
+
+    // v2: GPRD 서브 노드 루브릭 변수 주입
+    if node_type.starts_with("GPRD_") {
+        if let Some(input) = &input_text {
+            domain_rubric = domain_rubric.replace("{{RAW_INPUT}}", input);
+        }
+        domain_rubric = domain_rubric.replace("{{GENERATED_1A}}", draft);
+        domain_rubric = domain_rubric.replace("{{GENERATED_1B}}", draft);
+        domain_rubric = domain_rubric.replace("{{GENERATED_1C}}", draft);
+
+        if node_type == "GPRD_Capability_Actor" || node_type == "GPRD_Architecture_Schema" {
+            let approved_1a = get_approved_node_output(pool, project_id, "GPRD_Context_Goal").await;
+            domain_rubric = domain_rubric.replace("{{APPROVED_1A}}", &approved_1a);
+        }
+        
+        if node_type == "GPRD_Architecture_Schema" {
+            let approved_1b = get_approved_node_output(pool, project_id, "GPRD_Capability_Actor").await;
+            domain_rubric = domain_rubric.replace("{{APPROVED_1B}}", &approved_1b);
+        }
+    }
     
     let combined_sys_prompt = format!("$COMMON_RUBRIC\n{}\n\n$DOMAIN_RUBRIC\n{}", common_rubric, domain_rubric);
     println!(">>> Evaluator Prompt Loaded! Length: {} chars", combined_sys_prompt.len());
@@ -1231,10 +1395,10 @@ pub async fn confirm_genesis_prd_iteration(
 
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
-    // 1. 해당 노드의 모든 이터레이션 is_pass 초기화
-    sqlx::query("UPDATE generation_iteration SET is_pass = 0, updated_at = ? WHERE node_id = (SELECT node_id FROM document_node WHERE project_id = ? AND target_node_type = 'Genesis_PRD')")
+    // 1. 해당 이터레이션이 속한 노드의 모든 이터레이션 is_pass 초기화 (다른 스테이지 간섭 방지)
+    sqlx::query("UPDATE generation_iteration SET is_pass = 0, updated_at = ? WHERE node_id = (SELECT node_id FROM generation_iteration WHERE iteration_id = ?)")
         .bind(&now)
-        .bind(&project_id)
+        .bind(&iteration_id)
         .execute(&mut *tx)
         .await
         .map_err(|e| e.to_string())?;
@@ -1251,6 +1415,42 @@ pub async fn confirm_genesis_prd_iteration(
     Ok(())
 }
 
+/// Genesis PRD 개별 노드 승인 (SAD와 동일한 흐름 제공)
+#[tauri::command]
+pub async fn approve_genesis_prd_node(
+    app_handle: tauri::AppHandle,
+    pool: tauri::State<'_, SqlitePool>,
+    node_id: String,
+) -> Result<(), String> {
+    println!(">>> Approving Genesis PRD node: {}", node_id);
+    let now = Utc::now().to_rfc3339();
+
+    // 1. 노드 정보 조회 (project_id와 target_node_type 확보)
+    let node = sqlx::query_as::<_, DocumentNode>(
+        "SELECT * FROM document_node WHERE node_id = ?"
+    )
+    .bind(&node_id)
+    .fetch_optional(&*pool)
+    .await
+    .map_err(|e| e.to_string())?
+    .ok_or_else(|| "Node not found".to_string())?;
+
+    // 2. 노드 상태를 COMPLETED로 변경
+    sqlx::query(
+        "UPDATE document_node SET node_state = 'COMPLETED', updated_at = ? WHERE node_id = ?"
+    )
+    .bind(&now)
+    .bind(&node_id)
+    .execute(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 3. 다음 노드 트리거 (Stage 1 -> Stage 2 등)
+    trigger_next_nodes(app_handle, &node.project_id, &node.target_node_type).await?;
+
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn approve_genesis_prd(
     pool: tauri::State<'_, SqlitePool>,
@@ -1260,9 +1460,9 @@ pub async fn approve_genesis_prd(
     println!(">>> Approving Genesis PRD for project: {}", project_id);
     let now = Utc::now().to_rfc3339();
 
-    // 1. Genesis PRD 노드를 COMPLETED로 변경
+    // 1. GPRD_Architecture_Schema (최종 단계) 또는 기존 Genesis_PRD 노드를 COMPLETED로 변경
     sqlx::query(
-        "UPDATE document_node SET node_state = 'COMPLETED', updated_at = ? WHERE project_id = ? AND target_node_type = 'Genesis_PRD'"
+        "UPDATE document_node SET node_state = 'COMPLETED', updated_at = ? WHERE project_id = ? AND target_node_type IN ('Genesis_PRD', 'GPRD_Architecture_Schema')"
     )
     .bind(&now)
     .bind(&project_id)
@@ -1270,20 +1470,23 @@ pub async fn approve_genesis_prd(
     .await
     .map_err(|e| e.to_string())?;
 
-    // 1.1 최적의 이터레이션 데이터를 찾아 status를 HUMAN_APPROVED로 업데이트
-    let genesis_node = sqlx::query_as::<_, DocumentNode>(
-        "SELECT * FROM document_node WHERE project_id = ? AND target_node_type = 'Genesis_PRD'"
+    // 1.1 통합 PRD 데이터 생성 (1-A + 1-B + 1-C 병합)
+    let full_prd = get_full_approved_prd(&*pool, &project_id).await;
+    
+    // 1.2 최종 노드 식별 (RAG 연결용)
+    let final_node = sqlx::query_as::<_, DocumentNode>(
+        "SELECT * FROM document_node WHERE project_id = ? AND target_node_type IN ('GPRD_Architecture_Schema', 'Genesis_PRD') ORDER BY created_at DESC LIMIT 1"
     )
     .bind(&project_id)
     .fetch_optional(&*pool)
     .await
     .map_err(|e| e.to_string())?
-    .ok_or_else(|| "Genesis PRD node not found".to_string())?;
+    .ok_or_else(|| "Final GPRD node not found".to_string())?;
 
     let latest_it = sqlx::query_as::<_, GenerationIteration>(
         "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY is_pass DESC, calculated_score DESC LIMIT 1"
     )
-    .bind(&genesis_node.node_id)
+    .bind(&final_node.node_id)
     .fetch_optional(&*pool)
     .await
     .map_err(|e| e.to_string())?;
@@ -1291,13 +1494,18 @@ pub async fn approve_genesis_prd(
     println!(">>> Genesis PRD approved. Shifted to SAD Global phase for project: {}", project_id);
     let _ = app_handle.emit("nodes-updated", ());
 
-    // RAG 임베딩 백그라운드 처리
+    // [변경] RAG 임베딩 대기 없이 즉시 SAD 단계로 전환 (UI 응답성 개선)
+    let _ = actual_approve_genesis_prd(&app_handle, &*pool, &project_id).await;
+
+    // RAG 임베딩 백그라운드 처리: 통합본을 단일 문서로 색인
     if let Some(it) = latest_it {
         let pool_clone = pool.inner().clone();
         let app_handle_clone = app_handle.clone();
         let project_id_clone = project_id.clone();
-        let node_id_clone = genesis_node.node_id.clone();
-        let node_type_clone = genesis_node.target_node_type.clone();
+        let node_id_clone = final_node.node_id.clone();
+        let node_type_clone = final_node.target_node_type.clone();
+        let iteration_id_clone = it.iteration_id.clone();
+        let score = it.calculated_score.unwrap_or(0);
 
         tauri::async_runtime::spawn(async move {
             let client = app_handle_clone.state::<Client>();
@@ -1309,31 +1517,30 @@ pub async fn approve_genesis_prd(
                 _ => return,
             };
 
-            let _ = app_handle_clone.emit("pipeline-status", "PRD RAG 임베딩 중...");
+            let _ = app_handle_clone.emit("pipeline-status", "통합 PRD RAG 임베딩 중...");
             let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-                .bind("RAG 임베딩 중...")
+                .bind("통합 RAG 임베딩 중...")
                 .bind(Utc::now().to_rfc3339())
                 .bind(&node_id_clone)
                 .execute(&pool_clone)
                 .await;
             let _ = app_handle_clone.emit("nodes-updated", ());
 
+            // [핵심] get_full_approved_prd 결과물(full_prd)을 색인하여 중복 제거
             let embedding_res = store_document_embeddings(
                 &pool_clone, &*client, &api_key,
                 &project_id_clone, None,
                 &node_id_clone, &node_type_clone,
-                &it.iteration_id, &it.generated_draft_json,
-                it.calculated_score.unwrap_or(0),
+                &iteration_id_clone, &full_prd,
+                score,
             ).await;
 
             match embedding_res {
                 Ok(_) => {
-                    let _ = app_handle_clone.emit("pipeline-status", "PRD 임베딩 완료");
-                    // [수정] 성공 시에만 기존 로직(phase 전환 및 SAD 노드 생성) 실행
-                    let _ = actual_approve_genesis_prd(&app_handle_clone, &pool_clone, &project_id_clone).await;
+                    let _ = app_handle_clone.emit("pipeline-status", "통합 PRD 임베딩 완료");
                 },
                 Err(e) => {
-                    let err_msg = format!("PRD RAG 임베딩 실패: {}", e);
+                    let err_msg = format!("통합 PRD RAG 임베딩 실패: {}", e);
                     println!(">>> [RAG-BG] {}", err_msg);
                     
                     let error_info = RagErrorInfo {
@@ -1343,7 +1550,7 @@ pub async fn approve_genesis_prd(
                         error_message: e.to_string(),
                     };
                     let _ = app_handle_clone.emit("rag-error", error_info);
-                    let _ = app_handle_clone.emit("pipeline-status", "PRD 임베딩 실패 (중단)");
+                    let _ = app_handle_clone.emit("pipeline-status", "통합 PRD 임베딩 실패 (중단)");
                 }
             }
         });
@@ -1425,8 +1632,8 @@ pub async fn manually_trigger_next_nodes(
         }
     }
 
-    // 제네시스 PRD인 경우 시뮬레이션
-    if completed_node_type == "Genesis_PRD" {
+    // 제네시스 PRD 또는 GPRD 최종 노드인 경우 시뮬레이션
+    if completed_node_type == "Genesis_PRD" || completed_node_type == "GPRD_Architecture_Schema" {
         return actual_approve_genesis_prd(&app_handle, &*pool, &project_id).await;
     }
 
@@ -1488,25 +1695,12 @@ pub async fn run_sad_global_pipeline(
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "Project not found".to_string())?;
 
-    // Genesis PRD 최고 점수 결과 조회
-    let genesis_node = sqlx::query_as::<_, DocumentNode>(
-        "SELECT node_id, project_id, module_id, target_node_type, node_category, node_state, current_iteration, max_iterations, threshold_score, current_best_score, api_error_code, api_error_message, created_at, updated_at FROM document_node WHERE project_id = ? AND target_node_type = 'Genesis_PRD'"
-    )
-    .bind(&project_id)
-    .fetch_optional(&*pool)
-    .await
-    .map_err(|e| e.to_string())?
-    .ok_or_else(|| "Genesis PRD node not found".to_string())?;
-
-    let genesis_prd_content = sqlx::query_as::<_, GenerationIteration>(
-        "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 AND json_extract(generated_draft_json, '$.metadata.status') = 'HUMAN_APPROVED' ORDER BY created_at DESC LIMIT 1"
-    )
-    .bind(&genesis_node.node_id)
-    .fetch_optional(&*pool)
-    .await
-    .map_err(|e| e.to_string())?
-    .map(|it| it.generated_draft_json)
-    .ok_or_else(|| "확정된 Genesis PRD가 없습니다. PRD 단계에서 'Approve'를 먼저 완료해주세요.".to_string())?;
+    // v2: GPRD 3단계 통합 데이터(1-A, 1-B, 1-C)를 가져옵니다.
+    let genesis_prd_content = get_full_approved_prd(&*pool, &project_id).await;
+    
+    if genesis_prd_content == "{}" {
+        return Err("확정된 Genesis PRD가 없거나 통합할 수 없습니다. PRD 전 단계를 먼저 승인해주세요.".to_string());
+    }
 
     // SAD_Global 노드 상태 조회
     let sad_node = sqlx::query_as::<_, DocumentNode>(
@@ -1562,8 +1756,8 @@ pub async fn run_sad_global_pipeline(
         }
     }
 
-    let resource_dir = app_handle.path().resource_dir().map_err(|e| e.to_string())?;
-    let common_prompt = std::fs::read_to_string(resource_dir.join("prompts/generator/common.txt")).unwrap_or_else(|_| {
+    let prompts_dir = get_prompts_dir(&app_handle);
+    let common_prompt = std::fs::read_to_string(prompts_dir.join("generator/common.txt")).unwrap_or_else(|_| {
         println!("!!! Failed to load common.txt generator prompt");
         String::new()
     });
@@ -1611,7 +1805,7 @@ pub async fn run_sad_global_pipeline(
             };
 
             let schema_obj = crate::schemas::get_schema_for_node(ctx_type);
-            let resource_path = resource_dir.join(format!("prompts/generator/{}.txt", ctx_type));
+            let resource_path = prompts_dir.join(format!("generator/{}.txt", ctx_type));
             let type_prompt = std::fs::read_to_string(&resource_path).unwrap_or_else(|_| {
                 println!("!!! Missing prompt: {:?}", resource_path);
                 String::new()
@@ -1662,10 +1856,10 @@ pub async fn run_sad_global_pipeline(
 
         // 글로벌 컨텍스트 통합 평가
         let eval_schema = crate::schemas::get_evaluation_schema();
-        let resource_dir = app_handle.path().resource_dir().map_err(|e: tauri::Error| e.to_string())?;
+        let prompts_dir = get_prompts_dir(&app_handle);
         
-        let common_rubric = std::fs::read_to_string(resource_dir.join("prompts/evaluator/common.txt")).unwrap_or_else(|_| String::new());
-        let eval_rubric = std::fs::read_to_string(resource_dir.join("prompts/evaluator/sad_global.txt")).unwrap_or_default();
+        let common_rubric = std::fs::read_to_string(prompts_dir.join("evaluator/common.txt")).unwrap_or_else(|_| String::new());
+        let eval_rubric = std::fs::read_to_string(prompts_dir.join("evaluator/sad_global.txt")).unwrap_or_default();
         
         let eval_sys_prompt = format!("$COMMON_RUBRIC\n{}\n\n$DOMAIN_RUBRIC\n{}", common_rubric, eval_rubric);
         let eval_user_prompt = format!(
@@ -1864,25 +2058,12 @@ pub async fn run_sad_module_pipeline(
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "Project not found".to_string())?;
 
-    // Genesis PRD 조회
-    let genesis_node = sqlx::query_as::<_, DocumentNode>(
-        "SELECT * FROM document_node WHERE project_id = ? AND target_node_type = 'Genesis_PRD'"
-    )
-    .bind(&project_id)
-    .fetch_optional(&*pool)
-    .await
-    .map_err(|e| e.to_string())?
-    .ok_or_else(|| "Genesis PRD node not found".to_string())?;
-
-    let genesis_prd_content = sqlx::query_as::<_, GenerationIteration>(
-        "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 AND json_extract(generated_draft_json, '$.metadata.status') = 'HUMAN_APPROVED' ORDER BY created_at DESC LIMIT 1"
-    )
-    .bind(&genesis_node.node_id)
-    .fetch_optional(&*pool)
-    .await
-    .map_err(|e| e.to_string())?
-    .map(|it| it.generated_draft_json)
-    .ok_or_else(|| "확정된 Genesis PRD가 없습니다. PRD 단계에서 'Approve'를 먼저 완료해주세요.".to_string())?;
+    // v2: GPRD 3단계 통합 데이터(1-A, 1-B, 1-C)를 가져옵니다.
+    let genesis_prd_content = get_full_approved_prd(&*pool, &project_id).await;
+    
+    if genesis_prd_content == "{}" {
+        return Err("확정된 Genesis PRD가 없거나 통합할 수 없습니다. PRD 전 단계를 먼저 승인해주세요.".to_string());
+    }
 
     // 앞 단계인 SAD_Global의 결과(글로벌 컨텍스트) 조회
     let contexts = sqlx::query(
@@ -1955,8 +2136,8 @@ pub async fn run_sad_module_pipeline(
     }
     let mut last_error = String::new();
 
-    let resource_dir = app_handle.path().resource_dir().map_err(|e| e.to_string())?;
-    let common_prompt = std::fs::read_to_string(resource_dir.join("prompts/generator/common.txt")).unwrap_or_else(|_| {
+    let prompts_dir = get_prompts_dir(&app_handle);
+    let common_prompt = std::fs::read_to_string(prompts_dir.join("generator/common.txt")).unwrap_or_else(|_| {
         println!("!!! Failed to load common.txt generator prompt");
         String::new()
     });
@@ -1975,7 +2156,7 @@ pub async fn run_sad_module_pipeline(
             let _ = app_handle.emit("pipeline-status", format!("SAD Stage 2 (Iter {}): {} 생성 중...", current_iter, ctx_type));
 
             let schema_obj = crate::schemas::get_schema_for_node(ctx_type);
-            let resource_path = resource_dir.join(format!("prompts/generator/{}.txt", ctx_type));
+            let resource_path = prompts_dir.join(format!("generator/{}.txt", ctx_type));
             let type_prompt = std::fs::read_to_string(&resource_path).unwrap_or_else(|_| {
                 println!("!!! Missing prompt: {:?}", resource_path);
                 String::new()
@@ -2055,10 +2236,10 @@ pub async fn run_sad_module_pipeline(
         }
 
         let eval_schema = crate::schemas::get_evaluation_schema();
-        let resource_dir = app_handle.path().resource_dir().map_err(|e: tauri::Error| e.to_string())?;
+        let prompts_dir = get_prompts_dir(&app_handle);
         
-        let common_rubric = std::fs::read_to_string(resource_dir.join("prompts/evaluator/common.txt")).unwrap_or_else(|_| String::new());
-        let eval_rubric = std::fs::read_to_string(resource_dir.join("prompts/evaluator/sad_module.txt")).unwrap_or_default();
+        let common_rubric = std::fs::read_to_string(prompts_dir.join("evaluator/common.txt")).unwrap_or_else(|_| String::new());
+        let eval_rubric = std::fs::read_to_string(prompts_dir.join("evaluator/sad_module.txt")).unwrap_or_default();
         
         let eval_sys_prompt = format!("$COMMON_RUBRIC\n{}\n\n$DOMAIN_RUBRIC\n{}", common_rubric, eval_rubric);
         let eval_user_prompt = format!(
@@ -2947,10 +3128,10 @@ async fn generate_draft_with_context(
             String::new()
         });
     let node_normalized = node_type.to_lowercase().replace(" ", "_");
-    let resource_dir = app_handle.path().resource_dir().map_err(|e: tauri::Error| PipelineError::Internal(e.to_string()))?;
+    let prompts_dir = get_prompts_dir(&app_handle);
     
-    let common_prompt = std::fs::read_to_string(resource_dir.join("prompts/generator/common.txt")).unwrap_or_default();
-    let domain_prompt = std::fs::read_to_string(resource_dir.join(format!("prompts/generator/{}.txt", node_normalized))).unwrap_or_default();
+    let common_prompt = std::fs::read_to_string(prompts_dir.join("generator/common.txt")).unwrap_or_default();
+    let domain_prompt = std::fs::read_to_string(prompts_dir.join(format!("generator/{}.txt", node_normalized))).unwrap_or_default();
     
     let schema_obj = crate::schemas::get_schema_for_node(&node_normalized);
     let combined_sys_prompt = format!("$COMMON_RULES\n{}\n\n$DOMAIN_SPECIFIC_RULE\n{}", common_prompt, domain_prompt);
@@ -3219,7 +3400,7 @@ pub async fn delete_generation_iteration(
 
     // 2. Lock Policy 체크 (후행 작업 진행 중이면 삭제 불가)
     // - Genesis PRD: SAD 단계 이상 진행 확인
-    if node_type == "Genesis_PRD" {
+    if node_type == "Genesis_PRD" || node_type.starts_with("GPRD_") {
         let sad_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM document_node WHERE project_id = ? AND target_node_type LIKE 'SAD_%' AND node_state != 'PENDING'")
             .bind(&project_id)
             .fetch_one(&*pool)
@@ -3238,7 +3419,7 @@ pub async fn delete_generation_iteration(
     }
     // - SAD_Module: 하위 모듈 실제 데이터 생성 확인
     else if node_type == "SAD_Module" {
-         let sub_mod_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM document_node WHERE project_id = ? AND target_node_type NOT LIKE 'SAD_%' AND target_node_type != 'Genesis_PRD' AND node_state != 'PENDING'")
+         let sub_mod_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM document_node WHERE project_id = ? AND target_node_type NOT LIKE 'SAD_%' AND target_node_type NOT LIKE 'GPRD_%' AND target_node_type != 'Genesis_PRD' AND node_state != 'PENDING'")
             .bind(&project_id)
             .fetch_one(&*pool)
             .await
@@ -3336,7 +3517,7 @@ fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
     
     match node_type.to_lowercase().replace(" ", "_").as_str() {
         // ── Genesis PRD: 비즈니스 컨텍스트 / 역할 / 에픽 / 기술스택 분리 ──
-        "genesis_prd" => {
+        "genesis_prd" | "gprd_context_goal" | "gprd_capability_actor" | "gprd_architecture_schema" => {
             // 비즈니스 컨텍스트 + 메타데이터 (프로젝트 개요)
             if let (Some(meta), Some(biz)) = (val.get("metadata"), val.get("business_context")) {
                 chunks.push(format!("[GENESIS_PRD:OVERVIEW]\nmetadata: {}\nbusiness_context: {}",

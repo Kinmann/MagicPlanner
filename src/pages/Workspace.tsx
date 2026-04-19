@@ -703,7 +703,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
             <motion.div key="genesis" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <GenesisPrdView
                 projectId={projectId}
-                node={nodes.find(n => n.target_node_type === 'Genesis_PRD') || null}
+                nodes={nodes.filter(n => n.target_node_type.startsWith('GPRD_'))}
                 isLocked={currentPhase !== 'GENESIS_PRD'}
                 onApprove={async () => {
                   setLoading(true);

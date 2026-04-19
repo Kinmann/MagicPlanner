@@ -8,10 +8,10 @@ use std::sync::{Arc, Mutex};
 pub struct ActiveTasks(pub Arc<Mutex<HashSet<String>>>);
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
+// #[tauri::command]
+// fn greet(name: &str) -> String {
+//     format!("Hello, {}! You've been greeted from Rust!", name)
+// }
 
 use reqwest::Client;
 use tauri::Manager;
@@ -217,7 +217,7 @@ pub fn run() {
                 }
                 
                 // 4. 버려진(Stale) RAG 상태 초기화 (앱 시작 시 오버레이 스턱 방지)
-                let _ = sqlx::query("UPDATE document_node SET last_action = NULL WHERE last_action LIKE 'RAG 임베딩 중%'").execute(&pool).await;
+                let _ = sqlx::query("UPDATE document_node SET last_action = NULL WHERE last_action LIKE '%RAG 임베딩 중%'").execute(&pool).await;
                 
                 Ok::<sqlx::SqlitePool, String>(pool)
             })?;

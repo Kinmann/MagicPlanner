@@ -59,15 +59,18 @@ const SadOverview: React.FC<SadOverviewProps> = ({
     } catch { }
   };
 
-  const fetchIterations = async () => {
+  const fetchIterations = async (forceSelect = false) => {
     try {
       if (globalNode?.node_id) {
         const result = await invoke<GenerationIteration[]>('get_node_iterations', { nodeId: globalNode.node_id });
         setGlobalIters(result);
-        if (result.length > 0 && !selectedGlobalIterId) {
-          // 최신 리비전을 기본으로 선택 (Genesis PRD와 동일하게 자동 확정/선택 방지)
-          const defaultIter = result[result.length - 1];
-          setSelectedGlobalIterId(defaultIter.iteration_id);
+        if (result.length > 0) {
+          if (!selectedGlobalIterId || forceSelect) {
+            // confirmed(is_pass=true) 항목이 있으면 그것을 선택, 없으면 가장 최신(마지막 인덱스) 선택
+            const passIter = result.find(it => it.is_pass);
+            const target = passIter || result[result.length - 1];
+            setSelectedGlobalIterId(target.iteration_id);
+          }
         }
       }
 
@@ -77,9 +80,12 @@ const SadOverview: React.FC<SadOverviewProps> = ({
       if (moduleNode?.node_id) {
         const result = await invoke<GenerationIteration[]>('get_node_iterations', { nodeId: moduleNode.node_id });
         setModuleIters(result);
-        if (result.length > 0 && !selectedModuleIterId) {
-          const defaultIter = result[result.length - 1];
-          setSelectedModuleIterId(defaultIter.iteration_id);
+        if (result.length > 0) {
+          if (!selectedModuleIterId || forceSelect) {
+            const passIter = result.find(it => it.is_pass);
+            const target = passIter || result[result.length - 1];
+            setSelectedModuleIterId(target.iteration_id);
+          }
         }
       }
     } catch { }
@@ -100,8 +106,9 @@ const SadOverview: React.FC<SadOverviewProps> = ({
 
   useEffect(() => {
     fetchContexts();
-    fetchIterations();
-  }, [projectId, globalNode?.node_id, moduleNode?.node_id]);
+    // 노드 상태가 변했거나 처음 로드될 때만 이터레이션 정보를 가져옴 (강제 선택 로직 포함)
+    fetchIterations(true);
+  }, [projectId, globalNode?.node_id, globalNode?.node_state, moduleNode?.node_id, moduleNode?.node_state]);
 
   useEffect(() => {
     if (currentNode && !isMaxFocused) {
@@ -140,14 +147,14 @@ const SadOverview: React.FC<SadOverviewProps> = ({
       await invoke(cmd, args);
 
       await fetchContexts();
-      await fetchIterations();
+      await fetchIterations(true);
       onRefresh();
     } catch (err: any) {
       setError(err.toString());
     } finally {
       // 에러가 나더라도 생성된 이터레이션이나 컨텍스트가 있을 수 있으므로 동기화
       await fetchContexts();
-      await fetchIterations();
+      await fetchIterations(true);
       onRefresh();
       setLoading(false);
     }
@@ -160,7 +167,7 @@ const SadOverview: React.FC<SadOverviewProps> = ({
     setLoading(true);
     try {
       await invoke('confirm_sad_iteration', { projectId, iterationId: iterId });
-      await fetchIterations();
+      await fetchIterations(true);
       await fetchContexts();
       onRefresh();
     } catch (err: any) {

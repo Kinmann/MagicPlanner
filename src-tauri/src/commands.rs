@@ -243,6 +243,10 @@ pub async fn save_api_key(
             is_api_key_valid = 1,
             updated_at = excluded.updated_at"
     )
+    .bind(session_id)
+    .bind(api_key)
+    .bind(&now)
+    .bind(&now)
     .execute(&*pool)
     .await
     .map_err(|e| e.to_string())?;
@@ -1797,7 +1801,7 @@ pub async fn run_sad_global_pipeline(
     }
     let _guard = TaskGuard { tasks: active_tasks.0.clone(), node_id: sad_node.node_id.clone() };
 
-    let project = sqlx::query_as::<_, Project>(
+    let _project = sqlx::query_as::<_, Project>(
         "SELECT * FROM project WHERE project_id = ?"
     )
     .bind(&project_id)
@@ -2160,7 +2164,7 @@ pub async fn run_sad_module_pipeline(
     }
     let _guard = TaskGuard { tasks: active_tasks.0.clone(), node_id: sad_node.node_id.clone() };
 
-    let project = sqlx::query_as::<_, Project>(
+    let _project = sqlx::query_as::<_, Project>(
         "SELECT * FROM project WHERE project_id = ?"
     )
     .bind(&project_id)
@@ -2624,7 +2628,7 @@ pub async fn confirm_sad_iteration(
     }
 
     // 6. 노드의 최적 점수 업데이트 (상태는 PAUSED_HITL 유지하여 명시적 승인 대기)
-    let node = sqlx::query_as::<_, DocumentNode>(
+    let _node = sqlx::query_as::<_, DocumentNode>(
         "SELECT * FROM document_node WHERE node_id = ?"
     )
     .bind(&iteration.node_id)
@@ -2838,7 +2842,7 @@ pub async fn approve_sad_node(
                 })
             }).collect();
 
-            let final_json = serde_json::to_string(&modules_to_create).unwrap_or_else(|_| "[]".to_string());
+            let _final_json = serde_json::to_string(&modules_to_create).unwrap_or_else(|_| "[]".to_string());
             
             // 주의: create_local_modules 내부에서 트랜잭션을 다시 시작할 수 없으므로 
             // 여기서는 트랜잭션 커밋 후 호출하거나, 로직을 인라인화해야 함.
@@ -3527,7 +3531,7 @@ pub async fn get_all_active_nodes(
          FROM document_node n
          JOIN project p ON n.project_id = p.project_id
          LEFT JOIN local_module m ON n.module_id = m.module_id
-         WHERE (n.node_state = 'IN_PROGRESS' OR (n.node_state = 'COMPLETED' AND n.last_action LIKE 'RAG 임베딩 중%')) AND n.is_deleted = 0
+         WHERE (n.node_state = 'IN_PROGRESS' OR (n.node_state = 'COMPLETED' AND n.last_action LIKE '%RAG 임베딩 중%')) AND n.is_deleted = 0
          ORDER BY n.updated_at DESC"
     )
     .fetch_all(&*pool)
@@ -4081,6 +4085,7 @@ async fn store_document_embeddings(
 /// 프로젝트의 모든 완료된 문서를 벡터 DB에 수동 색인
 #[tauri::command]
 pub async fn index_project_embeddings(
+    app_handle: tauri::AppHandle,
     pool: State<'_, SqlitePool>,
     client: State<'_, Client>,
     project_id: String,
@@ -4123,6 +4128,16 @@ pub async fn index_project_embeddings(
             continue;
         }
 
+        // 상태 업데이트: 오버레이 표시 유도
+        let _ = app_handle.emit("pipeline-status", format!("[{}] RAG 임베딩 중...", node.target_node_type));
+        let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
+            .bind("RAG 임베딩 중...")
+            .bind(Utc::now().to_rfc3339())
+            .bind(&node.node_id)
+            .execute(&*pool)
+            .await;
+        let _ = app_handle.emit("nodes-updated", ());
+
         // 2. 각 노드의 최고 점수(최근) 리비전 조회
         let best_iter = sqlx::query_as::<_, GenerationIteration>(
             "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY calculated_score DESC, created_at DESC LIMIT 1"
@@ -4144,6 +4159,14 @@ pub async fn index_project_embeddings(
             
             indexed_count += 1;
         }
+
+        // 상태 초기화
+        let _ = sqlx::query("UPDATE document_node SET last_action = NULL, updated_at = ? WHERE node_id = ?")
+            .bind(Utc::now().to_rfc3339())
+            .bind(&node.node_id)
+            .execute(&*pool)
+            .await;
+        let _ = app_handle.emit("nodes-updated", ());
     }
 
     // 3. GPRD 통합본 색인 (진행된 내용이 있는 경우)
@@ -4159,14 +4182,42 @@ pub async fn index_project_embeddings(
                 }
             };
 
+            // 상태 업데이트: 통합 PRD 색인 알림
+            let _ = app_handle.emit("pipeline-status", "통합 PRD RAG 임베딩 중...");
+            let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
+                .bind("통합 RAG 임베딩 중...")
+                .bind(Utc::now().to_rfc3339())
+                .bind(&rep_id)
+                .execute(&*pool)
+                .await;
+            let _ = app_handle.emit("nodes-updated", ());
+
+            // [수정] hardcoded "integrated-prd" 대신 실제 존재하는 iteration_id를 조회하여 사용 (FK 제약 조건 준수)
+            let best_genesis_it: String = sqlx::query_scalar(
+                "SELECT iteration_id FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY is_pass DESC, calculated_score DESC LIMIT 1"
+            )
+            .bind(&rep_id)
+            .fetch_one(&*pool)
+            .await
+            .map_err(|e| format!("Genesis iteration lookup error: {}", e))?;
+
             store_document_embeddings(
                 &*pool, &*client, &api_key,
                 &project_id, None,
                 &rep_id, "Genesis_PRD",
-                "integrated-prd", &full_prd,
+                &best_genesis_it, &full_prd,
                 100, // 통합본은 점수 임의 부여
             ).await?;
+
             indexed_count += 1;
+
+            // 상태 초기화
+            let _ = sqlx::query("UPDATE document_node SET last_action = NULL, updated_at = ? WHERE node_id = ?")
+                .bind(Utc::now().to_rfc3339())
+                .bind(&rep_id)
+                .execute(&*pool)
+                .await;
+            let _ = app_handle.emit("nodes-updated", ());
         }
     }
     

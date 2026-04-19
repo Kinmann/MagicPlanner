@@ -1,0 +1,47 @@
+# GPRD_Architecture_Schema
+
+생성일: 2026년 4월 19일 오후 1:12
+
+승인된 선행 기획 데이터(`APPROVED_1A`, `APPROVED_1B`)와 사용자 아이디어(`RAW_INPUT`)를 바탕으로 시스템의 기술 스택을 확정하고 행위자 역할을 정규화하십시오.
+
+## [GPRD - Architecture Schema 설계 원칙]
+
+1. **기술 스택의 타당성 (Architectural Feasibility)**: `$APPROVED_1A`에 명시된 `global_constraints`(컴플라이언스, 성능, 레거시 연동)를 엄격히 준수하는 최적의 시스템 기술 스택(프론트엔드, 백엔드, 데이터베이스, 인프라 등)을 결정하십시오.
+2. **행위자의 역할 정규화 (Role Normalization)**: `$APPROVED_1B`에서 도출된 `actors`를 시스템 표준 권한 체계인 `ROLE-XXX` 식별자 형태로 정규화하고, 위계(Hierarchy) 수준(예: GUEST, USER, ADMIN, SYSTEM)을 매핑하십시오.
+3. **이전 설계 계승(Refinement)**: `$PREVIOUS_DRAFT`에 데이터가 존재한다면 이를 기본 골격으로 삼고, `$EVALUATOR_FEEDBACK`의 교정 지시 사항(특히 JSON Path `location`)을 최우선으로 타겟팅하여 문서를 개선하십시오.
+
+## [아키텍처 통합 및 제약 통제 규칙]
+
+1. **역할 식별자 매핑 규정 (필수)**:
+    - `$APPROVED_1B`의 `actors` 항목은 모두 `user_roles` 배열로 변환되어야 합니다.
+    - 각 역할은 `ROLE-XXXX` (예: ROLE-USER, ROLE-ADMIN) 형태의 고유 `role_id`를 가져야 하며, 기존 `role_name`의 문맥을 훼손하지 않고 1:1 매핑해야 합니다.
+2. **기술 스택 서술의 구체성**:
+    - 기술 스택(`tech_stack`) 정의 시 "안정적인 DB", "빠른 프레임워크" 등 추상적 표현을 금지합니다.
+    - "PostgreSQL 15", "React 18", "AWS EKS"와 같이 정확한 기술명과 버전(가능한 경우)을 명시하십시오.
+3. **문체 및 표현 통제 (엄격)**:
+    - 모든 텍스트는 감정이 배제된 분석적이고 건조한 '명사형 종결 문체'를 강제합니다.
+
+[출력 형식 가이드]
+
+```
+{
+  "tech_stack": {
+    "frontend": "React 18 / TypeScript 5.0",
+    "backend": "Spring Boot 3.2 / Java 21",
+    "database": "PostgreSQL 15 / Redis 7",
+    "infrastructure": "AWS EKS / RDS",
+    "interface_protocols": "RESTful API / OAuth 2.0"
+  },
+  "user_roles": [
+    {
+      "role_id": "ROLE-USER",
+      "original_role_name": "일반 사용자",
+      "hierarchy_level": "USER",
+      "description": "기본 서비스 이용 권한"
+    }
+  ]
+}
+```
+
+반드시 마크다운 백틱(```json)이나 인사말 없이, 순수하고 유효한 JSON 객체 1개만 출력하십시오.
+인사말이나 부연 설명을 절대 붙이지 마십시오.

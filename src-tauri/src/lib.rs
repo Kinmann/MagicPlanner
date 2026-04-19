@@ -42,10 +42,13 @@ pub fn run() {
             }
 
             let pool = tauri::async_runtime::block_on(async {
-                use sqlx::sqlite::SqliteConnectOptions;
+                use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode};
+                use std::time::Duration;
                 
                 let options = SqliteConnectOptions::new()
                     .filename(&db_path)
+                    .journal_mode(SqliteJournalMode::Wal)
+                    .busy_timeout(Duration::from_secs(5))
                     .create_if_missing(true);
 
                 let pool = sqlx::SqlitePool::connect_with(options).await.map_err(|e| e.to_string())?;
@@ -212,6 +215,9 @@ pub fn run() {
                         }
                     }
                 }
+                
+                // 4. 버려진(Stale) RAG 상태 초기화 (앱 시작 시 오버레이 스턱 방지)
+                let _ = sqlx::query("UPDATE document_node SET last_action = NULL WHERE last_action LIKE 'RAG 임베딩 중%'").execute(&pool).await;
                 
                 Ok::<sqlx::SqlitePool, String>(pool)
             })?;

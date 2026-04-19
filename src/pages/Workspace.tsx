@@ -708,6 +708,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
                 onApprove={async () => {
                   setLoading(true);
                   await Promise.all([fetchProject(), fetchNodes()]);
+                  setActivePhase(null); // 페이즈 전환 시 명시적으로 초기화하여 자동 전이 유도
                   setLoading(false);
                 }}
                 onRefresh={() => { fetchProject(); fetchNodes(); }}

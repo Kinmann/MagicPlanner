@@ -375,7 +375,7 @@ pub fn get_schema_for_node(node_type: &str) -> Option<serde_json::Value> {
         // v2: GPRD Sub-nodes
         "gprd_context_goal" => schemars::schema_for!(GprdContextGoalSchema),
         "gprd_capability_actor" => schemars::schema_for!(GprdCapabilityActorSchema),
-        "gprd_architecture_schema" => schemars::schema_for!(GenesisPrdSchema),
+        "gprd_architecture_schema" => schemars::schema_for!(GprdArchitectureSchema),
         // v2: SAD 글로벌 5종
         "sad_core_erd" => schemars::schema_for!(SadCoreErdSchema),
         "sad_auth_rbac" => schemars::schema_for!(SadAuthRbacSchema),
@@ -444,6 +444,14 @@ pub struct GprdEpic {
 pub struct GprdCapabilityActorSchema {
     pub actors: Vec<GprdActor>,
     pub core_epics: Vec<GprdEpic>,
+}
+
+// 1-C: Architecture & Schema Assembler
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct GprdArchitectureSchema {
+    pub user_roles: Vec<GenesisPrdUserRole>,
+    pub tech_stack: GenesisPrdTechStack,
 }
 
 // ============================================================

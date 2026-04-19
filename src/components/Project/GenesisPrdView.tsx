@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { Store } from '@tauri-apps/plugin-store';
 import { ask } from '@tauri-apps/plugin-dialog';
 import { DocumentNode } from '../../types/project';
@@ -49,6 +50,23 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
   // 모든 서브 노드가 완료되었는지 확인
   const allCompleted = nodes.length > 0 && nodes.every(n => n.node_state === 'COMPLETED');
 
+  // 전역 파이프라인 상태 메시지 수신 (RAG 임베딩 등)
+  React.useEffect(() => {
+    const unlisten = listen<string>('pipeline-status', (event) => {
+      const msg = event.payload;
+      if (msg.includes('임베딩 중')) {
+        setStatusMsg(msg);
+      } else if (msg.includes('임베딩 완료') || msg.includes('임베딩 실패')) {
+        setStatusMsg(null);
+        // 완료 시점에 노드 상태가 바뀌었을 수 있으므로 부모 새로고침 유도
+        onRefresh();
+      }
+    });
+    return () => {
+      unlisten.then(fn => fn());
+    };
+  }, [onRefresh]);
+
   // 자동 스테이지 전환 로직 (초기 로드 시)
   React.useEffect(() => {
     if (nodes.length > 0) {
@@ -60,7 +78,7 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
         setShowIntegrated(true);
       }
     }
-  }, [nodes.length]);
+  }, [nodes.length, allCompleted]);
 
   // node 정보가 외부에서 변경될 때 로컬 상태 동기화
   React.useEffect(() => {
@@ -168,8 +186,12 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
       await invoke('approve_genesis_prd_node', { nodeId: node.node_id });
       onRefresh();
       
-      // 다음 단계로 자동 전환 시도 (READY 상태인 첫 번째 노드 찾기)
-      // onRefresh()로 인해 부모 컴포넌트에서 nodes가 업데이트되면 useEffect가 처리할 것이므로 여기서는 onRefresh만 호출해도 무방함.
+      // 다음 단계로 자동 전환
+      if (activeStage === 'GPRD_Context_Goal') {
+        setActiveStage('GPRD_Capability_Actor');
+      } else if (activeStage === 'GPRD_Capability_Actor') {
+        setActiveStage('GPRD_Architecture_Schema');
+      }
     } catch (err: any) {
       setError(err.toString());
     } finally {
@@ -847,7 +869,10 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
                     const mainEntry = entries.find(([k]) => 
                       k.toLowerCase().includes('framework') || 
                       k.toLowerCase().includes('model_family') ||
-                      k.toLowerCase().includes('type')
+                      k.toLowerCase().includes('type') ||
+                      k.toLowerCase().includes('primary') ||
+                      k.toLowerCase().includes('database') ||
+                      k.toLowerCase().includes('main')
                     ) || entries[0];
                     const subEntries = entries.filter(e => e !== mainEntry);
 
@@ -855,7 +880,7 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
                       <div key={cat} className="tech-category">
                         <div className="category-header">
                           <span className="material-symbols-outlined">{getTechIcon(cat)}</span>
-                          <span className="name">{cat.replace(/_/g, ' ').toUpperCase()}</span>
+                          <span className={`name ${cat.toLowerCase() === 'database' ? 'is-primary' : ''}`}>{cat.replace(/_/g, ' ').toUpperCase()}</span>
                         </div>
                         <div className="category-body">
                           {mainEntry ? (

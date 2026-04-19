@@ -762,6 +762,11 @@
                 font-weight: 700;
                 text-transform: uppercase;
                 letter-spacing: 0.1em;
+
+                &.is-primary {
+                  color: $primary;
+                  text-shadow: 0 0 8px rgba($primary, 0.3);
+                }
               }
             }
 

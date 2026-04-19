@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { Store } from '@tauri-apps/plugin-store';
 import { ask } from '@tauri-apps/plugin-dialog';
 import { GlobalContext, CONTEXT_TYPE_LABELS, DocumentNode, GenerationIteration } from '../../types/project';
@@ -48,6 +49,7 @@ const SadOverview: React.FC<SadOverviewProps> = ({
   const [isAiGuidanceOpen, setIsAiGuidanceOpen] = useState(false);
   const [showRawView, setShowRawView] = useState(false);
   const [targetCount, setTargetCount] = useState(8);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
 
   const fetchContexts = async () => {
@@ -102,16 +104,25 @@ const SadOverview: React.FC<SadOverviewProps> = ({
   }, [projectId, globalNode?.node_id, moduleNode?.node_id]);
 
   useEffect(() => {
-    if (globalNode?.node_state === 'COMPLETED' && activeStage === 'GLOBAL') {
-      setActiveStage('MODULE');
-    }
-  }, [globalNode?.node_state]);
-
-  useEffect(() => {
     if (currentNode && !isMaxFocused) {
       setTempMax(currentNode.max_iterations);
     }
   }, [currentNode?.node_id, currentNode?.max_iterations, isMaxFocused]);
+
+  useEffect(() => {
+    const unlisten = listen<string>('pipeline-status', (event) => {
+      const msg = event.payload;
+      if (msg.includes('임베딩 중')) {
+        setStatusMsg(msg);
+      } else if (msg.includes('임베딩 완료') || msg.includes('임베딩 실패')) {
+        setStatusMsg(null);
+        onRefresh();
+      }
+    });
+    return () => {
+      unlisten.then(fn => fn());
+    };
+  }, [onRefresh]);
 
   const handleRunStage = async (stage: 'GLOBAL' | 'MODULE') => {
     setLoading(true);
@@ -141,6 +152,7 @@ const SadOverview: React.FC<SadOverviewProps> = ({
       setLoading(false);
     }
   };
+
   const handleConfirmIteration = async (stage: 'GLOBAL' | 'MODULE') => {
     const iterId = stage === 'GLOBAL' ? selectedGlobalIterId : selectedModuleIterId;
     if (!iterId) return;
@@ -184,6 +196,11 @@ const SadOverview: React.FC<SadOverviewProps> = ({
       await fetchIterations();
       await fetchContexts();
       onRefresh();
+
+      // [수정] 승인 시 다음 단계로 명시적 전환 (버그 방지를 위해 useEffect 대신 이곳에서 처리)
+      if (activeStage === 'GLOBAL') {
+        setActiveStage('MODULE');
+      }
     } catch (err: any) {
       setError(err.toString());
     } finally {
@@ -514,6 +531,24 @@ const SadOverview: React.FC<SadOverviewProps> = ({
         </div>
 
       </div>
+      
+      {statusMsg && (
+        <div className="sad-overview__status-msg" style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '8px', 
+          margin: '12px 24px', 
+          padding: '10px 16px', 
+          background: 'rgba(52, 199, 89, 0.1)', 
+          borderRadius: '8px', 
+          color: '#34c759',
+          fontSize: '0.9rem',
+          border: '1px solid rgba(52, 199, 89, 0.2)' 
+        }}>
+          <span className="material-symbols-outlined spinning" style={{ fontSize: '1.2rem' }}>sync</span>
+          <span>{statusMsg}</span>
+        </div>
+      )}
 
       {error && (
         <div className="sad-overview__error">

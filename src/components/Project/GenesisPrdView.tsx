@@ -137,7 +137,7 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
         apiKey: apiKeyValue.value,
       });
       setStatusMsg(null);
-      await loadContent();
+      await loadContent(true);
       onRefresh();
     } catch (err: any) {
       setError(err.toString());
@@ -241,7 +241,7 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
     setLoading(true);
     try {
       await invoke('unconfirm_iteration', { projectId, iterationId: it.iteration_id });
-      await loadContent();
+      await loadContent(false);
       onRefresh();
     } catch (e: any) {
       setError(e.toString());
@@ -264,7 +264,7 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
     setLoading(true);
     try {
       await invoke('delete_generation_iteration', { iterationId: it.iteration_id });
-      await loadContent();
+      await loadContent(true);
       onRefresh();
     } catch (e: any) {
       setError(e.toString());
@@ -273,7 +273,7 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
     }
   };
 
-  const loadContent = async () => {
+  const loadContent = async (force = false) => {
     if (!node) {
       setIterations([]);
       setSelectedIdx(-1);
@@ -288,9 +288,15 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
         const sorted = [...iters].sort((a, b) => a.iteration_number - b.iteration_number);
         setIterations(sorted);
 
-        // confirmed(is_pass=true) 항목이 있으면 그것을 선택, 없으면 가장 최신(마지막 인덱스) 선택
-        const passIdx = sorted.findIndex((it: any) => it.is_pass);
-        const targetIdx = passIdx >= 0 ? passIdx : sorted.length - 1;
+        // targetIdx 결정:
+        // 1. force가 true거나 현재 선택된 인덱스가 없으면(-1) 기본값(confirmed 또는 최신) 선택
+        // 2. 그 외에는 현재 선택된 인덱스(selectedIdx) 유지 시도 (범위 내에 있다면)
+        let targetIdx = selectedIdx;
+        
+        if (force || selectedIdx < 0 || selectedIdx >= sorted.length) {
+          const passIdx = sorted.findIndex((it: any) => it.is_pass);
+          targetIdx = passIdx >= 0 ? passIdx : sorted.length - 1;
+        }
 
         setSelectedIdx(targetIdx);
         let rawData = sorted[targetIdx].generated_draft_json;
@@ -388,8 +394,8 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
 
   React.useEffect(() => {
     const refresh = async () => {
-      // 1. 항상 현재 스테이지의 리비전 목록 동기화 (체크 아이콘 표시 보장)
-      await loadContent();
+      // 1. 항상 현재 스테이지의 리비전 목록 동기화 (배경 갱신 시에는 기존 선택 유지)
+      await loadContent(false);
 
       // 2. 통합 뷰 모드인 경우 메인 콘텐츠만 통합 데이터로 교체
       if (showIntegrated && allCompleted) {

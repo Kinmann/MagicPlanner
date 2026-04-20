@@ -745,6 +745,15 @@ pub async fn run_pipeline(
         // [기계적 판단] 점수와 치명적 오류 유무를 기반으로 통과 여부 결정
         let is_passed = eval.score >= threshold && eval.critical_errors.is_empty();
 
+        // [추가] 중복 확정 방지: 이번 회차가 통과 기준을 만족하면 기존 확정 상태들 초기화
+        if is_passed {
+            let _ = sqlx::query("UPDATE generation_iteration SET is_pass = 0, updated_at = ? WHERE node_id = ?")
+                .bind(Utc::now().to_rfc3339())
+                .bind(&node.node_id)
+                .execute(&*pool)
+                .await;
+        }
+
         sqlx::query(
             "INSERT INTO generation_iteration (iteration_id, node_id, iteration_number, generated_draft_json, calculated_score, is_pass, critical_errors_array, actionable_feedback_text, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"
         )
@@ -2025,8 +2034,18 @@ pub async fn run_sad_global_pipeline(
                 let feedback_json = serde_json::to_string(&eval["feedback"]).unwrap_or_default();
                 let critical_json = serde_json::to_string(&eval["critical_errors"]).unwrap_or_default();
 
-                // 트랜잭션 사용: 부모(generation_iteration) 먼저 저장 후 자식(global_context) 저장
+                // 트랜잭션 시작
                 let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
+                // [추가] 중복 확정 방지: 이번 회차가 통과 기준을 만족하면 해당 노드의 기존 확정 상태들 초기화
+                if is_passed {
+                    sqlx::query("UPDATE generation_iteration SET is_pass = 0, updated_at = ? WHERE node_id = ?")
+                        .bind(&now)
+                        .bind(&sad_node.node_id)
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                }
 
                 sqlx::query(
                     "INSERT INTO generation_iteration (iteration_id, node_id, iteration_number, generated_draft_json, calculated_score, is_pass, critical_errors_array, actionable_feedback_text, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"
@@ -2408,8 +2427,18 @@ pub async fn run_sad_module_pipeline(
                 let feedback_json = serde_json::to_string(&eval["feedback"]).unwrap_or_default();
                 let critical_json = serde_json::to_string(&eval["critical_errors"]).unwrap_or_default();
 
-                // 트랜잭션 사용: 부모(generation_iteration) 먼저 저장 후 자식(global_context) 저장
+                // 트랜잭션 시작
                 let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
+                // [추가] 중복 확정 방지: 이번 회차가 통과 기준을 만족하면 해당 노드의 기존 확정 상태들 초기화
+                if is_passed {
+                    sqlx::query("UPDATE generation_iteration SET is_pass = 0, updated_at = ? WHERE node_id = ?")
+                        .bind(&now)
+                        .bind(&sad_node.node_id)
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                }
 
                 sqlx::query(
                     "INSERT INTO generation_iteration (iteration_id, node_id, iteration_number, generated_draft_json, calculated_score, is_pass, critical_errors_array, actionable_feedback_text, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"
@@ -4091,6 +4120,20 @@ pub async fn index_project_embeddings(
     project_id: String,
     api_key: String,
 ) -> Result<i32, String> {
+    // 0. API 키 보완 (비어있을 경우 DB에서 조회)
+    let mut actual_api_key = api_key;
+    if actual_api_key.trim().is_empty() {
+        println!(">>> [index_project_embeddings] API key is empty, fetching from DB...");
+        let session_res = sqlx::query("SELECT api_key_encrypted FROM user_session WHERE session_id = 'default-session' AND is_deleted = 0")
+            .fetch_optional(&*pool).await.map_err(|e| e.to_string())?;
+        
+        actual_api_key = match session_res {
+            Some(row) => row.get::<String, _>("api_key_encrypted"),
+            None => return Err("API 키를 찾을 수 없습니다. 설정에서 API 키를 먼저 등록해 주세요.".to_string()),
+        };
+    }
+    let api_key = actual_api_key; // 섀도잉하여 이후 로직에서 사용
+
     // 1. 해당 프로젝트의 모든 완료된 노드 조회
     // [최적화] 마지막 인덱싱 시점 이후에 변경된 노드만 조회
     let nodes = sqlx::query_as::<_, DocumentNode>(

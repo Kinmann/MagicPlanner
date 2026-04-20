@@ -106,8 +106,8 @@ const SadOverview: React.FC<SadOverviewProps> = ({
 
   useEffect(() => {
     fetchContexts();
-    // 노드 상태가 변했거나 처음 로드될 때만 이터레이션 정보를 가져옴 (강제 선택 로직 포함)
-    fetchIterations(true);
+    // 노드 상태가 변했거나 처음 로드될 때만 이터레이션 정보를 가져옴 (배경 자동 갱신 시에는 기존 선택 유지)
+    fetchIterations(false);
   }, [projectId, globalNode?.node_id, globalNode?.node_state, moduleNode?.node_id, moduleNode?.node_state]);
 
   useEffect(() => {

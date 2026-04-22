@@ -1,4 +1,4 @@
-export type NodeState = 'PENDING' | 'READY' | 'IN_PROGRESS' | 'COMPLETED' | 'PAUSED_HITL' | 'PAUSED_API_ERROR' | 'PAUSED_STOPPED';
+export type NodeState = 'PENDING' | 'READY' | 'IN_PROGRESS' | 'COMPLETED' | 'PAUSED_HITL' | 'PAUSED_API_ERROR' | 'PAUSED_STOPPED' | 'STALE' | 'REFINING';
 
 // v2: Pipeline Phase
 export type PipelinePhase = 'GENESIS_PRD' | 'SAD' | 'MODULE_GENERATION' | 'COMPLETED';
@@ -50,6 +50,7 @@ export interface Project {
   pipeline_execution_mode: string;
   pipeline_phase: PipelinePhase;
   raw_input_text: string;
+  increment_intent?: string; // v2: Refinement 의도
   created_at: string;
   updated_at: string;
   current_node_type?: string;

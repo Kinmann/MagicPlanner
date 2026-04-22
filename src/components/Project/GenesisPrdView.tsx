@@ -170,7 +170,15 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
   const handleApprove = async () => {
     setLoading(true);
     try {
-      await invoke('approve_genesis_prd', { projectId });
+      const store = await Store.load('settings.json');
+      const apiKeyValue = await store.get<{ value: string }>('gemini_api_key');
+      const apiKey = apiKeyValue?.value || "";
+
+      await invoke('approve_genesis_prd', { 
+        projectId,
+        apiKey: apiKey
+      });
+
       onApprove();
     } catch (err: any) {
       setError(err.toString());
@@ -183,7 +191,15 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
     if (!node) return;
     setLoading(true);
     try {
-      await invoke('approve_genesis_prd_node', { nodeId: node.node_id });
+      const store = await Store.load('settings.json');
+      const apiKeyValue = await store.get<{ value: string }>('gemini_api_key');
+      const apiKey = apiKeyValue?.value || "";
+
+      await invoke('approve_genesis_prd_node', { 
+        nodeId: node.node_id,
+        apiKey: apiKey 
+      });
+
       onRefresh();
       
       // 다음 단계로 자동 전환

@@ -18,7 +18,7 @@
    - **양방향 및 순환 참조 금지**: 모듈 간 `A <-> B` 형태나 `A -> B -> A` 형태의 순환 고리가 발생한다면, 이는 모듈이 잘못 분리된 것입니다. 이 경우 해당 모듈들을 하나로 병합하여 구조적 결함을 제거하십시오.
 
 2. **통신 방식 (Communication Protocol)**:
-   - 각 의존성 링크에 선행 확정된 `Global Context` 규격에 맞는 통신 방식(예: `SYNC_REST`, `ASYNC_KAFKA`) Enum을 명시하십시오.
+   - 각 의존성 링크에 선행 확정된 `Global Context` 규격에 맞는 통신 방식(예: `SYNC_REST`, `ASYNC_KAFKA`)을 명시하십시오.
 
 3. **고립 방지**: 모든 모듈은 시스템 전체 토폴로지 내에서 최소 하나 이상의 Inbound 또는 Outbound 의존성을 가져야 합니다. 단독 실행 마이크로서비스가 아니라면 고립된 모듈은 존재할 수 없습니다.
 
@@ -29,10 +29,11 @@
     {
       "from_module": "MOD-XXXX",
       "to_module": "MOD-YYYY",
-      "dep_type": "SYNC_HTTP / ASYNC_EVENT / DB_SHARED 등",
+      "dependency_type": "...",
       "description": "..."
     }
-  ]
+  ],
+  "recommended_build_order": ["MOD-XXXX", "MOD-YYYY", "..."]
 }
 ```
 

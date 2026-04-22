@@ -570,6 +570,29 @@
         border-left-color: rgba($secondary, 0.4);
         .source { color: $secondary; }
       }
+
+      &--system {
+        border-left-style: dashed;
+        background: rgba(255, 255, 255, 0.02);
+        padding: 0.75rem 1rem;
+        border-radius: 0 8px 8px 0;
+        
+        .source {
+          font-style: italic;
+          opacity: 0.7;
+          &::before { content: "◈ "; }
+        }
+
+        &.log-item--working {
+          background: rgba($primary, 0.05);
+          border-left-color: $primary;
+        }
+
+        &.log-item--success {
+          background: rgba($status-completed, 0.05);
+          border-left-color: $status-completed;
+        }
+      }
     }
 
     @keyframes blink {

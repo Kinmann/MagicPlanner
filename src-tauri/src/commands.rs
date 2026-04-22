@@ -4,6 +4,8 @@ use uuid::Uuid;
 use chrono::Utc;
 use tauri::{Manager, Emitter, State};
 use sqlx::{SqlitePool, FromRow, Row};
+use json_patch::{patch, PatchOperation};
+use serde_json::Value;
 use crate::ActiveTasks;
 use std::sync::Arc;
 
@@ -17,6 +19,7 @@ pub enum NodeState {
     PausedHitl,
     PausedApiError,
     PausedStopped,
+    Refining,
 }
 
 impl ToString for NodeState {
@@ -29,10 +32,12 @@ impl ToString for NodeState {
             NodeState::PausedHitl => "PAUSED_HITL".to_string(),
             NodeState::PausedApiError => "PAUSED_API_ERROR".to_string(),
             NodeState::PausedStopped => "PAUSED_STOPPED".to_string(),
+            NodeState::Refining => "REFINING".to_string(),
         }
     }
 }
 
+#[derive(Debug)]
 pub enum PipelineError {
     ApiError(u16, String),
     Internal(String),
@@ -47,6 +52,8 @@ pub struct Project {
     pub pipeline_execution_mode: String,
     pub pipeline_phase: String,
     pub raw_input_text: String,
+    #[sqlx(default)]
+    pub increment_intent: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     #[sqlx(default)]
@@ -105,7 +112,7 @@ pub struct RagErrorInfo {
 }
 
 // ============================================================
-// v2 新 구조체
+// v2 ??囹긺쭛?삯벽?
 // ============================================================
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
@@ -145,7 +152,7 @@ pub async fn get_project_nodes(
     pool: tauri::State<'_, SqlitePool>,
     project_id: String,
 ) -> Result<Vec<DocumentNode>, String> {
-    // [자가 치유] 진행률 100%인데 완료되지 않은 모듈이 있는지 확인 및 보정
+    // [??? ?╊겘占? 辱뷂옙占썼쳺?100%?蘊덀ゲ ?占쏙옙??? ?劑눂? 獄덂댖占???占쏙옙辱뷂옙 ?屍귩쪟?獄?縕먩른占?
     let modules = sqlx::query_as::<_, LocalModule>(
         "SELECT * FROM local_module WHERE project_id = ? AND is_deleted = 0"
     )
@@ -156,7 +163,7 @@ pub async fn get_project_nodes(
 
     for m in modules {
         if m.module_state != "COMPLETED" {
-            // 정합성 체크 및 보정 (emit은 fetch 후 리턴되므로 생략 가능)
+            // ?制？蜈??墉?르占?獄?縕먩른占?(emit?占?fetch ??玉붺쭜占???獄???껃쵋 令덌옙??
             let _ = sync_module_completion_status(&*pool, None, &m.module_id).await;
         }
     }
@@ -254,7 +261,7 @@ pub async fn save_api_key(
     Ok(())
 }
 
-/// 특정 노드 타입의 승인된(is_pass=1) 가장 최신 이터레이션 결과를 가져오는 헬퍼
+/// ?野?옙 ?蘊덌옙 ?占?占쏙옙 ?野?쪟??is_pass=1) 令덌옙??容뽴?곤옙 ?歷ｏ옙?占쏜쬃??囹뜹쐦?껇쳺?令덌옙?蘊꾭젅???燁믡?
 async fn get_approved_node_output(pool: &SqlitePool, project_id: &str, node_type: &str) -> String {
     let res = sqlx::query(
         "SELECT generated_draft_json FROM generation_iteration 
@@ -273,7 +280,7 @@ async fn get_approved_node_output(pool: &SqlitePool, project_id: &str, node_type
     }
 }
 
-/// v2: GPRD 3단계(1-A, 1-B, 1-C)의 모든 승인된 내용을 가져와 하나의 객체로 병합하여 반환합니다.
+/// v2: GPRD 3??뤄옙(1-A, 1-B, 1-C)??獄덂댖占??野?쪟???歷ι뭘??令덌옙?蘊? ??わ옙??令덂릸?쇠ア?縕먳짉숃쪛???ㄹ?獄삣콪占??섓옙??
 async fn get_full_approved_prd(pool: &SqlitePool, project_id: &str) -> String {
     use crate::schemas::*;
 
@@ -285,19 +292,19 @@ async fn get_full_approved_prd(pool: &SqlitePool, project_id: &str) -> String {
     let res_1b: Result<GprdCapabilityActorSchema, _> = serde_json::from_str(&out_1b);
     let res_1c: Result<GprdArchitectureSchema, _> = serde_json::from_str(&out_1c);
 
-    // 하위 호환성 체크: 만약 새로운 구조로 파싱이 불가능하다면 구버전(Genesis_PRD 단일 노드) 시도
+    // ???옙 ?縕뀐옙??墉?르占? 獄ㅵ돋???占쏙옙??囹긺쭛?삭ア??葯멥삖??蘊깍옙??鴉뺧옙??덂틬 囹긺┷占??Genesis_PRD ??곧쫱??蘊덌옙) ?蒻낉옙
     if res_1a.is_err() || res_1b.is_err() || res_1c.is_err() {
         let legacy = get_approved_node_output(pool, project_id, "Genesis_PRD").await;
         if legacy != "{}" {
             return legacy;
         }
-        // 모든 정보가 없을 경우 빈 객체 반환
+        // 獄덂댖占???낂쇃令덌옙 ?占쏙옙 囹띈땃容?壅?令덂릸??獄삣콪占?
         if res_1a.is_err() && res_1b.is_err() && res_1c.is_err() {
             return "{}".to_string();
         }
     }
 
-    // 데이터가 하나라도 있다면 조립 시작
+    // ??잟쬃??? ??わ옙?逆븝옙 ?占쏜졊삭グ?邀썲쐣黎??帝같占?
     let s1a = res_1a.unwrap_or_else(|_| GprdContextGoalSchema {
         metadata: GenesisPrdMetadata {
             project_name: "Unknown".to_string(),
@@ -320,13 +327,13 @@ async fn get_full_approved_prd(pool: &SqlitePool, project_id: &str) -> String {
         interface_protocols: GenesisPrdInterfaceProtocols { api_type: "REST".to_string(), auth_protocol: "JWT".to_string() },
     }});
 
-    // 1-C 기반 Role Name -> ID 맵 구축
+    // 1-C 影ｅ쐣占?Role Name -> ID 獄?囹긺쭛占?
     let mut role_map = std::collections::HashMap::new();
     for role in &s1c.user_roles {
         role_map.insert(role.role_name.clone(), role.role_id.clone());
     }
 
-    // Epics 변환 (required_actors -> target_roles)
+    // Epics 縕먲옙??(required_actors -> target_roles)
     let finalized_epics = s1b.core_epics.into_iter().map(|e| {
         let target_roles = e.required_actors.iter()
             .map(|name| role_map.get(name).cloned().unwrap_or_else(|| format!("ROLE-UNKNOWN-{}", name)))
@@ -406,6 +413,7 @@ pub async fn list_projects(pool: tauri::State<'_, SqlitePool>) -> Result<Vec<Pro
             p.pipeline_execution_mode, 
             p.pipeline_phase,
             p.raw_input_text, 
+            p.increment_intent,
             p.created_at, 
             p.updated_at,
             (SELECT GROUP_CONCAT(target_node_type, ', ') 
@@ -439,7 +447,7 @@ pub async fn create_project(
     let session_id = "default-session"; 
     let now = Utc::now().to_rfc3339();
 
-    // 0. 기본 세션 확인 및 생성 (FK 제약 조건 충족)
+    // 0. 影ｅ쐣???蘊꾬옙 ?屍귩쪟?獄???뽳옙 (FK ?帝같??邀썲쐦??容뷸떀짠)
     sqlx::query(
         "INSERT INTO user_session (session_id, is_api_key_valid, created_at, updated_at, is_deleted) 
          VALUES (?, 1, ?, ?, 0)
@@ -452,7 +460,7 @@ pub async fn create_project(
     .await
     .map_err(|e| e.to_string())?;
 
-    // 1. 프로젝트 생성 (v2: pipeline_phase 포함)
+    // 1. ?占쏙옙??틶????뽳옙 (v2: pipeline_phase ?燁믮쪡?
     sqlx::query(
         "INSERT INTO project (project_id, session_id, project_name, pipeline_execution_mode, pipeline_phase, raw_input_text, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, 'GENESIS_PRD', ?, ?, ?, 0)"
     )
@@ -467,7 +475,7 @@ pub async fn create_project(
     .await
     .map_err(|e| e.to_string())?;
 
-    // 2. v2 개편: Genesis PRD를 3개의 서브 노드로 분할 생성
+    // 2. v2 令덍쮥껆틨: Genesis PRD獄?3令덍?곤옙 ?蒻낉옙 ?蘊덌옙獄?蘊깍옙占???뽳옙
     let now = Utc::now().to_rfc3339();
     
     // 1-A: Context & Goal Builder (READY)
@@ -519,8 +527,8 @@ pub async fn delete_project(
 ) -> Result<(), String> {
     println!(">>> Hard deleting project and all associated data: {}", project_id);
     
-    // 1. 벡터 데이터 삭제 (virtual table인 document_embeddings 먼저 처리)
-    // rowid가 embedding_metadata와 동기화되어 있으므로 서브쿼리 활용
+    // 1. 縕믠댃占???잟쬃????占?(virtual table??document_embeddings 獄잍쉼? 墉?겒??
+    // rowid令덌옙 embedding_metadata?占??邕롨맻?塋억옙???占썲컧獄?옙獄??蒻낉옙?닸스???帝같埇?
     sqlx::query("DELETE FROM document_embeddings WHERE rowid IN (SELECT rowid FROM embedding_metadata WHERE project_id = ?)")
         .bind(&project_id)
         .execute(&*pool)
@@ -533,14 +541,14 @@ pub async fn delete_project(
         .await
         .map_err(|e| format!("Failed to delete embedding metadata: {}", e))?;
 
-    // 2. 상세 결과물(이터레이션) 삭제 - 노드 테이블과 조인 필요
+    // 2. ?占쏙옙 囹뜹쐦?껇ァ??歷ｏ옙?占쏜쬃?? ??占?- ?蘊덌옙 ?葯모쬃?납劑칳??邀썲윜劑샃 ?占쏙옙
     sqlx::query("DELETE FROM generation_iteration WHERE node_id IN (SELECT node_id FROM document_node WHERE project_id = ?)")
         .bind(&project_id)
         .execute(&*pool)
         .await
         .map_err(|e| format!("Failed to delete generation iterations: {}", e))?;
 
-    // 3. 하위 요소 삭제 (노드, 모듈, 컨텍스트)
+    // 3. ???옙 ??뱄옙 ??占?(?蘊덌옙, 獄덂댖占? ?℡댃占?轝졽궩)
     sqlx::query("DELETE FROM document_node WHERE project_id = ?")
         .bind(&project_id)
         .execute(&*pool)
@@ -559,7 +567,7 @@ pub async fn delete_project(
         .await
         .map_err(|e| format!("Failed to delete global contexts: {}", e))?;
 
-    // 4. 최종 프로젝트 본체 삭제 (Hard Delete)
+    // 4. 容뽴?곤옙 ?占쏙옙??틶??縕먫퀎????占?(Hard Delete)
     sqlx::query("DELETE FROM project WHERE project_id = ?")
         .bind(&project_id)
         .execute(&*pool)
@@ -581,7 +589,7 @@ pub async fn run_pipeline(
 ) -> Result<String, String> {
     println!(">>> run_pipeline started for project: {}, node: {}", project_id, node_type);
 
-    // 1. 노드 정보 조회
+    // 1. ?蘊덌옙 ??낂쇃 邀썲쟿占?
     let node = sqlx::query_as::<_, DocumentNode>(
         "SELECT * FROM document_node WHERE project_id = ? AND target_node_type = ?"
     )
@@ -592,17 +600,17 @@ pub async fn run_pipeline(
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "Node not found".to_string())?;
 
-    // 중복 실행 체크
+    // 辱쀧궍???轝좑옙 墉?르占?
     {
         let mut tasks = active_tasks.0.lock().map_err(|e| e.to_string())?;
         if tasks.contains(&node.node_id) {
             println!(">>> [ABORT] Node is already running: {}", node.node_id);
-            return Err("이미 프로세스가 진행 중입니다. (ActiveTask Detect)".to_string());
+            return Err("?歷? ?占쏙옙?蘊꾣벆令덌옙 辱뷂옙占?辱쀰、억옙?占쏜졊? (ActiveTask Detect)".to_string());
         }
         tasks.insert(node.node_id.clone());
     }
 
-    // RAII 가드 생성
+    // RAII 令덌옙????뽳옙
     struct TaskGuard {
         tasks: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
         node_id: String,
@@ -616,8 +624,8 @@ pub async fn run_pipeline(
     }
     let _guard = TaskGuard { tasks: active_tasks.0.clone(), node_id: node.node_id.clone() };
 
-    if node.node_state != "READY" && node.node_state != "PAUSED_HITL" && node.node_state != "PAUSED_API_ERROR" && node.node_state != "PAUSED_STOPPED" && node.node_state != "COMPLETED" {
-          return Err("현재 상태에서는 실행할 수 없습니다. (READY, PAUSED_HITL, PAUSED_API_ERROR, PAUSED_STOPPED 또는 COMPLETED 필요)".to_string());
+    if node.node_state != "READY" && node.node_state != "PAUSED_HITL" && node.node_state != "PAUSED_API_ERROR" && node.node_state != "PAUSED_STOPPED" && node.node_state != "COMPLETED" && node.node_state != "STALE" {
+          return Err("?占쏙옙 ?占쏙옙??좑옙???轝좑옙?????占쏜졐?占쏜졊? (READY, PAUSED_HITL, PAUSED_API_ERROR, PAUSED_STOPPED ??믭옙 COMPLETED ?占쏙옙)".to_string());
     }
 
     let project = sqlx::query_as::<_, Project>(
@@ -629,7 +637,7 @@ pub async fn run_pipeline(
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "Project not found".to_string())?;
 
-    // 2. 상태 업데이트: IN_PROGRESS
+    // 2. ?占쏙옙 ?占썬ゲ?歷ｄ궩: IN_PROGRESS
     sqlx::query(
         "UPDATE document_node SET node_state = 'IN_PROGRESS', api_error_message = NULL, updated_at = ? WHERE node_id = ?"
     )
@@ -646,7 +654,7 @@ pub async fn run_pipeline(
     let mut current_best_score = node.current_best_score;
     let mut final_iteration_count = node.current_iteration;
 
-    // 2.5 [RETRY] 이전 회차 정보 가져오기 (컨텍스트 유지)
+    // 2.5 [RETRY] ?歷ο옙 ?葯면━ ??낂쇃 令덌옙?蘊꾭젅붺??(?℡댃占?轝졽궩 ?劑뵳?)
     let latest_iter = sqlx::query_as::<_, GenerationIteration>(
         "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY iteration_number DESC LIMIT 1"
     )
@@ -663,26 +671,26 @@ pub async fn run_pipeline(
         println!(">>> Resuming from previous iteration context (Node: {})", node_type);
         previous_draft = it.generated_draft_json;
         
-        // 피드백 복원 (하위 호환성: String vs EvaluationIssue)
+        // ?逆븝옙獄?縕먫썦占?(???옙 ?縕뀐옙?? String vs EvaluationIssue)
         if let Some(errors_json) = it.critical_errors_array {
             if let Ok(issues) = serde_json::from_str::<Vec<crate::schemas::EvaluationIssue>>(&errors_json) {
                 for issue in issues {
-                    previous_feedback.push(format!("[위치: {}] {} : {}", issue.location, issue.code, issue.description));
+                    previous_feedback.push(format!("[?占쏙옙: {}] {} : {}", issue.location, issue.code, issue.description));
                 }
             } else if let Ok(errors) = serde_json::from_str::<Vec<String>>(&errors_json) {
-                // 구버전 호환
+                // 囹긺┷占???縕뀐옙
                 previous_feedback.extend(errors);
             }
         }
         if let Some(action_json) = it.actionable_feedback_text {
             if let Ok(issues) = serde_json::from_str::<Vec<crate::schemas::EvaluationIssue>>(&action_json) {
                 for issue in issues {
-                    previous_feedback.push(format!("[보강 필요 - 위치: {}] {} : {}", issue.location, issue.code, issue.description));
+                    previous_feedback.push(format!("[縕먩퉲占??占쏙옙 - ?占쏙옙: {}] {} : {}", issue.location, issue.code, issue.description));
                 }
             } else if let Ok(feedback) = serde_json::from_str::<Vec<String>>(&action_json) {
-                // 구버전 호환
+                // 囹긺┷占???縕뀐옙
                 for f in feedback {
-                    previous_feedback.push(format!("보강 필요: {}", f));
+                    previous_feedback.push(format!("縕먩퉲占??占쏙옙: {}", f));
                 }
             }
         }
@@ -692,10 +700,10 @@ pub async fn run_pipeline(
     for i in start_iter..=max_iters {
         final_iteration_count = i;
         println!(">>> Iteration {}/{} starting for {}", i, max_iters, node_type);
-        let _ = app_handle.emit("pipeline-status", format!("{} 생성 중 (반복 {}/{})", node_type, i, max_iters));
+        let _ = app_handle.emit("pipeline-status", format!("{} ??뽳옙 辱?(獄삡겒??{}/{})", node_type, i, max_iters));
         
         sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-            .bind("문서 생성 중...").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
+            .bind("獄↑퀎占???뽳옙 辱?..").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
             .execute(&*pool).await.map_err(|e| e.to_string())?;
 
         let draft_res = generate_draft(&app_handle, &pool, &client, &api_key, &project.project_id, &node_type, &project.raw_input_text, &previous_draft, &previous_feedback, i, vec![]).await;
@@ -707,21 +715,21 @@ pub async fn run_pipeline(
             }
         };
 
-        // [STOP CHECK] AI 호출 후 중단 체크
+        // [STOP CHECK] AI ?蘊꾬옙 ??辱쀧궍靜? 墉?르占?
         if is_node_stopped(&*pool, &node.node_id).await {
             println!(">>> Pipeline stopped manually after generation (Node: {})", node.node_id);
             break;
         }
 
         println!(">>> Iteration {}: Draft generated, evaluating...", i);
-        let _ = app_handle.emit("pipeline-status", format!("{} 품질 검증 중 (반복 {}/{})", node_type, i, max_iters));
+        let _ = app_handle.emit("pipeline-status", format!("{} ?占쏙옙 囹띰옙辱?辱?(獄삡겒??{}/{})", node_type, i, max_iters));
         
         sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-            .bind("품질 검증 중...").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
+            .bind("?占쏙옙 囹띰옙辱?辱?..").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
             .execute(&*pool).await.map_err(|e| e.to_string())?;
 
         let input_text_for_eval = if node_type == "Genesis_PRD" { Some(project.raw_input_text.clone()) } else { None };
-        let empty_feedback = Vec::new(); // run_pipeline에서는 개별 피드백 추적 안 하므로 빈 값 전달
+        let empty_feedback = Vec::new(); // run_pipeline??좑옙??令덂텈占??逆븝옙獄?容뷰눢占??????獄?壅?令??占쏜줎?
         let eval_res = evaluate_draft(&app_handle, &pool, &client, &api_key, &project.project_id, &node_type, &draft, input_text_for_eval, "", "", &empty_feedback, i, vec![]).await;
         let eval = match eval_res {
             Ok(e) => e,
@@ -731,21 +739,21 @@ pub async fn run_pipeline(
             }
         };
 
-        // [STOP CHECK] 평가 후 및 저장 직전 중단 체크
+        // [STOP CHECK] ??? ??獄??占??辱뷂옙占?辱쀧궍靜? 墉?르占?
         if is_node_stopped(&*pool, &node.node_id).await {
             println!(">>> Pipeline stopped manually before save (Node: {})", node.node_id);
             break;
         }
 
-        // D. 결과 DB 기록 (ERD 준수)
+        // D. 囹뜹쐦??DB 影ｅ쐣占?(ERD 辱쀯옙??
         let iter_id = Uuid::new_v4().to_string();
         let errors_json = serde_json::to_string(&eval.critical_errors).unwrap_or_default();
         let feedback_json = serde_json::to_string(&eval.feedback).unwrap_or_default();
         
-        // [기계적 판단] 점수와 치명적 오류 유무를 기반으로 통과 여부 결정
+        // [影ｅ쐦占????믮죫] ??좑옙?占??╊겒占????덌옙 ?堤솘??쳺?影ｅ쐣占?逆븝옙 ??쏃쟽 ?獵? 囹뜹윜占?
         let is_passed = eval.score >= threshold && eval.critical_errors.is_empty();
 
-        // [추가] 중복 확정 방지: 이번 회차가 통과 기준을 만족하면 기존 확정 상태들 초기화
+        // [容븟??] 辱쀧궍???屍귨옙 獄삥떀?: ?歷좑옙 ?葯면━令덌옙 ??쏃쟽 影ｅ윜???獄ㅵ돋짠??ゅ틬 影ｅ윜???屍귨옙 ?占쏙옙??容뺧옙???
         if is_passed {
             let _ = sqlx::query("UPDATE generation_iteration SET is_pass = 0, updated_at = ? WHERE node_id = ?")
                 .bind(Utc::now().to_rfc3339())
@@ -771,7 +779,7 @@ pub async fn run_pipeline(
         .await
         .map_err(|e| e.to_string())?;
 
-        // 루프 내에서 실시간 진행률 DB 업데이트 및 이벤트 발송
+        // 獄닷댃占??歷ο옙????⑨옙令?辱뷂옙占썼쳺?DB ?占썬ゲ?歷ｄ궩 獄??歷좂븼??獄삽?곤옙
         sqlx::query(
             "UPDATE document_node SET current_iteration = ?, updated_at = ? WHERE node_id = ?"
         )
@@ -791,24 +799,24 @@ pub async fn run_pipeline(
 
         println!(">>> Iteration {}: Score = {}, Pass = {}", i, eval.score, eval.is_pass);
         
-        // 다음 회차 피드백 반영을 위해 루프 내 피드백 조합
+        // ??⑨옙 ?葯면━ ?逆븝옙獄?獄삡겘占???占썬윸 獄닷댃占????逆븝옙獄?邀썲쟿蜈?
         previous_draft = draft;
         previous_feedback.clear();
         for issue in &eval.critical_errors {
-            previous_feedback.push(format!("[위치: {}] {} : {}", issue.location, issue.code, issue.description));
+            previous_feedback.push(format!("[?占쏙옙: {}] {} : {}", issue.location, issue.code, issue.description));
         }
         for issue in &eval.feedback {
-            previous_feedback.push(format!("[보강 필요 - 위치: {}] {} : {}", issue.location, issue.code, issue.description));
+            previous_feedback.push(format!("[縕먩퉲占??占쏙옙 - ?占쏙옙: {}] {} : {}", issue.location, issue.code, issue.description));
         }
     }
 
-    // 루프 종료 후, 정지 상태인지 다시 확인 (PAUSED_STOPPED 상태 덮어쓰기 방지)
+    // 獄닷댃占?饒덌옙占??? ?屍? ?占쏙옙?蘊? ??⑨옙 ?屍귩쪟?(PAUSED_STOPPED ?占쏙옙 ??弟릎??뗨맻 獄삥떀?)
     if is_node_stopped(&pool, &node.node_id).await {
         println!(">>> Pipeline loop for node {} terminated due to manual stop signal.", node.node_id);
         return Ok(current_best_content);
     }
 
-    // 4. 상태 결정 및 업데이트
+    // 4. ?占쏙옙 囹뜹윜占?獄??占썬ゲ?歷ｄ궩
     let final_state = if let Some(e) = loop_error {
         match e {
             PipelineError::ApiError(code, msg) => {
@@ -856,9 +864,9 @@ pub async fn run_pipeline(
     .await
     .map_err(|e| e.to_string())?;
 
-    // 5. [중요] 완료된 경우에만 DAG 전이 처리
+    // 5. [辱쀰、억옙] ?占쏙옙??囹띈땃容??믭옙 DAG ?占쏜쬃?墉?겒??
     if final_state == NodeState::Completed {
-        // [RAG] 완료된 산출물을 벡터 DB에 임베딩 저장
+        // [RAG] ?占쏙옙????잞옙獄→쉼占?縕믠댃占?DB???占쏙옙???占??
         let best_iter = sqlx::query_as::<_, GenerationIteration>(
             "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY calculated_score DESC, created_at DESC LIMIT 1"
         )
@@ -869,9 +877,9 @@ pub async fn run_pipeline(
         
         if let Some(iter) = best_iter {
             if node.node_category != "GENESIS" {
-                let _ = app_handle.emit("pipeline-status", "RAG 임베딩 중...");
+                let _ = app_handle.emit("pipeline-status", "RAG ?占쏙옙??辱?..");
                 sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-                    .bind("RAG 임베딩 중...")
+                    .bind("RAG ?占쏙옙??辱?..")
                     .bind(Utc::now().to_rfc3339())
                     .bind(&node.node_id)
                     .execute(&*pool)
@@ -889,10 +897,10 @@ pub async fn run_pipeline(
 
                 match embedding_res {
                     Ok(_) => {
-                        let _ = app_handle.emit("pipeline-status", "RAG 임베딩 완료");
+                        let _ = app_handle.emit("pipeline-status", "RAG ?占쏙옙???占쏙옙");
                     },
                     Err(e) => {
-                        let err_msg = format!("RAG 임베딩 실패 ({}): {}", node_type, e);
+                        let err_msg = format!("RAG ?占쏙옙???轝좒쨺?({}): {}", node_type, e);
                         println!(">>> [RAG] {}", err_msg);
                         
                         let error_info = RagErrorInfo {
@@ -946,6 +954,7 @@ pub async fn handle_hitl_action(
     node_id: String,
     action: String,
     app_handle: tauri::AppHandle,
+    api_key: Option<String>,
 ) -> Result<(), String> {
     let node = sqlx::query_as::<_, DocumentNode>(
         "SELECT * FROM document_node WHERE node_id = ?"
@@ -958,7 +967,7 @@ pub async fn handle_hitl_action(
 
     match action.as_str() {
         "APPROVE" => {
-            // UI에 즉시 반영하기 위해 DB 상태를 먼저 COMPLETED로 변경
+            // UI 승인 액션 완료 후 즉시 DB 상태 반영 및 COMPLETED로 변경
             sqlx::query(
                 "UPDATE document_node SET node_state = 'COMPLETED', updated_at = ? WHERE node_id = ?"
             )
@@ -968,7 +977,9 @@ pub async fn handle_hitl_action(
             .await
             .map_err(|e| e.to_string())?;
 
-            // RAG 임베딩 및 다음 노드 트리거 로직을 백그라운드로 전환
+            let _ = app_handle.emit("nodes-updated", ());
+
+            // RAG 임베딩 등 백그라운드 작업 시작
             let pool_clone = pool.inner().clone();
             let app_handle_clone = app_handle.clone();
             let node_id_clone = node_id.clone();
@@ -977,15 +988,25 @@ pub async fn handle_hitl_action(
             let node_type_clone = node.target_node_type.clone();
             let node_category_for_bg = node.node_category.clone();
 
+            let api_key_passed = api_key;
             tauri::async_runtime::spawn(async move {
                 let client = app_handle_clone.state::<Client>();
-                let session_res = sqlx::query("SELECT api_key_encrypted FROM user_session WHERE session_id = 'default-session' AND is_deleted = 0")
-                    .fetch_optional(&pool_clone).await;
                 
-                let api_key = match session_res {
-                    Ok(Some(row)) => row.get::<String, _>("api_key_encrypted"),
+                let mut actual_key = api_key_passed;
+                if actual_key.as_deref().unwrap_or("").trim().is_empty() {
+                    let session_res = sqlx::query("SELECT api_key_encrypted FROM user_session WHERE session_id = 'default-session' AND is_deleted = 0")
+                        .fetch_optional(&pool_clone).await;
+                    
+                    actual_key = match session_res {
+                        Ok(Some(row)) => Some(row.get::<String, _>("api_key_encrypted")),
+                        _ => None,
+                    };
+                }
+
+                let final_api_key = match actual_key {
+                    Some(key) if !key.trim().is_empty() => key,
                     _ => {
-                        println!(">>> [RAG-BG] Failed to get API key for background embedding");
+                        println!(">>> [RAG-BG] Failed to get API key (passed was empty, DB was empty/failed)");
                         return;
                     }
                 };
@@ -1000,11 +1021,11 @@ pub async fn handle_hitl_action(
                 if let Ok(Some(iter)) = best_iter_res {
                     let mut embedding_success = true;
 
-                    // [RAG] GENESIS 카테고리는 개별 노드 색인을 생략하고 최종 통합 시점에 한 번만 수행함
+                    // [RAG] GENESIS ??르占썹じ堤솘???令덂텈占??蘊덌옙 ??ｐ쪟????껃쵋??섓옙 容뽴?곤옙 ???쪛 ?帝같占????縕믭옙占??掠욑옙??
                     if node_category_for_bg != "GENESIS" {
-                        let _ = app_handle_clone.emit("pipeline-status", "RAG 임베딩 중...");
+                        let _ = app_handle_clone.emit("pipeline-status", "RAG ?占쏙옙??辱?..");
                         let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-                            .bind("RAG 임베딩 중...")
+                            .bind("RAG ?占쏙옙??辱?..")
                             .bind(Utc::now().to_rfc3339())
                             .bind(&node_id_clone)
                             .execute(&pool_clone)
@@ -1012,7 +1033,7 @@ pub async fn handle_hitl_action(
                         let _ = app_handle_clone.emit("nodes-updated", ());
 
                         let embedding_res = store_document_embeddings(
-                            &pool_clone, &*client, &api_key,
+                            &pool_clone, &*client, &final_api_key,
                             &project_id_clone, module_id_clone.as_deref(),
                             &node_id_clone, &node_type_clone,
                             &iter.iteration_id, &iter.generated_draft_json,
@@ -1021,11 +1042,11 @@ pub async fn handle_hitl_action(
 
                         match embedding_res {
                             Ok(_) => {
-                                let _ = app_handle_clone.emit("pipeline-status", "RAG 임베딩 완료");
+                                let _ = app_handle_clone.emit("pipeline-status", "RAG ?占쏙옙???占쏙옙");
                             },
                             Err(e) => {
                                 embedding_success = false;
-                                let err_msg = format!("RAG 임베딩 실패 ({}): {}", node_type_clone, e);
+                                let err_msg = format!("RAG ?占쏙옙???轝좒쨺?({}): {}", node_type_clone, e);
                                 println!(">>> [RAG-BG] {}", err_msg);
                                 
                                 let error_info = RagErrorInfo {
@@ -1038,7 +1059,7 @@ pub async fn handle_hitl_action(
                             }
                         }
 
-                        // RAG 작업 종료 후 상태 초기화 (Live Activity 제거 용도)
+                        // RAG ?靜♥占?饒덌옙占????占쏙옙 容뺧옙???(Live Activity ?帝걟????섓옙)
                         let _ = sqlx::query("UPDATE document_node SET last_action = NULL, updated_at = ? WHERE node_id = ?")
                             .bind(Utc::now().to_rfc3339())
                             .bind(&node_id_clone)
@@ -1047,7 +1068,7 @@ pub async fn handle_hitl_action(
                         let _ = app_handle_clone.emit("nodes-updated", ());
                     }
 
-                    // 색인에 성공했거나, 색인 대상이 아닌 경우(GENESIS) 다음 노드 트리거
+                    // ??ｐ쪟???歟볣솷?占썸렆?? ??ｐ쪟??占?占쏜쬃??占쏙옙 囹띈땃容?GENESIS) ??⑨옙 ?蘊덌옙 ?蘊덃뵸令?
                     if embedding_success {
                         if let Some(mid) = &module_id_clone {
                             let _ = trigger_module_next_nodes(&app_handle_clone, mid, &node_type_clone).await;
@@ -1067,6 +1088,8 @@ pub async fn handle_hitl_action(
             .execute(&*pool)
             .await
             .map_err(|e| e.to_string())?;
+
+            let _ = app_handle.emit("nodes-updated", ());
         }
         _ => return Err("Invalid action".to_string()),
     }
@@ -1077,7 +1100,7 @@ pub async fn handle_hitl_action(
 async fn trigger_next_nodes(app_handle: tauri::AppHandle, project_id: &str, completed_node_type: &str) -> Result<(), String> {
     let pool = app_handle.state::<SqlitePool>();
 
-    // 프로젝트 레벨 명세 기반 의존성 맵 정의 (전역 노드만 담당)
+    // ?占쏙옙??틶???占썹뼅 獄덌옙占?影ｅ쐣占????뿈??獄??屍귨옙 (?占쏜　??蘊덌옙獄??歷좈컾)
     let next_map = vec![
         ("GPRD_Context_Goal", vec!["GPRD_Capability_Actor"]),
         ("GPRD_Capability_Actor", vec!["GPRD_Architecture_Schema"]),
@@ -1095,7 +1118,7 @@ async fn trigger_next_nodes(app_handle: tauri::AppHandle, project_id: &str, comp
         }
     }
 
-    // 각 후보 노드에 대해 모든 선행 조건이 충족되었는지 확인
+    // 令??占썽쇃 ?蘊덌옙???占??獄덂댖占??靜쪊占?邀썲쐦???容뷸떀짠???옙??? ?屍귩쪟?
     for target in nodes_to_check {
         let prerequisites = match target {
             "GPRD_Capability_Actor" => vec!["GPRD_Context_Goal"],
@@ -1152,7 +1175,7 @@ async fn trigger_next_nodes(app_handle: tauri::AppHandle, project_id: &str, comp
 fn get_prompts_dir(app_handle: &tauri::AppHandle) -> std::path::PathBuf {
     #[cfg(debug_assertions)]
     {
-        // 개발 환경(Debug 빌드)에서는 target 폴더의 캐시된 리소스 대신 원본 소스 경로를 최우선 탐색
+        // 令덂텈占???섊?(Debug 壅ю짆묕옙)??좑옙??target ?歷좑옙???ι윝占??玉붺쭛占???占????믧썿 ?葯멩벆 囹띈텫占썼쳺?容뽴?곈뺑????좑옙
         if let Ok(cwd) = std::env::current_dir() {
             let mut current = Some(cwd.as_path());
             while let Some(path) = current {
@@ -1170,7 +1193,7 @@ fn get_prompts_dir(app_handle: &tauri::AppHandle) -> std::path::PathBuf {
         }
     }
 
-    // 운영 환경(Release 빌드) 또는 소스 경로 탐색 실패 시 Tauri 리소스 경로 사용
+    // ?歷ο옙 ??섊?(Release 壅ю짆묕옙) ??믭옙 ?葯멩벆 囹띈텫占???좑옙 ?轝좒쨺???Tauri 玉붺쭛占??囹띈텫占??燁묌뭘
     if let Ok(resource_dir) = app_handle.path().resource_dir() {
         let p = resource_dir.join("prompts");
         if p.exists() {
@@ -1178,7 +1201,7 @@ fn get_prompts_dir(app_handle: &tauri::AppHandle) -> std::path::PathBuf {
         }
     }
 
-    // 최후의 수단
+    // 容뽴쮥껓옙????ゐ죫
     let fallback = app_handle.path().resource_dir().unwrap_or_default().join("prompts");
     println!(">>> [DEBUG] get_prompts_dir: No prompts directory found. Fallback to: {:?}", fallback);
     fallback
@@ -1195,15 +1218,8 @@ async fn generate_draft(
     previous_draft: &str,
     previous_feedback: &Vec<String>,
     iteration: i32,
-    exclude_node_ids: Vec<String>,
+    _exclude_node_ids: Vec<String>,
 ) -> Result<String, PipelineError> {
-    // Phase 2: RAG 컨텐츠 검색
-    let rag_query = format!("{} : {}", node_type, input_text);
-    let rag_context = get_rag_context(pool, client, api_key, project_id, &rag_query, 3, exclude_node_ids).await
-        .unwrap_or_else(|e| {
-            println!(">>> [RAG] Search failed (non-fatal): {}", e);
-            String::new()
-        });
     let node_normalized = node_type.to_lowercase().replace(" ", "_");
     let prompts_dir = get_prompts_dir(&app_handle);
     
@@ -1217,7 +1233,7 @@ async fn generate_draft(
         String::new()
     });
     
-    // v2: GPRD 서브 노드 동적 변수 주입
+    // v2: GPRD ?蒻낉옙 ?蘊덌옙 ?邕ㅿ옙 縕먲옙??辱ζ쉼占?
     if node_type.starts_with("GPRD_") {
         domain_prompt = domain_prompt.replace("{{RAW_INPUT}}", input_text);
         
@@ -1232,7 +1248,7 @@ async fn generate_draft(
         }
 
         let feedback_text = if previous_feedback.is_empty() {
-            "없음".to_string()
+            "?占쏙옙".to_string()
         } else {
             previous_feedback.join("\n")
         };
@@ -1246,12 +1262,12 @@ async fn generate_draft(
     println!(">>> System Prompt Loaded! Length: {} chars", combined_sys_prompt.len());
     
     let user_prompt = if node_type.starts_with("GPRD_") {
-        // GPRD 노드는 도메인 프롬프트 내에 모든 변수가 주입되었으므로 최소한의 구분자만 전달
+        // GPRD ?蘊덌옙???占쏙옙???占썩?占썰궩 ?歷ο옙 獄덂댖占?縕먲옙??? 辱ζ쉼占???옙?逆?獄?容뽴?곤옙?帝같占?囹긺┷占??믭옙 ?占쏜줎?
         format!("$DOCUMENT_TYPE: {}\n$ITERATION: {}", node_type, iteration)
     } else {
         let mut up = format!(
-            "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}{}",
-            node_type, iteration, input_text, rag_context
+            "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}",
+            node_type, iteration, input_text
         );
 
         if !previous_feedback.is_empty() {
@@ -1279,15 +1295,8 @@ async fn evaluate_draft(
     module_context: &str,
     previous_feedback: &Vec<String>,
     iteration: i32,
-    exclude_node_ids: Vec<String>,
+    _exclude_node_ids: Vec<String>,
 ) -> Result<crate::schemas::EvaluationResult, PipelineError> {
-    // Phase 2: RAG 컨텐츠 검색 (평가 시에도 참고)
-    let rag_query = format!("{} : {}", node_type, draft);
-    let rag_context = get_rag_context(pool, client, api_key, project_id, &rag_query, 3, exclude_node_ids).await
-        .unwrap_or_else(|e| {
-            println!(">>> [RAG] Search failed (non-fatal): {}", e);
-            String::new()
-        });
     let node_normalized = node_type.to_lowercase().replace(" ", "_");
     let prompts_dir = get_prompts_dir(&app_handle);
 
@@ -1301,7 +1310,7 @@ async fn evaluate_draft(
         String::new()
     });
 
-    // v2: GPRD 서브 노드 루브릭 변수 주입
+    // v2: GPRD ?蒻낉옙 ?蘊덌옙 獄닷댖占썼쵒?縕먲옙??辱ζ쉼占?
     if node_type.starts_with("GPRD_") {
         if let Some(input) = &input_text {
             domain_rubric = domain_rubric.replace("{{RAW_INPUT}}", input);
@@ -1324,25 +1333,32 @@ async fn evaluate_draft(
     let combined_sys_prompt = format!("$COMMON_RUBRIC\n{}\n\n$DOMAIN_RUBRIC\n{}", common_rubric, domain_rubric);
     println!(">>> Evaluator Prompt Loaded! Length: {} chars", combined_sys_prompt.len());
 
+    let target_schema = crate::schemas::get_schema_for_node(&node_normalized)
+        .map(|s| serde_json::to_string_pretty(&s).unwrap_or_default())
+        .unwrap_or_else(|| "No schema specification provided for this node type.".to_string());
+
     let mut user_prompt = format!(
-        "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$GENERATED_DOCUMENT\n{}{}",
-        node_type, iteration, draft, rag_context
+        "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$TARGET_SCHEMA\n{}\n\n$GENERATED_DOCUMENT\n{}",
+        node_type, iteration, target_schema, draft
     );
 
-    // 모듈 PRD가 아닐 때만 사용자 아이디어 참조
+    // [V2.6] $SOURCE_DOCUMENTS: 囹띰옙辱욃릸占?辱뷂옙?뭘 囹멱솠占??SSOT) ??⑨옙
+    let mut source_docs = String::new();
     if node_type == "Genesis_PRD" {
         if let Some(original_idea) = input_text {
-            user_prompt = format!(
-                "{}\n\n$SOURCE_DOCUMENTS\n{}",
-                user_prompt, original_idea
-            );
+            source_docs = original_idea;
+        }
+    } else {
+        // 獄덂댖占?獄????옙 ?蘊덌옙: global_context???靜쪊占??蘊덌옙(PRD, FSD, API_Spec ??令덌옙 ?燁믮쪡???㈇??占쏜줎??
+        if !global_context.is_empty() {
+            source_docs = global_context.to_string();
         }
     }
 
-    if !global_context.is_empty() {
+    if !source_docs.is_empty() {
         user_prompt = format!(
-            "{}\n\n$GLOBAL_CONTEXT\n{}",
-            user_prompt, global_context
+            "{}\n\n$SOURCE_DOCUMENTS\n{}",
+            user_prompt, source_docs
         );
     }
 
@@ -1363,7 +1379,7 @@ async fn evaluate_draft(
     let schema_obj = crate::schemas::get_schema_for_node("evaluator");
     let response_text = call_gemini(client, api_key, &combined_sys_prompt, &user_prompt, schema_obj).await?;
     
-    // JSON 추출 (정형화된 출력으로 인해 바로 파싱 시도, Gemini 2.5 Flash Structured Output 대응)
+    // JSON 容뷰눢占?(?制？占?塋억옙 容뷴텈占?逆븝옙 ?縕꿔윸 獄사ゾ占??葯멥삖 ?蒻낉옙, Gemini 2.5 Flash Structured Output ?占??
     let json_str = response_text.trim_start_matches("```json").trim_end_matches("```").trim();
     
     let eval: crate::schemas::EvaluationResult = serde_json::from_str(json_str)
@@ -1418,7 +1434,7 @@ async fn call_gemini(client: &Client, api_key: &str, sys_prompt: &str, user_prom
         .as_str()
         .ok_or_else(|| PipelineError::Internal("Empty response from Gemini".to_string()))?;
 
-    // 마크다운 백틱 및 불필요한 공백 제거
+    // 獄ㅿ옙占??⑩쟼?獄삥《??獄?蘊깍옙占?映앾옙 囹멱썯???帝걟??
     let cleaned_text = raw_text
         .trim()
         .trim_start_matches("```json")
@@ -1436,7 +1452,7 @@ pub async fn save_file(path: String, contents: String) -> Result<(), String> {
 }
 
 // ============================================================
-// v2 新 커맨드
+// v2 ???€쐢鸚??
 // ============================================================
 
 #[tauri::command]
@@ -1487,7 +1503,7 @@ pub async fn get_global_contexts(
     Ok(contexts)
 }
 
-/// Genesis PRD 파이프라인: 기존 run_pipeline과 동일한 Best-of-N 루프 사용
+/// Genesis PRD ?葯모쬃?占쏜쫱?? 影ｅ윜??run_pipeline囹??邕ㆀ쫱??Best-of-N 獄닷댃占??燁묌뭘
 #[tauri::command]
 pub async fn run_genesis_prd_pipeline(
     app_handle: tauri::AppHandle,
@@ -1496,11 +1512,11 @@ pub async fn run_genesis_prd_pipeline(
     project_id: String,
     api_key: String,
 ) -> Result<String, String> {
-    // Genesis_PRD 노드로 기존 run_pipeline 위임
+    // Genesis_PRD ?蘊덌옙獄?影ｅ윜??run_pipeline ?占쏙옙
     run_pipeline(app_handle, pool, active_tasks, project_id, "Genesis_PRD".to_string(), api_key).await
 }
 
-/// Genesis PRD HITL 승인 → SAD 페이즈로 전환 + SAD 노드 생성
+/// Genesis PRD HITL ?野?쪟???SAD ???쬃?킒占쏙옙 ?占쏙옙 + SAD ?蘊덌옙 ??뽳옙
 #[tauri::command]
 pub async fn confirm_genesis_prd_iteration(
     _app_handle: tauri::AppHandle,
@@ -1513,7 +1529,7 @@ pub async fn confirm_genesis_prd_iteration(
 
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
-    // 1. 해당 이터레이션이 속한 노드의 모든 이터레이션 is_pass 초기화 (다른 스테이지 간섭 방지)
+    // 1. ?歷좈컾 ?歷ｏ옙?占쏜쬃???쬃??驛곻옙 ?蘊덌옙??獄덂댖占??歷ｏ옙?占쏜쬃??is_pass 容뺧옙???(??덃뼢 ?轝좑옙?歷? 令덌옙占?獄삥떀?)
     sqlx::query("UPDATE generation_iteration SET is_pass = 0, updated_at = ? WHERE node_id = (SELECT node_id FROM generation_iteration WHERE iteration_id = ?)")
         .bind(&now)
         .bind(&iteration_id)
@@ -1521,7 +1537,7 @@ pub async fn confirm_genesis_prd_iteration(
         .await
         .map_err(|e| e.to_string())?;
 
-    // 2. 선택된 이터레이션만 is_pass = 1 설정
+    // 2. ?靜쪊占???歷ｏ옙?占쏜쬃??わ옙 is_pass = 1 ??⑨옙
     sqlx::query("UPDATE generation_iteration SET is_pass = 1, updated_at = ? WHERE iteration_id = ?")
         .bind(&now)
         .bind(&iteration_id)
@@ -1533,17 +1549,19 @@ pub async fn confirm_genesis_prd_iteration(
     Ok(())
 }
 
-/// Genesis PRD 개별 노드 승인 (SAD와 동일한 흐름 제공)
+/// Genesis PRD 令덂텈占??蘊덌옙 ?野?쪟?(SAD?占??邕ㆀ쫱????믭옙 ?帝걟??
 #[tauri::command]
 pub async fn approve_genesis_prd_node(
     app_handle: tauri::AppHandle,
     pool: tauri::State<'_, SqlitePool>,
     node_id: String,
+    api_key: Option<String>,
 ) -> Result<(), String> {
-    println!(">>> Approving Genesis PRD node: {}", node_id);
+    println!(">>> Approving Genesis PRD node: {}, api_key_provided: {}", node_id, api_key.is_some());
+
     let now = Utc::now().to_rfc3339();
 
-    // 1. 노드 정보 조회 (project_id와 target_node_type 확보)
+    // 1. ?蘊덌옙 ??낂쇃 邀썲쟿占?(project_id?占?target_node_type ??낂쇃)
     let node = sqlx::query_as::<_, DocumentNode>(
         "SELECT * FROM document_node WHERE node_id = ?"
     )
@@ -1553,7 +1571,7 @@ pub async fn approve_genesis_prd_node(
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "Node not found".to_string())?;
 
-    // 2. 노드 상태를 COMPLETED로 변경
+    // 2. ?蘊덌옙 ?占쏙옙獄?COMPLETED獄?縕먲옙囹?
     sqlx::query(
         "UPDATE document_node SET node_state = 'COMPLETED', updated_at = ? WHERE node_id = ?"
     )
@@ -1563,7 +1581,7 @@ pub async fn approve_genesis_prd_node(
     .await
     .map_err(|e| e.to_string())?;
 
-    // 3. 다음 노드 트리거 (Stage 1 -> Stage 2 등)
+    // 3. ??⑨옙 ?蘊덌옙 ?蘊덃뵸令?(Stage 1 -> Stage 2 ??
     trigger_next_nodes(app_handle, &node.project_id, &node.target_node_type).await?;
 
     Ok(())
@@ -1574,11 +1592,13 @@ pub async fn approve_genesis_prd(
     pool: tauri::State<'_, SqlitePool>,
     project_id: String,
     app_handle: tauri::AppHandle,
+    api_key: Option<String>,
 ) -> Result<(), String> {
-    println!(">>> Approving Genesis PRD for project: {}", project_id);
+    println!(">>> Approving Genesis PRD for project: {}, api_key_provided: {}", project_id, api_key.is_some());
+
     let now = Utc::now().to_rfc3339();
 
-    // 1. GPRD_Architecture_Schema (최종 단계) 또는 기존 Genesis_PRD 노드를 COMPLETED로 변경
+    // 1. GPRD_Architecture_Schema (容뽴?곤옙 ??뤄옙) ??믭옙 影ｅ윜??Genesis_PRD ?蘊덌옙獄?COMPLETED獄?縕먲옙囹?
     sqlx::query(
         "UPDATE document_node SET node_state = 'COMPLETED', updated_at = ? WHERE project_id = ? AND target_node_type IN ('Genesis_PRD', 'GPRD_Architecture_Schema')"
     )
@@ -1588,10 +1608,10 @@ pub async fn approve_genesis_prd(
     .await
     .map_err(|e| e.to_string())?;
 
-    // 1.1 통합 PRD 데이터 생성 (1-A + 1-B + 1-C 병합)
+    // 1.1 ???쪛 PRD ??잟쬃????뽳옙 (1-A + 1-B + 1-C 縕먳짉숃쪛)
     let full_prd = get_full_approved_prd(&*pool, &project_id).await;
     
-    // 1.2 최종 노드 식별 (RAG 연결용)
+    // 1.2 容뽴?곤옙 ?蘊덌옙 ??껓옙 (RAG ??뗧썟??
     let final_node = sqlx::query_as::<_, DocumentNode>(
         "SELECT * FROM document_node WHERE project_id = ? AND target_node_type IN ('GPRD_Architecture_Schema', 'Genesis_PRD') ORDER BY created_at DESC LIMIT 1"
     )
@@ -1612,10 +1632,10 @@ pub async fn approve_genesis_prd(
     println!(">>> Genesis PRD approved. Shifted to SAD Global phase for project: {}", project_id);
     let _ = app_handle.emit("nodes-updated", ());
 
-    // [변경] RAG 임베딩 대기 없이 즉시 SAD 단계로 전환 (UI 응답성 개선)
+    // [縕먲옙囹? RAG ?占쏙옙???占썹???占쏜쬃?辱욃맋占?SAD ??뤄옙獄??占쏙옙 (UI ??ｄ???令덍?곤옙)
     let _ = actual_approve_genesis_prd(&app_handle, &*pool, &project_id).await;
 
-    // RAG 임베딩 백그라운드 처리: 통합본을 단일 문서로 색인
+    // RAG ?占쏙옙??獄삥쥞繹?逆곧쟼??墉?겒?? ???쪛縕먫퀎占???곧쫱?獄↑퀎占썼ア???ｐ쪟?
     if let Some(it) = latest_it {
         let pool_clone = pool.inner().clone();
         let app_handle_clone = app_handle.clone();
@@ -1627,26 +1647,41 @@ pub async fn approve_genesis_prd(
 
         tauri::async_runtime::spawn(async move {
             let client = app_handle_clone.state::<Client>();
-            let session_res = sqlx::query("SELECT api_key_encrypted FROM user_session WHERE session_id = 'default-session' AND is_deleted = 0")
-                .fetch_optional(&pool_clone).await;
             
-            let api_key = match session_res {
-                Ok(Some(row)) => row.get::<String, _>("api_key_encrypted"),
-                _ => return,
+            // 1. ?蘊꾬옙獄????㈇??????잞옙 ?燁묌뭘, ?占썲컧獄?DB??좑옙 邀썲쟿占?
+            let mut actual_api_key = api_key;
+            if actual_api_key.as_deref().unwrap_or("").trim().is_empty() {
+                let session_res = sqlx::query("SELECT api_key_encrypted FROM user_session WHERE session_id = 'default-session' AND is_deleted = 0")
+                    .fetch_optional(&pool_clone).await;
+                
+                actual_api_key = match session_res {
+                    Ok(Some(row)) => Some(row.get::<String, _>("api_key_encrypted")),
+                    _ => None,
+                };
+            }
+
+            let api_key_str = match actual_api_key {
+                Some(key) if !key.trim().is_empty() => key,
+                _ => {
+                    println!(">>> [RAG-BG] No API key found in args or DB. Aborting embedding.");
+                    return;
+                }
             };
 
-            let _ = app_handle_clone.emit("pipeline-status", "통합 PRD RAG 임베딩 중...");
+
+            let _ = app_handle_clone.emit("pipeline-status", "???쪛 PRD RAG ?占쏙옙??辱?..");
             let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-                .bind("통합 RAG 임베딩 중...")
+                .bind("???쪛 RAG ?占쏙옙??辱?..")
                 .bind(Utc::now().to_rfc3339())
                 .bind(&node_id_clone)
                 .execute(&pool_clone)
                 .await;
             let _ = app_handle_clone.emit("nodes-updated", ());
 
-            // [핵심] get_full_approved_prd 결과물(full_prd)을 색인하여 중복 제거
+            // [??숎줎? get_full_approved_prd 囹뜹쐦?껇ァ?full_prd)????ｐ쪟???ㄹ?辱쀧궍???帝걟??
             let embedding_res = store_document_embeddings(
-                &pool_clone, &*client, &api_key,
+                &pool_clone, &*client, &api_key_str,
+
                 &project_id_clone, None,
                 &node_id_clone, &node_type_clone,
                 &iteration_id_clone, &full_prd,
@@ -1655,7 +1690,7 @@ pub async fn approve_genesis_prd(
 
             match embedding_res {
                 Ok(_) => {
-                    let _ = app_handle_clone.emit("pipeline-status", "통합 PRD 임베딩 완료");
+                    let _ = app_handle_clone.emit("pipeline-status", "???쪛 PRD ?占쏙옙???占쏙옙");
                     let _ = sqlx::query("UPDATE document_node SET last_action = NULL, updated_at = ? WHERE node_id = ?")
                         .bind(Utc::now().to_rfc3339())
                         .bind(&node_id_clone)
@@ -1664,7 +1699,7 @@ pub async fn approve_genesis_prd(
                     let _ = app_handle_clone.emit("nodes-updated", ());
                 },
                 Err(e) => {
-                    let err_msg = format!("통합 PRD RAG 임베딩 실패: {}", e);
+                    let err_msg = format!("???쪛 PRD RAG ?占쏙옙???轝좒쨺? {}", e);
                     println!(">>> [RAG-BG] {}", err_msg);
                     
                     let error_info = RagErrorInfo {
@@ -1674,7 +1709,7 @@ pub async fn approve_genesis_prd(
                         error_message: e.to_string(),
                     };
                     let _ = app_handle_clone.emit("rag-error", error_info);
-                    let _ = app_handle_clone.emit("pipeline-status", "통합 PRD 임베딩 실패 (중단)");
+                    let _ = app_handle_clone.emit("pipeline-status", "???쪛 PRD ?占쏙옙???轝좒쨺?(辱쀧궍靜?)");
                 }
             }
         });
@@ -1683,7 +1718,7 @@ pub async fn approve_genesis_prd(
     Ok(())
 }
 
-/// 실제 Genesis PRD 승인 처리 로직 (임베딩 성공 후 호출)
+/// ??⑨옙 Genesis PRD ?野?쪟?墉?겒??獄??곤옙 (?占쏙옙???歟볣솷 ???蘊꾬옙)
 async fn actual_approve_genesis_prd(
     app_handle: &tauri::AppHandle,
     pool: &SqlitePool,
@@ -1691,7 +1726,7 @@ async fn actual_approve_genesis_prd(
 ) -> Result<(), String> {
     let now = Utc::now().to_rfc3339();
 
-    // 1. 프로젝트 pipeline_phase를 SAD로 전환
+    // 1. ?占쏙옙??틶??pipeline_phase獄?SAD獄??占쏙옙
     sqlx::query(
         "UPDATE project SET pipeline_phase = 'SAD', updated_at = ? WHERE project_id = ?"
     )
@@ -1701,7 +1736,7 @@ async fn actual_approve_genesis_prd(
     .await
     .map_err(|e| e.to_string())?;
 
-    // 2. SAD 글로벌 컨텍스트 노드 생성
+    // 2. SAD 影ｏ옙獄℡텈占??℡댃占?轝졽궩 ?蘊덌옙 ??뽳옙
     let global_node_id = Uuid::new_v4().to_string();
     sqlx::query(
         "INSERT INTO document_node (node_id, project_id, module_id, target_node_type, node_category, node_state, current_iteration, max_iterations, threshold_score, current_best_score, created_at, updated_at, is_deleted) VALUES (?, ?, NULL, 'SAD_Global', 'SAD', 'READY', 0, 5, 80, 0, ?, ?, 0)"
@@ -1714,7 +1749,7 @@ async fn actual_approve_genesis_prd(
     .await
     .map_err(|e| e.to_string())?;
 
-    // 3. SAD 모듈 분할 노드 생성 (PENDING 상태로 생성하여 DAG 표현)
+    // 3. SAD 獄덂댖占?蘊깍옙占??蘊덌옙 ??뽳옙 (PENDING ?占쏙옙獄???뽳옙???ㄹ?DAG ?帝굛占?
     let module_node_id = Uuid::new_v4().to_string();
     sqlx::query(
         "INSERT INTO document_node (node_id, project_id, module_id, target_node_type, node_category, node_state, current_iteration, max_iterations, threshold_score, current_best_score, created_at, updated_at, is_deleted) VALUES (?, ?, NULL, 'SAD_Module', 'SAD', 'PENDING', 0, 5, 80, 0, ?, ?, 0)"
@@ -1731,7 +1766,7 @@ async fn actual_approve_genesis_prd(
     Ok(())
 }
 
-/// 유저가 수동으로 다음 단계를 활성화 (READY 상태로 전환)
+/// ?劑뵳?令덌옙 ??わ옙?逆븝옙 ??⑨옙 ??뤄옙獄??帝같占??(READY ?占쏙옙獄??占쏙옙)
 #[tauri::command]
 pub async fn manually_trigger_next_nodes(
     app_handle: tauri::AppHandle,
@@ -1740,7 +1775,7 @@ pub async fn manually_trigger_next_nodes(
 ) -> Result<(), String> {
     println!(">>> Manually triggering next nodes for: {}", completed_node_type);
     
-    // 현재 노드가 속한 모듈 아이디 찾기 (모듈 파이프라인 전용)
+    // ?占쏙옙 ?蘊덌옙令덌옙 ?驛곻옙 獄덂댖占??占쏜쬃??墉녷㉬??(獄덂댖占??葯모쬃?占쏜쫱???占썽뭘)
     let pool = app_handle.state::<SqlitePool>();
     let node = sqlx::query("SELECT module_id FROM document_node WHERE project_id = ? AND target_node_type = ?")
         .bind(&project_id)
@@ -1756,7 +1791,7 @@ pub async fn manually_trigger_next_nodes(
         }
     }
 
-    // 제네시스 PRD 또는 GPRD 최종 노드인 경우 시뮬레이션
+    // ?蒻낉옙?帝같??PRD ??믭옙 GPRD 容뽴?곤옙 ?蘊덌옙??囹띈땃容??蒻??占쏜쬃??
     if completed_node_type == "Genesis_PRD" || completed_node_type == "GPRD_Architecture_Schema" {
         return actual_approve_genesis_prd(&app_handle, &*pool, &project_id).await;
     }
@@ -1764,7 +1799,7 @@ pub async fn manually_trigger_next_nodes(
     trigger_next_nodes(app_handle, &project_id, &completed_node_type).await
 }
 
-/// SAD 글로벌 컨텍스트 파이프라인
+/// SAD 影ｏ옙獄℡텈占??℡댃占?轝졽궩 ?葯모쬃?占쏜쫱??
 #[tauri::command]
 pub async fn run_sad_global_pipeline(
     app_handle: tauri::AppHandle,
@@ -1776,7 +1811,7 @@ pub async fn run_sad_global_pipeline(
     println!(">>> SAD Global Pipeline started for project: {}", project_id);
     let client = reqwest::Client::new();
 
-    // SAD_Global 노드 정보 조회 (중복 실행 체크용)
+    // SAD_Global ?蘊덌옙 ??낂쇃 邀썲쟿占?(辱쀧궍???轝좑옙 墉?르占??
     let sad_node = sqlx::query_as::<_, DocumentNode>(
         "SELECT * FROM document_node WHERE project_id = ? AND target_node_type = 'SAD_Global'"
     )
@@ -1786,17 +1821,17 @@ pub async fn run_sad_global_pipeline(
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "SAD_Global node not found".to_string())?;
 
-    // 중복 실행 체크
+    // 辱쀧궍???轝좑옙 墉?르占?
     {
         let mut tasks = active_tasks.0.lock().map_err(|e| e.to_string())?;
         if tasks.contains(&sad_node.node_id) {
             println!(">>> [ABORT] Node is already running: {}", sad_node.node_id);
-            return Err("이미 프로세스가 진행 중입니다. (ActiveTask Detect)".to_string());
+            return Err("?歷? ?占쏙옙?蘊꾣벆令덌옙 辱뷂옙占?辱쀰、억옙?占쏜졊? (ActiveTask Detect)".to_string());
         }
         tasks.insert(sad_node.node_id.clone());
     }
 
-    // RAII 가드 생성
+    // RAII 令덌옙????뽳옙
     struct TaskGuard {
         tasks: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
         node_id: String,
@@ -1819,14 +1854,14 @@ pub async fn run_sad_global_pipeline(
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "Project not found".to_string())?;
 
-    // v2: GPRD 3단계 통합 데이터(1-A, 1-B, 1-C)를 가져옵니다.
+    // v2: GPRD 3??뤄옙 ???쪛 ??잟쬃??1-A, 1-B, 1-C)獄?令덌옙?蘊꾤뙋?占쏜졊?
     let genesis_prd_content = get_full_approved_prd(&*pool, &project_id).await;
     
     if genesis_prd_content == "{}" {
-        return Err("확정된 Genesis PRD가 없거나 통합할 수 없습니다. PRD 전 단계를 먼저 승인해주세요.".to_string());
+        return Err("?屍귨옙??Genesis PRD令덌옙 ?占썸렆?????쪛?????占쏜졐?占쏜졊? PRD ????뤄옙獄?獄잍쉼? ?野?쪟?歷Λ?蘊꾬옙.".to_string());
     }
 
-    // SAD_Global 노드 상태 조회
+    // SAD_Global ?蘊덌옙 ?占쏙옙 邀썲쟿占?
     let sad_node = sqlx::query_as::<_, DocumentNode>(
         "SELECT node_id, project_id, module_id, target_node_type, node_category, node_state, current_iteration, max_iterations, threshold_score, current_best_score, api_error_code, api_error_message, created_at, updated_at FROM document_node WHERE project_id = ? AND target_node_type = 'SAD_Global'"
     )
@@ -1836,11 +1871,11 @@ pub async fn run_sad_global_pipeline(
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "SAD_Global node not found".to_string())?;
     
-    if sad_node.node_state != "READY" && sad_node.node_state != "PAUSED_HITL" && sad_node.node_state != "PAUSED_API_ERROR" && sad_node.node_state != "PAUSED_STOPPED" && sad_node.node_state != "COMPLETED" {
-        return Err("현재 상태에서는 실행할 수 없습니다.".to_string());
+    if sad_node.node_state != "READY" && sad_node.node_state != "PAUSED_HITL" && sad_node.node_state != "PAUSED_API_ERROR" && sad_node.node_state != "PAUSED_STOPPED" && sad_node.node_state != "COMPLETED" && sad_node.node_state != "STALE" {
+        return Err("?占쏙옙 ?占쏙옙??좑옙???轝좑옙?????占쏜졐?占쏜졊?".to_string());
     }
 
-    // 상태를 IN_PROGRESS로 변경
+    // ?占쏙옙獄?IN_PROGRESS獄?縕먲옙囹?
     sqlx::query("UPDATE document_node SET node_state = 'IN_PROGRESS', updated_at = ? WHERE node_id = ?")
         .bind(Utc::now().to_rfc3339())
         .bind(&sad_node.node_id)
@@ -1858,7 +1893,7 @@ pub async fn run_sad_global_pipeline(
     let mut last_error = String::new();
     let mut last_feedback = String::new();
 
-    // [RETRY] 이전 회차 피드백 및 초안 가져오기
+    // [RETRY] ?歷ο옙 ?葯면━ ?逆븝옙獄?獄?容뺧옙占?令덌옙?蘊꾭젅붺??
     let latest_iter = sqlx::query_as::<_, GenerationIteration>(
         "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY iteration_number DESC LIMIT 1"
     )
@@ -1887,24 +1922,24 @@ pub async fn run_sad_global_pipeline(
     });
 
     if current_iter >= max_iters && !is_global_success {
-        last_error = "최대 반복 횟수(Max Iterations)에 도달했습니다. 설정을 변경하여 횟수를 늘려주세요.".to_string();
+        last_error = "容뽩텈? 獄삡겒???悌솆占?Max Iterations)???占쏜줎?占쏜졐?占쏜졊? ??⑨옙??縕먲옙囹띈릊占???悌솆占썼쳺???ゐ㉧백뇰逆곤옙??".to_string();
     }
 
-    // Stage 1: 글로벌 컨텍스트 5종 생성 및 평가 루프
+    // Stage 1: 影ｏ옙獄℡텈占??℡댃占?轝졽궩 5饒???뽳옙 獄???? 獄닷댃占?
     while current_iter < max_iters && !is_global_success {
         current_iter += 1;
         let global_types = vec!["sad_non_tech", "sad_tech_stack", "sad_core_erd", "sad_auth_rbac", "sad_interface_error"];
-        // 이전 회차의 번들이 있다면 초기값으로 사용, 없으면 빈 객체
+        // ?歷ο옙 ?葯면━??縕믭옙褶???占쏜졊삭グ?容뺧옙?쇘찄帝찂弱먫ア??燁묌뭘, ?占썲컧獄?壅?令덂릸??
         let mut stage_context_json = initial_stage_context.clone();
 
         for ctx_type in global_types {
-            let _ = app_handle.emit("pipeline-status", format!("SAD Stage 1 (Iter {}): {} 생성 중...", current_iter, ctx_type));
+            let _ = app_handle.emit("pipeline-status", format!("SAD Stage 1 (Iter {}): {} ??뽳옙 辱?..", current_iter, ctx_type));
 
             sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-                .bind(format!("{} 생성 중...", ctx_type)).bind(Utc::now().to_rfc3339()).bind(&sad_node.node_id)
+                .bind(format!("{} ??뽳옙 辱?..", ctx_type)).bind(Utc::now().to_rfc3339()).bind(&sad_node.node_id)
                 .execute(&*pool).await.map_err(|e| e.to_string())?;
             
-            // 의존성 데이터 추출
+            // ???뿈????잟쬃??容뷰눢占?
             let dependencies = match ctx_type {
                 "sad_non_tech" => vec![],
                 "sad_tech_stack" => vec!["sad_non_tech"],
@@ -1935,24 +1970,17 @@ pub async fn run_sad_global_pipeline(
                 String::new()
             });
 
-            let rag_query = format!("{} : {}", ctx_type, genesis_prd_content);
-            let rag_context = get_rag_context(&*pool, &client, &api_key, &project_id, &rag_query, 3, vec![]).await
-                .unwrap_or_else(|e| {
-                    println!(">>> [RAG] SAD Global Search failed: {}", e);
-                    String::new()
-                });
-
             let sys_prompt = format!("$COMMON_RULES\n{}\n\n$DOMAIN_SPECIFIC_RULE\n{}", common_prompt, type_prompt);
             let user_prompt = format!(
-                "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$PREVIOUS_ARCHITECTURAL_DECISIONS\n{}\n\n$PREVIOUS_DRAFT\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n{}\n\n위 정보를 기반으로 {}을(를) 작성하십시오.",
-                ctx_type, current_iter, genesis_prd_content, prev_context_str, prev_draft_str, last_feedback, rag_context, ctx_type
+                "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$PREVIOUS_ARCHITECTURAL_DECISIONS\n{}\n\n$PREVIOUS_DRAFT\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n????낂쇃獄?影ｅ쐣占?逆븝옙 {}??獄? ?靜♥占???쨫?帝같?닎.",
+                ctx_type, current_iter, genesis_prd_content, prev_context_str, prev_draft_str, last_feedback, ctx_type
             );
 
             let result = call_gemini(&client, &api_key, &sys_prompt, &user_prompt, schema_obj).await;
             let part_json = match result {
                 Ok(content) => {
                     serde_json::from_str::<serde_json::Value>(&content)
-                        .map_err(|e| format!("SAD Part ({}) 파싱 오류: {} - 원본: {}", ctx_type, e, content))?
+                        .map_err(|e| format!("SAD Part ({}) ?葯멥삖 ??덌옙: {} - ??믧썿: {}", ctx_type, e, content))?
                 }
                 Err(e) => {
                     let (code, msg) = match e {
@@ -1962,23 +1990,23 @@ pub async fn run_sad_global_pipeline(
                     sqlx::query("UPDATE document_node SET node_state = 'PAUSED_API_ERROR', api_error_code = ?, api_error_message = ?, updated_at = ? WHERE node_id = ?")
                     .bind(code).bind(&msg).bind(Utc::now().to_rfc3339()).bind(&sad_node.node_id)
                     .execute(&*pool).await.map_err(|e| e.to_string())?;
-                    return Err(format!("SAD Part ({}) 생성 오류: {}", ctx_type, msg));
+                    return Err(format!("SAD Part ({}) ??뽳옙 ??덌옙: {}", ctx_type, msg));
                 }
             };
 
-            // 통합 객체에 삽입
+            // ???쪛 令덂릸????擁ｏ옙
             if let Some(obj) = stage_context_json.as_object_mut() {
                 obj.insert(ctx_type.to_string(), part_json);
             }
 
-            // [STOP CHECK] 개별 파트 생성 후 중단 체크
+            // [STOP CHECK] 令덂텈占??榕꿜궩 ??뽳옙 ??辱쀧궍靜? 墉?르占?
             if is_node_stopped(&*pool, &sad_node.node_id).await {
                 println!(">>> SAD Global stopped manually during part generation ({})", ctx_type);
                 return Ok("SAD global stopped manually".to_string());
             }
         }
 
-        // 글로벌 컨텍스트 통합 평가
+        // 影ｏ옙獄℡텈占??℡댃占?轝졽궩 ???쪛 ???
         let eval_schema = crate::schemas::get_evaluation_schema();
         let prompts_dir = get_prompts_dir(&app_handle);
         
@@ -1992,7 +2020,7 @@ pub async fn run_sad_global_pipeline(
         );
 
         sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-            .bind("통합 품질 검증 중...").bind(Utc::now().to_rfc3339()).bind(&sad_node.node_id)
+            .bind("???쪛 ?占쏙옙 囹띰옙辱?辱?..").bind(Utc::now().to_rfc3339()).bind(&sad_node.node_id)
             .execute(&*pool).await.map_err(|e| e.to_string())?;
 
         let eval_result = call_gemini(&client, &api_key, &eval_sys_prompt, &eval_user_prompt, Some(eval_schema)).await;
@@ -2001,32 +2029,32 @@ pub async fn run_sad_global_pipeline(
                 let eval: serde_json::Value = serde_json::from_str(&eval_json).unwrap_or_default();
                 let score = eval["score"].as_i64().unwrap_or(0) as i32;
                 
-                // [기계적 판단] AI의 is_pass 값을 무시하고 백엔드에서 직접 계산
+                // [影ｅ쐦占????믮죫] AI??is_pass 令덍Ł놅옙 獄→른占??섓옙 獄삥×占?帝같占??辱뷂옙占?囹몌옙占?
                 let has_critical_errors = eval["critical_errors"].as_array().map_or(false, |arr| !arr.is_empty());
                 let is_passed = score >= threshold && !has_critical_errors;
                 
                 if is_passed || (current_iter == max_iters) {
                     is_global_success = is_passed;
                     if !is_passed && current_iter == max_iters {
-                        let _ = app_handle.emit("pipeline-status", format!("SAD Stage 1 품질 미달이나 최대 횟수 도달로 중단 (점수: {})", score));
+                        let _ = app_handle.emit("pipeline-status", format!("SAD Stage 1 ?占쏙옙 獄?퀓靜졋?歷좑옙 容뽩텈? ?悌솆占??占쏜줎븃ア?辱쀧궍靜? (??좑옙: {})", score));
                     } else {
                         _all_context_json = stage_context_json.clone();
-                        let _ = app_handle.emit("pipeline-status", format!("SAD Stage 1 통과 (점수: {})", score));
+                        let _ = app_handle.emit("pipeline-status", format!("SAD Stage 1 ??쏃쟽 (??좑옙: {})", score));
                     }
                 }
 
-                // [회차 저장] 모든 이터레이션 결과를 히스토리 테이블에 저장
+                // [?葯면━ ?占?? 獄덂댖占??歷ｏ옙?占쏜쬃??囹뜹쐦?껇쳺??占썸벆?堤솘???葯모쬃?납?뱄옙 ?占??
                 let iter_id = Uuid::new_v4().to_string();
                 let now = Utc::now().to_rfc3339();
 
                 let feedback_text = if let Ok(issues) = serde_json::from_value::<Vec<crate::schemas::EvaluationIssue>>(eval["feedback"].clone()) {
-                    issues.iter().map(|i| format!("[보강 필요 - 위치: {}] {} : {}", i.location, i.code, i.description)).collect::<Vec<_>>().join("\n")
+                    issues.iter().map(|i| format!("[縕먩퉲占??占쏙옙 - ?占쏙옙: {}] {} : {}", i.location, i.code, i.description)).collect::<Vec<_>>().join("\n")
                 } else {
                     eval["feedback"].as_array().map(|arr| arr.iter().map(|v| v.as_str().unwrap_or("")).collect::<Vec<_>>().join("\n")).unwrap_or_default()
                 };
 
                 let critical_errors_text = if let Ok(issues) = serde_json::from_value::<Vec<crate::schemas::EvaluationIssue>>(eval["critical_errors"].clone()) {
-                    issues.iter().map(|i| format!("[위치: {}] {} : {}", i.location, i.code, i.description)).collect::<Vec<_>>().join("\n")
+                    issues.iter().map(|i| format!("[?占쏙옙: {}] {} : {}", i.location, i.code, i.description)).collect::<Vec<_>>().join("\n")
                 } else {
                     eval["critical_errors"].as_array().map(|arr| arr.iter().map(|v| v.as_str().unwrap_or("")).collect::<Vec<_>>().join("\n")).unwrap_or_default()
                 };
@@ -2034,10 +2062,10 @@ pub async fn run_sad_global_pipeline(
                 let feedback_json = serde_json::to_string(&eval["feedback"]).unwrap_or_default();
                 let critical_json = serde_json::to_string(&eval["critical_errors"]).unwrap_or_default();
 
-                // 트랜잭션 시작
+                // ?蘊덌옙??占??帝같占?
                 let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
-                // [추가] 중복 확정 방지: 이번 회차가 통과 기준을 만족하면 해당 노드의 기존 확정 상태들 초기화
+                // [容븟??] 辱쀧궍???屍귨옙 獄삥떀?: ?歷좑옙 ?葯면━令덌옙 ??쏃쟽 影ｅ윜???獄ㅵ돋짠??ゅ틬 ?歷좈컾 ?蘊덌옙??影ｅ윜???屍귨옙 ?占쏙옙??容뺧옙???
                 if is_passed {
                     sqlx::query("UPDATE generation_iteration SET is_pass = 0, updated_at = ? WHERE node_id = ?")
                         .bind(&now)
@@ -2062,7 +2090,7 @@ pub async fn run_sad_global_pipeline(
                 .bind(&now)
                 .execute(&mut *tx).await.map_err(|e| e.to_string())?;
 
-                // 기계적 분할: 매 회차(Draft 포함)의 5종 컨텍스트를 각각 저장
+                // 影ｅ쐦占??蘊깍옙占? 獄??葯면━(Draft ?燁믮쪡???5饒??℡댃占?轝졽궩獄?令덌옙占??占??
                 let global_types = vec!["sad_core_erd", "sad_auth_rbac", "sad_interface_error", "sad_tech_stack", "sad_non_tech"];
                 for ctx_type in global_types {
                     if let Some(data) = stage_context_json.get(ctx_type) {
@@ -2077,31 +2105,31 @@ pub async fn run_sad_global_pipeline(
 
                 tx.commit().await.map_err(|e| e.to_string())?;
 
-                // [피드백 업데이트] 다음 회차를 위해 피드백 저장 (지식 주입용 텍스트)
+                // [?逆븝옙獄??占썬ゲ?歷ｄ궩] ??⑨옙 ?葯면━獄??占썬윸 ?逆븝옙獄??占??(辱뷂옙??辱ζ쉼占???鼎퐗???
                 last_feedback = feedback_text.clone();
                 if !critical_errors_text.is_empty() {
                     last_feedback = format!("{}\n{}", critical_errors_text, last_feedback);
                 }
 
                 if !is_global_success {
-                    last_error = eval["feedback"].as_str().unwrap_or("품질 미달").to_string();
-                    let _ = app_handle.emit("pipeline-status", format!("SAD Stage 1 품질 미달 (점수: {}), 재시도 중...", score));
+                    last_error = eval["feedback"].as_str().unwrap_or("?占쏙옙 獄?퀓靜졋").to_string();
+                    let _ = app_handle.emit("pipeline-status", format!("SAD Stage 1 ?占쏙옙 獄?퀓靜졋 (??좑옙: {}), ?燁묕옙??辱?..", score));
                 }
             }
             Err(_) => {
-                last_error = "평가 중 오류 발생".to_string();
+                last_error = "??? 辱???덌옙 獄삽?곤옙".to_string();
             }
         }
     }
 
-    // 루프 종료 후, 정지 상태인지 다시 확인 (PAUSED_STOPPED 상태 덮어쓰기 방지)
+    // 獄닷댃占?饒덌옙占??? ?屍? ?占쏙옙?蘊? ??⑨옙 ?屍귩쪟?(PAUSED_STOPPED ?占쏙옙 ??弟릎??뗨맻 獄삥떀?)
     if is_node_stopped(&pool, &sad_node.node_id).await {
         println!(">>> SAD Global Pipeline loop for node {} terminated due to manual stop signal.", sad_node.node_id);
         return Ok("SAD global context pipeline stopped".to_string());
     }
 
     if !is_global_success {
-        // [수정] 실패 시에도 이터레이션 정보는 업데이트
+        // [???옙] ?轝좒쨺??帝같占???歷ｏ옙?占쏜쬃????낂쇃???占썬ゲ?歷ｄ궩
         sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', current_iteration = ?, updated_at = ? WHERE node_id = ?")
             .bind(current_iter)
             .bind(Utc::now().to_rfc3339())
@@ -2111,10 +2139,10 @@ pub async fn run_sad_global_pipeline(
             .map_err(|e| e.to_string())?;
 
         let _ = app_handle.emit("nodes-updated", ());
-        return Err(format!("SAD 글로벌 컨텍스트 생성 불가: {}", last_error));
+        return Err(format!("SAD 影ｏ옙獄℡텈占??℡댃占?轝졽궩 ??뽳옙 蘊깍옙?: {}", last_error));
     }
 
-    // SAD_Global 노드 완료 처리 및 SAD_Module 노드 활성화(READY)
+    // SAD_Global ?蘊덌옙 ?占쏙옙 墉?겒??獄?SAD_Module ?蘊덌옙 ?帝같占??READY)
     sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', current_iteration = ?, current_best_score = 100, updated_at = ? WHERE node_id = ?")
         .bind(current_iter)
         .bind(Utc::now().to_rfc3339())
@@ -2131,12 +2159,12 @@ pub async fn run_sad_global_pipeline(
         .map_err(|e| e.to_string())?;
 
     let _ = app_handle.emit("nodes-updated", ());
-    let _ = app_handle.emit("pipeline-status", "SAD 글로벌 컨텍스트 생성 완료. 모듈 분할 노드를 실행해 주세요.");
+    let _ = app_handle.emit("pipeline-status", "SAD 影ｏ옙獄℡텈占??℡댃占?轝졽궩 ??뽳옙 ?占쏙옙. 獄덂댖占?蘊깍옙占??蘊덌옙獄??轝좑옙??辱ζ쉼占??");
 
     Ok("SAD global context pipeline completed".to_string())
 }
 
-/// SAD 모듈 분할 파이프라인
+/// SAD 獄덂댖占?蘊깍옙占??葯모쬃?占쏜쫱??
 #[tauri::command]
 pub async fn run_sad_module_pipeline(
     app_handle: tauri::AppHandle,
@@ -2149,7 +2177,7 @@ pub async fn run_sad_module_pipeline(
     println!(">>> SAD Module Split Pipeline started for project: {}, target_count: {:?}", project_id, target_module_count);
     let client = reqwest::Client::new();
 
-    // SAD_Module 노드 정보 조회 (중복 실행 체크용)
+    // SAD_Module ?蘊덌옙 ??낂쇃 邀썲쟿占?(辱쀧궍???轝좑옙 墉?르占??
     let sad_node = sqlx::query_as::<_, DocumentNode>(
         "SELECT * FROM document_node WHERE project_id = ? AND target_node_type = 'SAD_Module'"
     )
@@ -2159,17 +2187,17 @@ pub async fn run_sad_module_pipeline(
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "SAD_Module node not found".to_string())?;
 
-    // 중복 실행 체크
+    // 辱쀧궍???轝좑옙 墉?르占?
     {
         let mut tasks = active_tasks.0.lock().map_err(|e| e.to_string())?;
         if tasks.contains(&sad_node.node_id) {
             println!(">>> [ABORT] Node is already running: {}", sad_node.node_id);
-            return Err("이미 프로세스가 진행 중입니다. (ActiveTask Detect)".to_string());
+            return Err("?歷? ?占쏙옙?蘊꾣벆令덌옙 辱뷂옙占?辱쀰、억옙?占쏜졊? (ActiveTask Detect)".to_string());
         }
         tasks.insert(sad_node.node_id.clone());
     }
 
-    // RAII 가드 생성
+    // RAII 令덌옙????뽳옙
     struct TaskGuard {
         tasks: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
         node_id: String,
@@ -2192,14 +2220,14 @@ pub async fn run_sad_module_pipeline(
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "Project not found".to_string())?;
 
-    // v2: GPRD 3단계 통합 데이터(1-A, 1-B, 1-C)를 가져옵니다.
+    // v2: GPRD 3??뤄옙 ???쪛 ??잟쬃??1-A, 1-B, 1-C)獄?令덌옙?蘊꾤뙋?占쏜졊?
     let genesis_prd_content = get_full_approved_prd(&*pool, &project_id).await;
     
     if genesis_prd_content == "{}" {
-        return Err("확정된 Genesis PRD가 없거나 통합할 수 없습니다. PRD 전 단계를 먼저 승인해주세요.".to_string());
+        return Err("?屍귨옙??Genesis PRD令덌옙 ?占썸렆?????쪛?????占쏜졐?占쏜졊? PRD ????뤄옙獄?獄잍쉼? ?野?쪟?歷Λ?蘊꾬옙.".to_string());
     }
 
-    // 앞 단계인 SAD_Global의 결과(글로벌 컨텍스트) 조회
+    // ????뤄옙??SAD_Global??囹뜹쐦??影ｏ옙獄℡텈占??℡댃占?轝졽궩) 邀썲쟿占?
     let contexts = sqlx::query(
         "SELECT context_type, context_data_json FROM global_context WHERE project_id = ? AND is_deleted = 0"
     )
@@ -2216,7 +2244,7 @@ pub async fn run_sad_module_pipeline(
     }
     let global_context_str = serde_json::to_string_pretty(&all_context_json).unwrap_or_default();
 
-    // SAD_Module 노드 상태 업데이트
+    // SAD_Module ?蘊덌옙 ?占쏙옙 ?占썬ゲ?歷ｄ궩
     let sad_node = sqlx::query_as::<_, DocumentNode>(
         "SELECT * FROM document_node WHERE project_id = ? AND target_node_type = 'SAD_Module'"
     )
@@ -2226,8 +2254,8 @@ pub async fn run_sad_module_pipeline(
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "SAD_Module node not found".to_string())?;
 
-    if sad_node.node_state != "READY" && sad_node.node_state != "PAUSED_HITL" && sad_node.node_state != "PAUSED_API_ERROR" && sad_node.node_state != "PAUSED_STOPPED" && sad_node.node_state != "COMPLETED" {
-        return Err("현재 상태에서는 실행할 수 없습니다.".to_string());
+    if sad_node.node_state != "READY" && sad_node.node_state != "PAUSED_HITL" && sad_node.node_state != "PAUSED_API_ERROR" && sad_node.node_state != "PAUSED_STOPPED" && sad_node.node_state != "COMPLETED" && sad_node.node_state != "STALE" {
+        return Err("?占쏙옙 ?占쏙옙??좑옙???轝좑옙?????占쏜졐?占쏜졊?".to_string());
     }
 
     sqlx::query("UPDATE document_node SET node_state = 'IN_PROGRESS', updated_at = ? WHERE node_id = ?")
@@ -2245,7 +2273,7 @@ pub async fn run_sad_module_pipeline(
     let mut is_module_success = false;
     let mut last_feedback = String::new();
 
-    // [RETRY] 이전 회차 피드백 및 초안 가져오기
+    // [RETRY] ?歷ο옙 ?葯면━ ?逆븝옙獄?獄?容뺧옙占?令덌옙?蘊꾭젅붺??
     let latest_iter = sqlx::query_as::<_, GenerationIteration>(
         "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY iteration_number DESC LIMIT 1"
     )
@@ -2259,7 +2287,7 @@ pub async fn run_sad_module_pipeline(
         println!(">>> Resuming SAD Module Split from previous iteration feedback");
         if let Some(fb) = it.actionable_feedback_text {
              if let Ok(issues) = serde_json::from_str::<Vec<crate::schemas::EvaluationIssue>>(&fb) {
-                 last_feedback = issues.iter().map(|i| format!("[보강 필요 - 위치: {}] {} : {}", i.location, i.code, i.description)).collect::<Vec<_>>().join("\n");
+                 last_feedback = issues.iter().map(|i| format!("[縕먩퉲占??占쏙옙 - ?占쏙옙: {}] {} : {}", i.location, i.code, i.description)).collect::<Vec<_>>().join("\n");
              } else if let Ok(fb_list) = serde_json::from_str::<Vec<String>>(&fb) {
                  last_feedback = fb_list.join("\n");
              }
@@ -2277,17 +2305,17 @@ pub async fn run_sad_module_pipeline(
     });
 
     if current_iter >= max_iters && !is_module_success {
-        last_error = "최대 반복 횟수(Max Iterations)에 도달했습니다. 설정을 변경하여 횟수를 늘려주세요.".to_string();
+        last_error = "容뽩텈? 獄삡겒???悌솆占?Max Iterations)???占쏜줎?占쏜졐?占쏜졊? ??⑨옙??縕먲옙囹띈릊占???悌솆占썼쳺???ゐ㉧백뇰逆곤옙??".to_string();
     }
 
     while current_iter < max_iters && !is_module_success {
         current_iter += 1;
         let module_types = vec!["sad_module_list", "sad_epic_mapping", "sad_module_deps"];
-        // 이전 회차 번들 유지
+        // ?歷ο옙 ?葯면━ 縕믭옙褶??劑뵳?
         let mut stage_module_json = initial_stage_context.clone();
 
         for ctx_type in module_types {
-            let _ = app_handle.emit("pipeline-status", format!("SAD Stage 2 (Iter {}): {} 생성 중...", current_iter, ctx_type));
+            let _ = app_handle.emit("pipeline-status", format!("SAD Stage 2 (Iter {}): {} ??뽳옙 辱?..", current_iter, ctx_type));
 
             let schema_obj = crate::schemas::get_schema_for_node(ctx_type);
             let resource_path = prompts_dir.join(format!("generator/{}.txt", ctx_type));
@@ -2296,7 +2324,7 @@ pub async fn run_sad_module_pipeline(
                 String::new()
             });
 
-            // 의존성 정의: 사용자 요청에 따라 순차적 주입
+            // ???뿈???屍귨옙: ?燁묌뭘????밭뿆????됶쫱??帝같腰??辱ζ쉼占?
             let dependencies = match ctx_type {
                 "sad_module_list" => vec![],
                 "sad_epic_mapping" => vec!["sad_module_list"],
@@ -2318,23 +2346,16 @@ pub async fn run_sad_module_pipeline(
                 "{}".to_string()
             };
 
-            let rag_query = format!("{} : {} : {}", ctx_type, genesis_prd_content, global_context_str);
-            let rag_context = get_rag_context(&*pool, &client, &api_key, &project_id, &rag_query, 3, vec![]).await
-                .unwrap_or_else(|e| {
-                    println!(">>> [RAG] SAD Module Search failed: {}", e);
-                    String::new()
-                });
-
             let sys_prompt = format!("$COMMON_RULES\n{}\n\n$DOMAIN_SPECIFIC_RULE\n{}", common_prompt, type_prompt);
             let mut user_prompt = format!(
-                "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$GLOBAL_CONTEXT\n{}\n\n$PREVIOUS_ARCHITECTURAL_DECISIONS\n{}\n\n$PREVIOUS_DRAFT\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n{}\n\n위 정보를 기반으로 {}을(를) 작성하십시오.",
-                ctx_type, current_iter, genesis_prd_content, global_context_str, prev_context_str, prev_draft_str, last_feedback, rag_context, ctx_type
+                "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}\n\n$GLOBAL_CONTEXT\n{}\n\n$PREVIOUS_ARCHITECTURAL_DECISIONS\n{}\n\n$PREVIOUS_DRAFT\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n????낂쇃獄?影ｅ쐣占?逆븝옙 {}??獄? ?靜♥占???쨫?帝같?닎.",
+                ctx_type, current_iter, genesis_prd_content, global_context_str, prev_context_str, prev_draft_str, last_feedback, ctx_type
             );
 
-            // 모듈 개수 제약 조건 주입
+            // 獄덂댖占?令덍?곤옙 ?帝같??邀썲쐦??辱ζ쉼占?
             if let Some(count) = target_module_count {
                 user_prompt = format!(
-                    "{}\n\n[제약 사항: 시스템의 전체 모듈 개수를 반드시 {}개 내외로 구성하십시오. 중요도가 낮은 기능은 다른 모듈에 병합하여 개수를 맞추십시오.]",
+                    "{}\n\n[?帝같???燁믮Ŋ? ?帝같??帝같占??占썹쑝 獄덂댖占?令덍?곤옙獄?獄삡겒占??{}令??歷η꺏獄?囹긺쭛占???쨫?帝같?닎. 辱쀰、억옙?占? ??? 影ｅ쐣劑걩?占???덃뼢 獄덂댖占??縕먳짉숃쪛???ㄹ?令덍?곤옙獄?獄ㆀ첃댐옙??占??]",
                     user_prompt, count
                 );
             }
@@ -2343,7 +2364,7 @@ pub async fn run_sad_module_pipeline(
             let part_json = match result {
                 Ok(content) => {
                     serde_json::from_str::<serde_json::Value>(&content)
-                        .map_err(|e| format!("SAD Part ({}) 파싱 오류: {} - 원본: {}", ctx_type, e, content))?
+                        .map_err(|e| format!("SAD Part ({}) ?葯멥삖 ??덌옙: {} - ??믧썿: {}", ctx_type, e, content))?
                 }
                 Err(e) => {
                     let (code, msg) = match e {
@@ -2353,16 +2374,16 @@ pub async fn run_sad_module_pipeline(
                     sqlx::query("UPDATE document_node SET node_state = 'PAUSED_API_ERROR', api_error_code = ?, api_error_message = ?, updated_at = ? WHERE node_id = ?")
                     .bind(code).bind(&msg).bind(Utc::now().to_rfc3339()).bind(&sad_node.node_id)
                     .execute(&*pool).await.map_err(|e| e.to_string())?;
-                    return Err(format!("SAD Part ({}) 생성 오류: {}", ctx_type, msg));
+                    return Err(format!("SAD Part ({}) ??뽳옙 ??덌옙: {}", ctx_type, msg));
                 }
             };
 
-            // 통합 객체에 삽입
+            // ???쪛 令덂릸????擁ｏ옙
             if let Some(obj) = stage_module_json.as_object_mut() {
                 obj.insert(ctx_type.to_string(), part_json);
             }
 
-            // [STOP CHECK] 개별 파트 생성 후 중단 체크
+            // [STOP CHECK] 令덂텈占??榕꿜궩 ??뽳옙 ??辱쀧궍靜? 墉?르占?
             if is_node_stopped(&*pool, &sad_node.node_id).await {
                 println!(">>> SAD Module Split stopped manually during part generation ({})", ctx_type);
                 return Ok("SAD module split stopped manually".to_string());
@@ -2387,36 +2408,36 @@ pub async fn run_sad_module_pipeline(
                 let eval: serde_json::Value = serde_json::from_str(&eval_json).unwrap_or_default();
                 let score = eval["score"].as_i64().unwrap_or(0) as i32;
                 
-                // [기계적 판단] AI의 is_pass 값을 무시하고 백엔드에서 직접 계산
+                // [影ｅ쐦占????믮죫] AI??is_pass 令덍Ł놅옙 獄→른占??섓옙 獄삥×占?帝같占??辱뷂옙占?囹몌옙占?
                 let has_critical_errors = eval["critical_errors"].as_array().map_or(false, |arr| !arr.is_empty());
                 let is_passed = score >= threshold && !has_critical_errors;
                 
                 if is_passed || (current_iter == max_iters) {
                     is_module_success = is_passed;
                     if !is_passed && current_iter == max_iters {
-                        let _ = app_handle.emit("pipeline-status", format!("SAD Stage 2 품질 미달이나 최대 횟수 도달로 중단 (점수: {})", score));
+                        let _ = app_handle.emit("pipeline-status", format!("SAD Stage 2 ?占쏙옙 獄?퀓靜졋?歷좑옙 容뽩텈? ?悌솆占??占쏜줎븃ア?辱쀧궍靜? (??좑옙: {})", score));
                     } else {
-                        let _ = app_handle.emit("pipeline-status", format!("SAD Stage 2 통과 (점수: {})", score));
+                        let _ = app_handle.emit("pipeline-status", format!("SAD Stage 2 ??쏃쟽 (??좑옙: {})", score));
                     }
                 }
 
-                // [회차 저장] Stage 2 결과도 히스토리 테이블에 저장
+                // [?葯면━ ?占?? Stage 2 囹뜹쐦????占썸벆?堤솘???葯모쬃?납?뱄옙 ?占??
                 let iter_id = Uuid::new_v4().to_string();
                 let now = Utc::now().to_rfc3339();
 
                 let feedback_text = if let Ok(issues) = serde_json::from_value::<Vec<crate::schemas::EvaluationIssue>>(eval["feedback"].clone()) {
-                    issues.iter().map(|i| format!("[보강 필요 - 위치: {}] {} : {}", i.location, i.code, i.description)).collect::<Vec<_>>().join("\n")
+                    issues.iter().map(|i| format!("[縕먩퉲占??占쏙옙 - ?占쏙옙: {}] {} : {}", i.location, i.code, i.description)).collect::<Vec<_>>().join("\n")
                 } else {
                     eval["feedback"].as_array().map(|arr| arr.iter().map(|v| v.as_str().unwrap_or("")).collect::<Vec<_>>().join("\n")).unwrap_or_default()
                 };
 
                 let critical_errors_text = if let Ok(issues) = serde_json::from_value::<Vec<crate::schemas::EvaluationIssue>>(eval["critical_errors"].clone()) {
-                    issues.iter().map(|i| format!("[위치: {}] {} : {}", i.location, i.code, i.description)).collect::<Vec<_>>().join("\n")
+                    issues.iter().map(|i| format!("[?占쏙옙: {}] {} : {}", i.location, i.code, i.description)).collect::<Vec<_>>().join("\n")
                 } else {
                     eval["critical_errors"].as_array().map(|arr| arr.iter().map(|v| v.as_str().unwrap_or("")).collect::<Vec<_>>().join("\n")).unwrap_or_default()
                 };
                 
-                // Stage 2 결과는 Stage 1 결과와 합쳐서 저장 (완결된 SAD 뷰 제공)
+                // Stage 2 囹뜹쐦???Stage 1 囹뜹쐦??占???뽳옙???占??(?占썹썟??SAD 蘊??帝걟??
                 let mut combined_bundle = all_context_json.clone();
                 if let Some(obj) = combined_bundle.as_object_mut() {
                     for (k, v) in stage_module_json.as_object().unwrap() {
@@ -2427,10 +2448,10 @@ pub async fn run_sad_module_pipeline(
                 let feedback_json = serde_json::to_string(&eval["feedback"]).unwrap_or_default();
                 let critical_json = serde_json::to_string(&eval["critical_errors"]).unwrap_or_default();
 
-                // 트랜잭션 시작
+                // ?蘊덌옙??占??帝같占?
                 let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
-                // [추가] 중복 확정 방지: 이번 회차가 통과 기준을 만족하면 해당 노드의 기존 확정 상태들 초기화
+                // [容븟??] 辱쀧궍???屍귨옙 獄삥떀?: ?歷좑옙 ?葯면━令덌옙 ??쏃쟽 影ｅ윜???獄ㅵ돋짠??ゅ틬 ?歷좈컾 ?蘊덌옙??影ｅ윜???屍귨옙 ?占쏙옙??容뺧옙???
                 if is_passed {
                     sqlx::query("UPDATE generation_iteration SET is_pass = 0, updated_at = ? WHERE node_id = ?")
                         .bind(&now)
@@ -2455,7 +2476,7 @@ pub async fn run_sad_module_pipeline(
                 .bind(&now)
                 .execute(&mut *tx).await.map_err(|e| e.to_string())?;
 
-                // 기계적 분할: 매 회차(Draft 포함)의 3종 컨텍스트를 각각 저장
+                // 影ｅ쐦占??蘊깍옙占? 獄??葯면━(Draft ?燁믮쪡???3饒??℡댃占?轝졽궩獄?令덌옙占??占??
                 let module_types = vec!["sad_module_list", "sad_epic_mapping", "sad_module_deps"];
                 for ctx_type in module_types {
                     if let Some(data) = stage_module_json.get(ctx_type) {
@@ -2470,28 +2491,28 @@ pub async fn run_sad_module_pipeline(
 
                 tx.commit().await.map_err(|e| e.to_string())?;
 
-                // [피드백 업데이트] 다음 회차를 위해 저장 (패키징된 텍스트)
+                // [?逆븝옙獄??占썬ゲ?歷ｄ궩] ??⑨옙 ?葯면━獄??占썬윸 ?占??(???옙辱붺몗占??鼎퐗???
                 last_feedback = feedback_text.clone(); if !critical_errors_text.is_empty() { last_feedback = format!("{}\n{}", critical_errors_text, last_feedback); }
 
                 if !is_module_success {
-                    last_error = eval["feedback"].as_str().unwrap_or("품질 미달").to_string();
-                    let _ = app_handle.emit("pipeline-status", format!("SAD Stage 2 품질 미달 (점수: {}), 재시도 중...", score));
+                    last_error = eval["feedback"].as_str().unwrap_or("?占쏙옙 獄?퀓靜졋").to_string();
+                    let _ = app_handle.emit("pipeline-status", format!("SAD Stage 2 ?占쏙옙 獄?퀓靜졋 (??좑옙: {}), ?燁묕옙??辱?..", score));
                 }
             }
             Err(_) => {
-                last_error = "평가 중 오류 발생".to_string();
+                last_error = "??? 辱???덌옙 獄삽?곤옙".to_string();
             }
         }
     }
 
-    // 루프 종료 후, 정지 상태인지 다시 확인 (PAUSED_STOPPED 상태 덮어쓰기 방지)
+    // 獄닷댃占?饒덌옙占??? ?屍? ?占쏙옙?蘊? ??⑨옙 ?屍귩쪟?(PAUSED_STOPPED ?占쏙옙 ??弟릎??뗨맻 獄삥떀?)
     if is_node_stopped(&pool, &sad_node.node_id).await {
         println!(">>> SAD Module Pipeline loop for node {} terminated due to manual stop signal.", sad_node.node_id);
         return Ok("SAD module context pipeline stopped".to_string());
     }
 
     if !is_module_success {
-        // [수정] 실패 시에도 이터레이션 정보 반영
+        // [???옙] ?轝좒쨺??帝같占???歷ｏ옙?占쏜쬃????낂쇃 獄삡겘占?
         sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', current_iteration = ?, updated_at = ? WHERE node_id = ?")
             .bind(current_iter)
             .bind(Utc::now().to_rfc3339())
@@ -2501,7 +2522,7 @@ pub async fn run_sad_module_pipeline(
             .map_err(|e| e.to_string())?;
 
         let _ = app_handle.emit("nodes-updated", ());
-        return Err(format!("SAD 모듈 분할 생성 불가: {}", last_error));
+        return Err(format!("SAD 獄덂댖占?蘊깍옙占???뽳옙 蘊깍옙?: {}", last_error));
     }
 
     sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', current_iteration = ?, current_best_score = 100, updated_at = ? WHERE node_id = ?")
@@ -2513,12 +2534,12 @@ pub async fn run_sad_module_pipeline(
     .map_err(|e| e.to_string())?;
 
     let _ = app_handle.emit("nodes-updated", ());
-    let _ = app_handle.emit("pipeline-status", "SAD 모듈 분할 생성 완료. 모듈 생성을 승인해 주세요.");
+    let _ = app_handle.emit("pipeline-status", "SAD 獄덂댖占?蘊깍옙占???뽳옙 ?占쏙옙. 獄덂댖占???뽳옙???野?쪟??辱ζ쉼占??");
 
     Ok("SAD module split pipeline completed".to_string())
 }
 
-/// SAD 결과 기반 로컬 모듈 자동 생성 (최대 10개)
+/// SAD 囹뜹쐦??影ｅ쐣占?獄??계퀝 獄덂댖占???믭옙 ??뽳옙 (容뽩텈? 10令?
 #[tauri::command]
 pub async fn create_local_modules(
     pool: tauri::State<'_, SqlitePool>,
@@ -2528,20 +2549,20 @@ pub async fn create_local_modules(
 ) -> Result<Vec<String>, String> {
     let now = Utc::now().to_rfc3339();
 
-    // modules_json 파싱: [{name, description, responsibility, mapped_epics, priority_order}]
+    // modules_json ?葯멥삖: [{name, description, responsibility, mapped_epics, priority_order}]
     let modules: Vec<serde_json::Value> = serde_json::from_str(&modules_json)
-        .map_err(|e| format!("모듈 JSON 파싱 오류: {}", e))?;
+        .map_err(|e| format!("獄덂댖占?JSON ?葯멥삖 ??덌옙: {}", e))?;
 
     if modules.len() > 10 {
-        return Err("최대 모듈 수는 10개입니다.".to_string());
+        return Err("容뽩텈? 獄덂댖占???わ옙 10令덍?곤옙?占쏜졊?".to_string());
     }
 
-    // SAD 모듈 분할 노드 완료 처리
+    // SAD 獄덂댖占?蘊깍옙占??蘊덌옙 ?占쏙옙 墉?겒??
     sqlx::query("UPDATE document_node SET node_state = 'COMPLETED', updated_at = ? WHERE project_id = ? AND target_node_type = 'SAD_Module'")
     .bind(&now).bind(&project_id)
     .execute(&*pool).await.map_err(|e| e.to_string())?;
 
-    // 프로젝트 phase 전환
+    // ?占쏙옙??틶??phase ?占쏙옙
     sqlx::query("UPDATE project SET pipeline_phase = 'MODULE_GENERATION', updated_at = ? WHERE project_id = ?")
     .bind(&now).bind(&project_id)
     .execute(&*pool).await.map_err(|e| e.to_string())?;
@@ -2550,22 +2571,26 @@ pub async fn create_local_modules(
     let node_types = vec!["PRD", "FSD", "User Flow", "IA", "ERD", "Wireframe", "API_Spec", "TC"];
 
     for (idx, module) in modules.iter().enumerate() {
-        let module_id = Uuid::new_v4().to_string();
+        // AI令덌옙 ?帝같占??ID令덌옙 ?占썲컧獄??燁묌뭘, ?占썲컧獄?UUID ??뽳옙 (??????옙)
+        let module_id = module["module_id"].as_str()
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| Uuid::new_v4().to_string());
+            
         let default_name = format!("Module-{}", idx+1);
         let m_name = module["name"].as_str().unwrap_or(&default_name);
         let m_desc = module["description"].as_str().unwrap_or("");
         let m_resp = module["responsibility"].as_str().unwrap_or("");
-        let m_epics = module.get("mapped_epics").map(|v| v.to_string()).unwrap_or_default();
+        let m_epics = module["mapped_epics"].as_str().unwrap_or(""); // 獄덌옙占?占썲컧獄?獄↑퀎占??容뷰눢占?
         let priority = module["priority_order"].as_i64().unwrap_or(idx as i64) as i32;
 
         sqlx::query(
             "INSERT INTO local_module (module_id, project_id, module_name, module_description, core_responsibility, mapped_epics, priority_order, module_state, display_order, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, 0)"
         )
-        .bind(&module_id).bind(&project_id).bind(m_name).bind(m_desc).bind(m_resp).bind(&m_epics)
+        .bind(&module_id).bind(&project_id).bind(m_name).bind(m_desc).bind(m_resp).bind(m_epics)
         .bind(priority).bind(idx as i32).bind(&now).bind(&now)
         .execute(&*pool).await.map_err(|e| e.to_string())?;
 
-        // 각 모듈에 8개 노드 생성
+        // 令?獄덂댖占??8令??蘊덌옙 ??뽳옙
         for node_type in &node_types {
             let node_id = Uuid::new_v4().to_string();
             let initial_state = if node_type == &"PRD" { "READY" } else { "PENDING" };
@@ -2579,7 +2604,7 @@ pub async fn create_local_modules(
         module_ids.push(module_id);
     }
 
-    // 첫 번째 모듈(우선순위 최고)을 활성화
+    // 墉?縕믭옙耶?獄덂댖占???잞옙?帝같占?容뽴쮤덌옙)???帝같占??
     if let Some(first_id) = module_ids.first() {
         sqlx::query("UPDATE local_module SET module_state = 'ACTIVE' WHERE module_id = ?")
         .bind(first_id).execute(&*pool).await.map_err(|e| e.to_string())?;
@@ -2589,7 +2614,7 @@ pub async fn create_local_modules(
     Ok(module_ids)
 }
 
-/// 선택한 SAD 이터레이션을 공식 컨텍스트로 확정
+/// ?靜쪊占??SAD ?歷ｏ옙?占쏜쬃???옙 囹멱썦占??℡댃占?轝졽궩獄??屍귨옙
 #[tauri::command]
 pub async fn confirm_sad_iteration(
     _app_handle: tauri::AppHandle,
@@ -2599,7 +2624,7 @@ pub async fn confirm_sad_iteration(
 ) -> Result<(), String> {
     println!(">>> Confirming SAD iteration: {} for project: {}", iteration_id, project_id);
     
-    // 1. 회차 정보 조회
+    // 1. ?葯면━ ??낂쇃 邀썲쟿占?
     let iteration = sqlx::query_as::<_, GenerationIteration>(
         "SELECT * FROM generation_iteration WHERE iteration_id = ?"
     )
@@ -2607,19 +2632,19 @@ pub async fn confirm_sad_iteration(
     .fetch_optional(&*pool)
     .await
     .map_err(|e| e.to_string())?
-    .ok_or_else(|| "회차 정보를 찾을 수 없습니다.".to_string())?;
+    .ok_or_else(|| "?葯면━ ??낂쇃獄?墉녷㉩占????占쏜졐?占쏜졊?".to_string())?;
 
-    // 2. 번들링된 JSON 파싱
+    // 2. 縕믭옙褶⑵イ占쏙옙 JSON ?葯멥삖
     let bundle: serde_json::Value = serde_json::from_str(&iteration.generated_draft_json)
-        .map_err(|e| format!("데이터 파싱 오류: {}", e))?;
+        .map_err(|e| format!("??잟쬃???葯멥삖 ??덌옙: {}", e))?;
 
     let now = Utc::now().to_rfc3339();
     let it_number = iteration.iteration_number;
 
-    // 3. 트랜잭션 시작
+    // 3. ?蘊덌옙??占??帝같占?
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
-    // 4. 기존 컨텍스트 삭제 (논리 삭제)
+    // 4. 影ｅ윜???℡댃占?轝졽궩 ??占?(?逆뷸뵸 ??占?
     sqlx::query("UPDATE global_context SET is_deleted = 1, updated_at = ? WHERE project_id = ?")
         .bind(&now)
         .bind(&project_id)
@@ -2627,7 +2652,7 @@ pub async fn confirm_sad_iteration(
         .await
         .map_err(|e| e.to_string())?;
 
-    // 4-1. 해당 노드의 모든 이터레이션 is_pass 초기화 후 현재 회차만 1로 설정
+    // 4-1. ?歷좈컾 ?蘊덌옙??獄덂댖占??歷ｏ옙?占쏜쬃??is_pass 容뺧옙??????占쏙옙 ?葯면━獄?1獄???⑨옙
     sqlx::query("UPDATE generation_iteration SET is_pass = 0, updated_at = ? WHERE node_id = ?")
         .bind(&now)
         .bind(&iteration.node_id)
@@ -2642,7 +2667,7 @@ pub async fn confirm_sad_iteration(
         .await
         .map_err(|e| e.to_string())?;
 
-    // 5. 새 컨텍스트 삽입
+    // 5. ???℡댃占?轝졽궩 ?擁ｏ옙
     if let Some(obj) = bundle.as_object() {
         for (ctx_type, data) in obj {
             let ctx_id = Uuid::new_v4().to_string();
@@ -2656,7 +2681,7 @@ pub async fn confirm_sad_iteration(
         }
     }
 
-    // 6. 노드의 최적 점수 업데이트 (상태는 PAUSED_HITL 유지하여 명시적 승인 대기)
+    // 6. ?蘊덌옙??容뽴?곤옙 ??좑옙 ?占썬ゲ?歷ｄ궩 (?占쏙옙??PAUSED_HITL ?劑뵳????ㄹ?獄덌옙占???野?쪟??占썹??
     let _node = sqlx::query_as::<_, DocumentNode>(
         "SELECT * FROM document_node WHERE node_id = ?"
     )
@@ -2680,7 +2705,7 @@ pub async fn confirm_sad_iteration(
     Ok(())
 }
 
-/// 확정된 이터레이션을 취소
+/// ?屍귨옙???歷ｏ옙?占쏜쬃???옙 庸믣댆占?
 #[tauri::command]
 pub async fn unconfirm_iteration(
     app_handle: tauri::AppHandle,
@@ -2693,7 +2718,7 @@ pub async fn unconfirm_iteration(
 
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
-    // 1. 해당 이터레이션 정보 조회
+    // 1. ?歷좈컾 ?歷ｏ옙?占쏜쬃????낂쇃 邀썲쟿占?
     let _iteration = sqlx::query_as::<_, GenerationIteration>(
         "SELECT * FROM generation_iteration WHERE iteration_id = ?"
     )
@@ -2701,9 +2726,9 @@ pub async fn unconfirm_iteration(
     .fetch_optional(&mut *tx)
     .await
     .map_err(|e| e.to_string())?
-    .ok_or_else(|| "회차 정보를 찾을 수 없습니다.".to_string())?;
+    .ok_or_else(|| "?葯면━ ??낂쇃獄?墉녷㉩占????占쏜졐?占쏜졊?".to_string())?;
 
-    // 2. is_pass를 0으로 변경
+    // 2. is_pass獄?0?逆븝옙 縕먲옙囹?
     sqlx::query("UPDATE generation_iteration SET is_pass = 0, updated_at = ? WHERE iteration_id = ?")
         .bind(&now)
         .bind(&iteration_id)
@@ -2711,8 +2736,8 @@ pub async fn unconfirm_iteration(
         .await
         .map_err(|e| e.to_string())?;
 
-    // 3. SAD 관련 리비전일 경우 연결된 global_context 논리 삭제
-    // version(iteration_number)와 iteration_id를 기반으로 삭제
+    // 3. SAD 囹듸옙??玉붺┷占?占쏜쫱?囹띈땃容???뗧썟??global_context ?逆뷸뵸 ??占?
+    // version(iteration_number)?占?iteration_id獄?影ｅ쐣占?逆븝옙 ??占?
     sqlx::query("UPDATE global_context SET is_deleted = 1, updated_at = ? WHERE project_id = ? AND iteration_id = ?")
         .bind(&now)
         .bind(&project_id)
@@ -2728,18 +2753,20 @@ pub async fn unconfirm_iteration(
     Ok(())
 }
 
-/// SAD 단계의 노드(Global 또는 Module)를 최종 승인 처리
+/// SAD ??뤄옙???蘊덌옙(Global ??믭옙 Module)獄?容뽴?곤옙 ?野?쪟?墉?겒??
 #[tauri::command]
 pub async fn approve_sad_node(
     app_handle: tauri::AppHandle,
     pool: tauri::State<'_, SqlitePool>,
     project_id: String,
     node_id: String,
+    api_key: Option<String>,
 ) -> Result<(), String> {
-    println!(">>> Approving SAD node: {} for project: {}", node_id, project_id);
+    println!(">>> Approving SAD node: {} for project: {}, api_key_provided: {}", node_id, project_id, api_key.is_some());
+
     let now = Utc::now().to_rfc3339();
 
-    // 1. 노드 정보 조회
+    // 1. ?蘊덌옙 ??낂쇃 邀썲쟿占?
     let node = sqlx::query_as::<_, DocumentNode>(
         "SELECT * FROM document_node WHERE node_id = ?"
     )
@@ -2747,9 +2774,9 @@ pub async fn approve_sad_node(
     .fetch_optional(&*pool)
     .await
     .map_err(|e| e.to_string())?
-    .ok_or_else(|| "노드 정보를 찾을 수 없습니다.".to_string())?;
+    .ok_or_else(|| "?蘊덌옙 ??낂쇃獄?墉녷㉩占????占쏜졐?占쏜졊?".to_string())?;
 
-    // 2. 확정된(is_pass=1) 이터레이션이 있는지 확인
+    // 2. ?屍귨옙??is_pass=1) ?歷ｏ옙?占쏜쬃???쬃??占쏙옙辱뷂옙 ?屍귩쪟?
     let confirmed_iter = sqlx::query_as::<_, GenerationIteration>(
         "SELECT * FROM generation_iteration WHERE node_id = ? AND is_pass = 1 AND is_deleted = 0 LIMIT 1"
     )
@@ -2757,11 +2784,11 @@ pub async fn approve_sad_node(
     .fetch_optional(&*pool)
     .await
     .map_err(|e| e.to_string())?
-    .ok_or_else(|| "확정된 리비전이 없습니다. 먼저 리비전을 확정해 주세요.".to_string())?;
+    .ok_or_else(|| "?屍귨옙??玉붺┷占?占쏜쬃??占쏜졐?占쏜졊? 獄잍쉼? 玉붺┷占?占쏙옙 ?屍귨옙??辱ζ쉼占??".to_string())?;
 
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
-    // 3. 노드 상태를 COMPLETED로 변경
+    // 3. ?蘊덌옙 ?占쏙옙獄?COMPLETED獄?縕먲옙囹?
     sqlx::query(
         "UPDATE document_node SET node_state = 'COMPLETED', updated_at = ? WHERE node_id = ?"
     )
@@ -2771,7 +2798,7 @@ pub async fn approve_sad_node(
     .await
     .map_err(|e| e.to_string())?;
 
-    // [RAG] 승인된 SAD 노드 임베딩 로직을 백그라운드로 전환 (DB Lock 방지)
+    // [RAG] ?野?쪟??SAD ?蘊덌옙 ?占쏙옙??獄??곤옙??獄삥쥞繹?逆곧쟼?蒻낉옙 ?占쏙옙 (DB Lock 獄삥떀?)
     let pool_clone = pool.inner().clone();
     let app_handle_clone = app_handle.clone();
     let project_id_clone = project_id.clone();
@@ -2783,17 +2810,31 @@ pub async fn approve_sad_node(
 
     tauri::async_runtime::spawn(async move {
         let client = app_handle_clone.state::<Client>();
-        let session_res = sqlx::query("SELECT api_key_encrypted FROM user_session WHERE session_id = 'default-session' AND is_deleted = 0")
-            .fetch_optional(&pool_clone).await;
         
-        let api_key = match session_res {
-            Ok(Some(row)) => row.get::<String, _>("api_key_encrypted"),
-            _ => return,
+        // 1. ?蘊꾬옙獄????㈇??????잞옙 ?燁묌뭘, ?占썲컧獄?DB??좑옙 邀썲쟿占?
+        let mut actual_api_key = api_key;
+        if actual_api_key.as_deref().unwrap_or("").trim().is_empty() {
+            let session_res = sqlx::query("SELECT api_key_encrypted FROM user_session WHERE session_id = 'default-session' AND is_deleted = 0")
+                .fetch_optional(&pool_clone).await;
+            
+            actual_api_key = match session_res {
+                Ok(Some(row)) => Some(row.get::<String, _>("api_key_encrypted")),
+                _ => None,
+            };
+        }
+
+        let api_key_str = match actual_api_key {
+            Some(key) if !key.trim().is_empty() => key,
+            _ => {
+                println!(">>> [RAG-BG] No API key found in args or DB. Aborting embedding for SAD node.");
+                return;
+            }
         };
 
-        let _ = app_handle_clone.emit("pipeline-status", "SAD RAG 임베딩 중...");
+
+        let _ = app_handle_clone.emit("pipeline-status", "SAD RAG ?占쏙옙??辱?..");
         let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-            .bind("RAG 임베딩 중...")
+            .bind("RAG ?占쏙옙??辱?..")
             .bind(Utc::now().to_rfc3339())
             .bind(&node_id_for_bg)
             .execute(&pool_clone)
@@ -2801,7 +2842,8 @@ pub async fn approve_sad_node(
         let _ = app_handle_clone.emit("nodes-updated", ());
 
         let embedding_res = store_document_embeddings(
-            &pool_clone, &*client, &api_key,
+            &pool_clone, &*client, &api_key_str,
+
             &project_id_clone, None,
             &node_id_for_bg, &node_type_for_bg,
             &iteration_id_for_bg, &draft_json_for_bg,
@@ -2810,10 +2852,10 @@ pub async fn approve_sad_node(
 
         match embedding_res {
             Ok(_) => {
-                let _ = app_handle_clone.emit("pipeline-status", "SAD 임베딩 완료");
+                let _ = app_handle_clone.emit("pipeline-status", "SAD ?占쏙옙???占쏙옙");
             },
             Err(e) => {
-                let err_msg = format!("SAD RAG 임베딩 실패 ({}): {}", node_type_for_bg, e);
+                let err_msg = format!("SAD RAG ?占쏙옙???轝좒쨺?({}): {}", node_type_for_bg, e);
                 println!(">>> [RAG-BG] {}", err_msg);
                 
                 let error_info = RagErrorInfo {
@@ -2826,7 +2868,7 @@ pub async fn approve_sad_node(
             }
         }
 
-        // 상태 초기화
+        // ?占쏙옙 容뺧옙???
         let _ = sqlx::query("UPDATE document_node SET last_action = NULL, updated_at = ? WHERE node_id = ?")
             .bind(Utc::now().to_rfc3339())
             .bind(&node_id_for_bg)
@@ -2835,9 +2877,9 @@ pub async fn approve_sad_node(
         let _ = app_handle_clone.emit("nodes-updated", ());
     });
 
-    // 4. 다음 단계 활성화 처리
+    // 4. ??⑨옙 ??뤄옙 ?帝같占??墉?겒??
     if node.target_node_type == "SAD_Global" {
-        // SAD_Module 노드를 READY로 전환
+        // SAD_Module ?蘊덌옙獄?READY獄??占쏙옙
         sqlx::query(
             "UPDATE document_node SET node_state = 'READY', updated_at = ? WHERE project_id = ? AND target_node_type = 'SAD_Module' AND node_state = 'PENDING'"
         )
@@ -2847,9 +2889,9 @@ pub async fn approve_sad_node(
         println!(">>> SAD_Global approved. SAD_Module is now READY.");
     } else if node.target_node_type == "SAD_Module" {
         println!(">>> SAD_Module approved. Triggering local module creation...");
-        // 확정된 이터레이션의 데이터를 파싱하여 로컬 모듈 생성 호출
+        // ?屍귨옙???歷ｏ옙?占쏜쬃???옙 ??잟쬃??? ?葯멥삖???ㄹ?獄??계퀝 獄덂댖占???뽳옙 ?蘊꾬옙
         let bundle: serde_json::Value = serde_json::from_str(&confirmed_iter.generated_draft_json)
-            .map_err(|e| format!("데이터 파싱 오류: {}", e))?;
+            .map_err(|e| format!("??잟쬃???葯멥삖 ??덌옙: {}", e))?;
 
         if let Some(modules_val) = bundle.get("sad_module_list") {
             let modules_json = if modules_val.is_array() {
@@ -2860,28 +2902,45 @@ pub async fn approve_sad_node(
                 modules_val.to_string()
             };
             
-            // create_local_modules에 필요한 데이터 키 매핑 재조정 (name, description, responsibility)
+            // 6. sad_epic_mapping??蘊깍옙占???ㄹ?獄덂댖占썼쾺??堤솘欲??劑뫊制첉 容뷰눢占?
+            let epic_mappings: Vec<serde_json::Value> = bundle.get("sad_epic_mapping")
+                .and_then(|em| em.get("mappings"))
+                .and_then(|m| m.as_array())
+                .cloned().unwrap_or_default();
+
+            // create_local_modules???占쏙옙????잟쬃????獄ㅶ쵟占??燁묅??(name, description, responsibility, mapped_epics)
             let raw_modules: Vec<serde_json::Value> = serde_json::from_str(&modules_json).unwrap_or_default();
             let modules_to_create: Vec<serde_json::Value> = raw_modules.iter().map(|m| {
+                let current_mid = m.get("module_id").and_then(|v| v.as_str()).unwrap_or("");
+                
+                // ?歷좈컾 獄덂댖占?ID令덌옙 ?燁믮쪡??獄덂댖占??劑뫊制첉 ID ???옙
+                let assigned_epics: Vec<String> = epic_mappings.iter()
+                    .filter(|em| em.get("mapped_modules").and_then(|mm| mm.as_array())
+                        .map_or(false, |mm| mm.iter().any(|mid| mid.as_str() == Some(current_mid))))
+                    .filter_map(|em| em.get("epic_id").and_then(|e| e.as_str()).map(|e| e.to_string()))
+                    .collect();
+
                 serde_json::json!({
+                    "module_id": current_mid,
                     "name": m.get("module_name").or(m.get("name")),
                     "description": m.get("description"),
                     "responsibility": m.get("core_responsibility").or(m.get("responsibility")),
+                    "mapped_epics": assigned_epics.join(", "), // ?逆ㅿ옙獄?囹긺┷占??獄↑퀎占??
                     "priority_order": m.get("priority_order")
                 })
             }).collect();
 
             let _final_json = serde_json::to_string(&modules_to_create).unwrap_or_else(|_| "[]".to_string());
             
-            // 주의: create_local_modules 내부에서 트랜잭션을 다시 시작할 수 없으므로 
-            // 여기서는 트랜잭션 커밋 후 호출하거나, 로직을 인라인화해야 함.
-            // 일단 확정 후 호출하는 방식으로 진행.
+            // 辱ζ쉼占? create_local_modules ?歷???좑옙 ?蘊덌옙??占????⑨옙 ?帝같占?????占썲컧獄?옙獄?
+            // ?獵배맻?蒻낉옙 ?蘊덌옙??占??€쐢占????蘊꾬옙??섉렆?? 獄??곤옙???蘊덍쫱?縕뀐옙?歷η꽚 ??
+            // ?逆븟죫 ?屍귨옙 ???蘊꾬옙??わ옙 獄삥떀占?逆븝옙 辱뷂옙占?
         }
     }
 
     tx.commit().await.map_err(|e| e.to_string())?;
 
-    // Module 생성 트리거 (트랜잭션 밖에서 실행)
+    // Module ??뽳옙 ?蘊덃뵸令?(?蘊덌옙??占?獄삥퓳占???轝좑옙)
     if node.target_node_type == "SAD_Module" {
          let bundle: serde_json::Value = serde_json::from_str(&confirmed_iter.generated_draft_json).unwrap_or_default();
          if let Some(modules_val) = bundle.get("sad_module_list") {
@@ -2893,12 +2952,28 @@ pub async fn approve_sad_node(
                 "[]".to_string()
             };
 
+            // ?劑뫊制첉 獄ㅶ쵟占???낂쇃 容뷰눢占?
+            let epic_mappings: Vec<serde_json::Value> = bundle.get("sad_epic_mapping")
+                .and_then(|em| em.get("mappings"))
+                .and_then(|m| m.as_array())
+                .cloned().unwrap_or_default();
+
             let raw_modules: Vec<serde_json::Value> = serde_json::from_str(&modules_json).unwrap_or_default();
             let modules_to_create: Vec<serde_json::Value> = raw_modules.iter().map(|m| {
+                let current_mid = m.get("module_id").and_then(|v| v.as_str()).unwrap_or("");
+                
+                let assigned_epics: Vec<String> = epic_mappings.iter()
+                    .filter(|em| em.get("mapped_modules").and_then(|mm| mm.as_array())
+                        .map_or(false, |mm| mm.iter().any(|mid| mid.as_str() == Some(current_mid))))
+                    .filter_map(|em| em.get("epic_id").and_then(|e| e.as_str()).map(|e| e.to_string()))
+                    .collect();
+
                 serde_json::json!({
+                    "module_id": current_mid,
                     "name": m.get("module_name").or(m.get("name")),
                     "description": m.get("description"),
                     "responsibility": m.get("core_responsibility").or(m.get("responsibility")),
+                    "mapped_epics": assigned_epics.join(", "),
                     "priority_order": m.get("priority_order")
                 })
             }).collect();
@@ -2912,7 +2987,7 @@ pub async fn approve_sad_node(
     Ok(())
 }
 
-/// 모듈 내 노드 파이프라인 실행 (글로벌 컨텍스트 주입 포함)
+/// 獄덂댖占????蘊덌옙 ?葯모쬃?占쏜쫱???轝좑옙 (影ｏ옙獄℡텈占??℡댃占?轝졽궩 辱ζ쉼占??燁믮쪡?
 #[tauri::command]
 pub async fn run_module_pipeline(
     app_handle: tauri::AppHandle,
@@ -2923,7 +2998,7 @@ pub async fn run_module_pipeline(
     node_type: String,
     api_key: String,
 ) -> Result<String, String> {
-    // 글로벌 컨텍스트 수집
+    // 影ｏ옙獄℡텈占??℡댃占?轝졽궩 ???옙
     let contexts = sqlx::query_as::<_, GlobalContext>(
         "SELECT context_id, project_id, iteration_id, context_type, context_data_json, version, created_at, updated_at FROM global_context WHERE project_id = ? AND is_deleted = 0"
     )
@@ -2932,7 +3007,7 @@ pub async fn run_module_pipeline(
     .await
     .map_err(|e| e.to_string())?;
 
-    // 모듈 정보 조회 (추가)
+    // 獄덂댖占???낂쇃 邀썲쟿占?(容븟??)
     let module = sqlx::query_as::<_, LocalModule>(
         "SELECT module_id, project_id, module_name, module_description, core_responsibility, mapped_epics, dependency_spec, priority_order, module_state, display_order, created_at, updated_at FROM local_module WHERE module_id = ?"
     )
@@ -2944,7 +3019,6 @@ pub async fn run_module_pipeline(
 
     let normalized_node_type = node_type.to_lowercase().replace(" ", "_");
     let mut global_ctx = serde_json::json!({});
-    let module_name = &module.module_name;
 
     for ctx in &contexts {
         let is_required = match normalized_node_type.as_str() {
@@ -2962,30 +3036,33 @@ pub async fn run_module_pipeline(
         if is_required {
             let mut val: serde_json::Value = serde_json::from_str(&ctx.context_data_json).unwrap_or(serde_json::json!({}));
             
-            // [특수 필터링] Stage 2 문서에서 해당 모듈 관련 정보만 추출
+            // [?野?옙 ?占쏙옙獄? Stage 2 獄↑퀎占??좑옙 ?歷좈컾 獄덂댖占?囹듸옙????낂쇃獄?容뷰눢占?
             match ctx.context_type.as_str() {
                 "sad_module_list" => {
                     if let Some(modules) = val.get_mut("modules").and_then(|m| m.as_array_mut()) {
-                        modules.retain(|m| m.get("module_name").and_then(|n| n.as_str()) == Some(module_name));
+                        modules.retain(|m| m.get("module_id").and_then(|n| n.as_str()) == Some(&module_id));
                     }
                 },
+
                 "sad_epic_mapping" => {
                     if let Some(mappings) = val.get_mut("mappings").and_then(|m| m.as_array_mut()) {
                         mappings.retain(|m| {
                             m.get("mapped_modules").and_then(|mm| mm.as_array())
-                             .map_or(false, |mm| mm.iter().any(|name| name.as_str() == Some(module_name)))
+                             .map_or(false, |mm| mm.iter().any(|id| id.as_str() == Some(&module_id)))
                         });
                     }
                 },
+
                 "sad_module_deps" => {
                     if let Some(deps) = val.get_mut("dependencies").and_then(|d| d.as_array_mut()) {
                         deps.retain(|d| {
-                            d.get("from_module").and_then(|n| n.as_str()) == Some(module_name) ||
-                            d.get("to_module").and_then(|n| n.as_str()) == Some(module_name)
+                            d.get("from_module").and_then(|n| n.as_str()) == Some(&module_id) ||
+                            d.get("to_module").and_then(|n| n.as_str()) == Some(&module_id)
                         });
                     }
                 },
-                _ => {} // 다른 타입은 전체 주입
+
+                _ => {} // ??덃뼢 ?占?占? ?占썹쑝 辱ζ쉼占?
             }
 
             global_ctx[&ctx.context_type] = val;
@@ -2993,17 +3070,7 @@ pub async fn run_module_pipeline(
     }
     let global_context_str = serde_json::to_string_pretty(&global_ctx).unwrap_or_default();
 
-    // 모듈 정보 조회
-    let module = sqlx::query_as::<_, LocalModule>(
-        "SELECT module_id, project_id, module_name, module_description, core_responsibility, mapped_epics, dependency_spec, priority_order, module_state, display_order, created_at, updated_at FROM local_module WHERE module_id = ?"
-    )
-    .bind(&module_id)
-    .fetch_optional(&*pool)
-    .await
-    .map_err(|e| e.to_string())?
-    .ok_or_else(|| "Module not found".to_string())?;
-
-    // 해당 모듈의 노드 조회
+    // ?歷좈컾 獄덂댖占???蘊덌옙 邀썲쟿占?
     let node = sqlx::query_as::<_, DocumentNode>(
         "SELECT node_id, project_id, module_id, target_node_type, node_category, node_state, current_iteration, max_iterations, threshold_score, current_best_score, api_error_code, api_error_message, created_at, updated_at FROM document_node WHERE module_id = ? AND target_node_type = ? AND is_deleted = 0"
     )
@@ -3014,17 +3081,17 @@ pub async fn run_module_pipeline(
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "Node not found in module".to_string())?;
 
-    // 중복 실행 체크
+    // 辱쀧궍???轝좑옙 墉?르占?
     {
         let mut tasks = active_tasks.0.lock().map_err(|e| e.to_string())?;
         if tasks.contains(&node.node_id) {
             println!(">>> [ABORT] Node is already running: {}", node.node_id);
-            return Err("이미 프로세스가 진행 중입니다. (ActiveTask Detect)".to_string());
+            return Err("?歷? ?占쏙옙?蘊꾣벆令덌옙 辱뷂옙占?辱쀰、억옙?占쏜졊? (ActiveTask Detect)".to_string());
         }
         tasks.insert(node.node_id.clone());
     }
 
-    // RAII 가드 생성
+    // RAII 令덌옙????뽳옙
     struct TaskGuard {
         tasks: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
         node_id: String,
@@ -3038,13 +3105,13 @@ pub async fn run_module_pipeline(
     }
     let _guard = TaskGuard { tasks: active_tasks.0.clone(), node_id: node.node_id.clone() };
 
-    if node.node_state != "READY" && node.node_state != "PAUSED_HITL" && node.node_state != "PAUSED_API_ERROR" && node.node_state != "PAUSED_STOPPED" && node.node_state != "COMPLETED" {
-        return Err("현재 상태에서는 실행할 수 없습니다. (READY, PAUSED_HITL, PAUSED_API_ERROR, PAUSED_STOPPED 또는 COMPLETED 필요)".to_string());
+    if node.node_state != "READY" && node.node_state != "PAUSED_HITL" && node.node_state != "PAUSED_API_ERROR" && node.node_state != "PAUSED_STOPPED" && node.node_state != "COMPLETED" && node.node_state != "STALE" {
+        return Err("?占쏙옙 ?占쏙옙??좑옙???轝좑옙?????占쏜졐?占쏜졊? (READY, PAUSED_HITL, PAUSED_API_ERROR, PAUSED_STOPPED ??믭옙 COMPLETED ?占쏙옙)".to_string());
     }
 
 
 
-    // IN_PROGRESS 상태
+    // IN_PROGRESS ?占쏙옙
     sqlx::query("UPDATE document_node SET node_state = 'IN_PROGRESS', api_error_message = NULL, updated_at = ? WHERE node_id = ?")
     .bind(Utc::now().to_rfc3339()).bind(&node.node_id)
     .execute(&*pool).await.map_err(|e| e.to_string())?;
@@ -3057,7 +3124,7 @@ pub async fn run_module_pipeline(
     let mut final_iteration_count = 0;
     let mut loop_error = None;
 
-    // [RETRY] 이전 회차 정보 가져오기
+    // [RETRY] ?歷ο옙 ?葯면━ ??낂쇃 令덌옙?蘊꾭젅붺??
     let latest_iter = sqlx::query_as::<_, GenerationIteration>(
         "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY iteration_number DESC LIMIT 1"
     )
@@ -3080,23 +3147,23 @@ pub async fn run_module_pipeline(
         if let Some(fbs) = it.actionable_feedback_text {
             if let Ok(flist) = serde_json::from_str::<Vec<String>>(&fbs) {
                 for f in flist {
-                    previous_feedback.push(format!("보강 필요: {}", f));
+                    previous_feedback.push(format!("縕먩퉲占??占쏙옙: {}", f));
                 }
             }
         }
     }
 
-    // 모듈 컨텍스트 구성
+    // 獄덂댖占??℡댃占?轝졽궩 囹긺쭛占?
     let module_context = format!(
-        "### [CURRENT MODULE: {}] ###\n\n[설명]\n{}\n\n[핵심 책임]\n{}\n\n[매핑된 Epic]\n{}\n\n[의존성 및 데이터 흐름]\n{}",
+        "### [CURRENT MODULE: {}] ###\n\n[??덌옙]\n{}\n\n[??숎줎?墉뉛옙占?\n{}\n\n[獄ㅶ쵟占??Epic]\n{}\n\n[???뿈??獄???잟쬃????믭옙]\n{}",
         module.module_name,
         module.module_description.as_deref().unwrap_or(""),
         module.core_responsibility.as_deref().unwrap_or(""),
         module.mapped_epics.as_deref().unwrap_or(""),
-        module.dependency_spec.as_deref().unwrap_or("없음")
+        module.dependency_spec.as_deref().unwrap_or("?占쏙옙")
     );
 
-    // [V2.5] 의존성 기반 부모 노드 산출물 명시적 주입 로직
+    // [V2.5] ???뿈??影ｅ쐣占?蘊깍옙獄??蘊덌옙 ??잞옙獄?獄덌옙占??辱ζ쉼占?獄??곤옙
     let prerequisites = match node_type.as_str() {
         "FSD" => vec!["PRD"],
         "User Flow" => vec!["FSD"],
@@ -3112,7 +3179,7 @@ pub async fn run_module_pipeline(
     let mut exclude_node_ids = Vec::new();
 
     for pre_type in prerequisites {
-        // node_id만 필요하므로 query_as 대신 개별 필드 조회
+        // node_id獄??占쏙옙???獄?query_as ?占??令덂텈占??占쏙옙 邀썲쟿占?
         let pre_node_id: Option<String> = sqlx::query_scalar(
             "SELECT node_id FROM document_node WHERE module_id = ? AND target_node_type = ? AND is_deleted = 0"
         )
@@ -3122,7 +3189,7 @@ pub async fn run_module_pipeline(
         if let Some(target_id) = pre_node_id {
             exclude_node_ids.push(target_id.clone());
             
-            // generated_draft_json만 필요하므로 query_scalar 사용
+            // generated_draft_json獄??占쏙옙???獄?query_scalar ?燁묌뭘
             let iter_content: Option<String> = sqlx::query_scalar(
                 "SELECT generated_draft_json FROM generation_iteration WHERE node_id = ? AND is_pass = 1 AND is_deleted = 0 ORDER BY iteration_number DESC LIMIT 1"
             )
@@ -3135,7 +3202,7 @@ pub async fn run_module_pipeline(
         }
     }
 
-    // 생성/평가용 통합 컨텍스트 구성 (글로벌 규칙 + 모듈 명세 + 부모 문서)
+    // ??뽳옙/????????쪛 ?℡댃占?轝졽궩 囹긺쭛占?(影ｏ옙獄℡텈占?影욒?곤옙 + 獄덂댖占?獄덌옙占?+ 蘊깍옙獄?獄↑퀎占?
     let combined_context = format!(
         "{}\n\n{}\n\n$PARENT_DOCUMENTS_CONTEXT\n{}",
         global_context_str, module_context, parent_docs_context
@@ -3145,39 +3212,39 @@ pub async fn run_module_pipeline(
     let mut any_passed = false;
     for i in start_iter..=max_iters {
         final_iteration_count = i;
-        let _ = app_handle.emit("pipeline-status", format!("[{}] {} 생성 중 (반복 {}/{})", module.module_name, node_type, i, max_iters));
+        let _ = app_handle.emit("pipeline-status", format!("[{}] {} ??뽳옙 辱?(獄삡겒??{}/{})", module.module_name, node_type, i, max_iters));
 
         sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-            .bind("문서 생성 중...").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
+            .bind("獄↑퀎占???뽳옙 辱?..").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
             .execute(&*pool).await.map_err(|e| e.to_string())?;
 
-        // 3. Draft 생성 (원본 아이디어 제외, 통합 컨텍스트 주입)
+        // 3. Draft ??뽳옙 (??믧썿 ?占쏜쬃??뱅㈇??帝같?? ???쪛 ?℡댃占?轝졽궩 辱ζ쉼占?
         let draft_res = generate_draft_with_context(&app_handle, &pool, &client, &api_key, &project_id, &node_type, &parent_docs_context, &previous_draft, &previous_feedback, &combined_context, i, exclude_node_ids.clone()).await;
         let draft = match draft_res {
             Ok(d) => d,
             Err(e) => { loop_error = Some(e); break; }
         };
 
-        // [STOP CHECK] AI 호출 후 중단 체크
+        // [STOP CHECK] AI ?蘊꾬옙 ??辱쀧궍靜? 墉?르占?
         if is_node_stopped(&*pool, &node.node_id).await {
             println!(">>> Module Pipeline stopped manually after generation (Node: {})", node.node_id);
             break;
         }
 
-        let _ = app_handle.emit("pipeline-status", format!("[{}] {} 검증 중 (반복 {}/{})", module.module_name, node_type, i, max_iters));
+        let _ = app_handle.emit("pipeline-status", format!("[{}] {} 囹띰옙辱?辱?(獄삡겒??{}/{})", module.module_name, node_type, i, max_iters));
         
         sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-            .bind("품질 검증 중...").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
+            .bind("?占쏙옙 囹띰옙辱?辱?..").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
             .execute(&*pool).await.map_err(|e| e.to_string())?;
 
-        // 4. Draft 평가 (통합 컨텍스트 및 이전 피드백 주입)
+        // 4. Draft ??? (???쪛 ?℡댃占?轝졽궩 獄??歷ο옙 ?逆븝옙獄?辱ζ쉼占?
         let eval_res = evaluate_draft(&app_handle, &pool, &client, &api_key, &project_id, &node_type, &draft, None, &combined_context, &module_context, &previous_feedback, i, exclude_node_ids.clone()).await;
         let eval = match eval_res {
             Ok(e) => e,
             Err(e) => { loop_error = Some(e); break; }
         };
 
-        // [STOP CHECK] 평가 후 및 저장 직전 중단 체크
+        // [STOP CHECK] ??? ??獄??占??辱뷂옙占?辱쀧궍靜? 墉?르占?
         if is_node_stopped(&*pool, &node.node_id).await {
             println!(">>> Module Pipeline stopped manually before save (Node: {})", node.node_id);
             break;
@@ -3187,7 +3254,7 @@ pub async fn run_module_pipeline(
         let errors_json = serde_json::to_string(&eval.critical_errors).unwrap_or_default();
         let feedback_json = serde_json::to_string(&eval.feedback).unwrap_or_default();
 
-        // [기계적 판단] AI의 is_pass 대신 백엔드 공식을 사용
+        // [影ｅ쐦占????믮죫] AI??is_pass ?占??獄삥×占??囹멱썦占???燁묌뭘
         let is_passed = eval.score >= threshold && eval.critical_errors.is_empty();
 
         sqlx::query(
@@ -3209,8 +3276,8 @@ pub async fn run_module_pipeline(
         }
 
         previous_draft = draft;
-        previous_feedback = eval.critical_errors.iter().map(|i| format!("[위치: {}] {} : {}", i.location, i.code, i.description)).collect();
-        for i in eval.feedback { previous_feedback.push(format!("[보강 필요 - 위치: {}] {} : {}", i.location, i.code, i.description)); }
+        previous_feedback = eval.critical_errors.iter().map(|i| format!("[?占쏙옙: {}] {} : {}", i.location, i.code, i.description)).collect();
+        for i in eval.feedback { previous_feedback.push(format!("[縕먩퉲占??占쏙옙 - ?占쏙옙: {}] {} : {}", i.location, i.code, i.description)); }
 
         if is_passed {
             any_passed = true;
@@ -3218,7 +3285,7 @@ pub async fn run_module_pipeline(
         }
     }
 
-    // 최종 상태 결정
+    // 容뽴?곤옙 ?占쏙옙 囹뜹윜占?
     if let Some(e) = loop_error {
         match e {
             PipelineError::ApiError(code, msg) => {
@@ -3236,7 +3303,7 @@ pub async fn run_module_pipeline(
         }
     }
 
-    // 루프 종료 후, 정지 상태인지 다시 확인 (PAUSED_STOPPED 상태 덮어쓰기 방지)
+    // 獄닷댃占?饒덌옙占??? ?屍? ?占쏙옙?蘊? ??⑨옙 ?屍귩쪟?(PAUSED_STOPPED ?占쏙옙 ??弟릎??뗨맻 獄삥떀?)
     if is_node_stopped(&pool, &node.node_id).await {
         println!(">>> Pipeline loop for node {} terminated due to manual stop signal.", node.node_id);
         return Ok(current_best_content);
@@ -3249,7 +3316,7 @@ pub async fn run_module_pipeline(
     .execute(&*pool).await.map_err(|e| e.to_string())?;
 
     if final_state == NodeState::Completed {
-        // [RAG] 완료된 산출물을 벡터 DB에 임베딩 저장
+        // [RAG] ?占쏙옙????잞옙獄→쉼占?縕믠댃占?DB???占쏙옙???占??
         let best_iter = sqlx::query_as::<_, GenerationIteration>(
             "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY calculated_score DESC, created_at DESC LIMIT 1"
         )
@@ -3259,9 +3326,9 @@ pub async fn run_module_pipeline(
         .map_err(|e| e.to_string())?;
         
         if let Some(iter) = best_iter {
-            let _ = app_handle.emit("pipeline-status", format!("[{}] RAG 임베딩 중...", module.module_name));
+            let _ = app_handle.emit("pipeline-status", format!("[{}] RAG ?占쏙옙??辱?..", module.module_name));
             sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-                .bind("RAG 임베딩 중...")
+                .bind("RAG ?占쏙옙??辱?..")
                 .bind(Utc::now().to_rfc3339())
                 .bind(&node.node_id)
                 .execute(&*pool)
@@ -3279,11 +3346,11 @@ pub async fn run_module_pipeline(
 
             match embedding_res {
                 Ok(_) => {
-                    let _ = app_handle.emit("pipeline-status", format!("[{}] 임베딩 완료", module.module_name));
+                    let _ = app_handle.emit("pipeline-status", format!("[{}] ?占쏙옙???占쏙옙", module.module_name));
                 },
                 Err(e) => {
                     println!(">>> [RAG] Embedding storage failed: {}", e);
-                    // 모듈 파이프라인에서는 RAG 실패를 비치명적 에러로 처리 (로그만 남김)
+                    // 獄덂댖占??葯모쬃?占쏜쫱?蘊꾬옙?蒻낉옙 RAG ?轝좒쨺낁쳺?壅э옙占썼쳢占쏙옙 ??믣돰獄?墉?겒??(獄?쮤덃벚獄????)
                 }
             }
 
@@ -3301,7 +3368,7 @@ pub async fn run_module_pipeline(
     Ok(current_best_content)
 }
 
-/// 글로벌 컨텍스트를 포함한 generate_draft
+/// 影ｏ옙獄℡텈占??℡댃占?轝졽궩獄??燁믮쪡??generate_draft
 async fn generate_draft_with_context(
     app_handle: &tauri::AppHandle,
     pool: &SqlitePool,
@@ -3316,7 +3383,7 @@ async fn generate_draft_with_context(
     iteration: i32,
     exclude_node_ids: Vec<String>,
 ) -> Result<String, PipelineError> {
-    // Phase 2: RAG 컨텐츠 검색
+    // Phase 2: RAG ?℡댃占썽섹?囹띰옙??
     let rag_query = format!("{} : {} : {}", node_type, input_text, global_context);
     let rag_context = get_rag_context(pool, client, api_key, project_id, &rag_query, 3, exclude_node_ids).await
         .unwrap_or_else(|e| {
@@ -3333,11 +3400,11 @@ async fn generate_draft_with_context(
     let combined_sys_prompt = format!("$COMMON_RULES\n{}\n\n$DOMAIN_SPECIFIC_RULE\n{}", common_prompt, domain_prompt);
     
     let mut user_prompt = format!(
-        "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}{}\n\n위 정보를 바탕으로 기획서를 작성하십시오.",
+        "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}{}\n\n????낂쇃獄?獄사콨占?逆븝옙 影ｅ쟿占?蒻? ?靜♥占???쨫?帝같?닎.",
         node_type, iteration, input_text, rag_context
     );
 
-    // 글로벌 컨텍스트 주입
+    // 影ｏ옙獄℡텈占??℡댃占?轝졽궩 辱ζ쉼占?
     if !global_context.is_empty() {
         let prefix = if user_prompt.is_empty() { "" } else { "\n\n" };
         user_prompt = format!(
@@ -3348,12 +3415,12 @@ async fn generate_draft_with_context(
 
     if !previous_draft.is_empty() {
         let feedback_text = if previous_feedback.is_empty() {
-            "없음".to_string()
+            "?占쏙옙".to_string()
         } else {
             previous_feedback.iter().map(|f| format!("- {}", f)).collect::<Vec<_>>().join("\n")
         };
         user_prompt = format!(
-            "{}\n\n$PREVIOUS_DRAFT\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n위 피드백을 반영하여 기존 설계를 계승하고 보완하여 최신 결과물을 도출하십시오.",
+            "{}\n\n$PREVIOUS_DRAFT\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n???逆븝옙獄삥×占?獄삡겘占???ㄹ?影ｅ윜????곤옙獄?囹몌옙???섓옙 縕먩른占???ㄹ?容뽴?곤옙 囹뜹쐦?껇ァ逆곤옙 ?占쏙옙???쨫?帝같?닎.",
             user_prompt, previous_draft, feedback_text
         );
     }
@@ -3361,7 +3428,7 @@ async fn generate_draft_with_context(
     call_gemini(client, api_key, &combined_sys_prompt, &user_prompt, schema_obj).await
 }
 
-/// 모듈의 모든 노드가 완료되었는지 확인하고 모듈/프로젝트 상태를 동기화하는 헬퍼
+/// 獄덂댖占??獄덂댖占??蘊덌옙令덌옙 ?占쏙옙???옙??? ?屍귩쪟??섓옙 獄덂댖占??占쏙옙??틶???占쏙옙獄??邕롨맻?映앾옙???燁믡?
 async fn sync_module_completion_status(
     pool: &SqlitePool,
     app_handle: Option<&tauri::AppHandle>,
@@ -3379,18 +3446,18 @@ async fn sync_module_completion_status(
         .bind(module_id).fetch_optional(pool).await.map_err(|e| e.to_string())?;
 
         if let Some(m) = module {
-            // 이미 완료 상태라면 스킵
+            // ?歷? ?占쏙옙 ?占쏙옙?逆뷴틬 ?轝좑옙
             if m.module_state == "COMPLETED" {
                 return Ok(());
             }
 
             let now = Utc::now().to_rfc3339();
 
-            // 1. 현재 모듈 완료 처리
+            // 1. ?占쏙옙 獄덂댖占??占쏙옙 墉?겒??
             sqlx::query("UPDATE local_module SET module_state = 'COMPLETED', updated_at = ? WHERE module_id = ?")
             .bind(&now).bind(module_id).execute(pool).await.map_err(|e| e.to_string())?;
 
-            // 2. 다음 대기 중인(PENDING) 모듈이 있는지 확인하여 활성화
+            // 2. ??⑨옙 ?占썹??辱쀰、언쪟?PENDING) 獄덂댖占???占쏙옙辱뷂옙 ?屍귩쪟???ㄹ??帝같占??
             let next_module = sqlx::query_as::<_, LocalModule>(
                 "SELECT * FROM local_module WHERE project_id = ? AND module_state = 'PENDING' AND is_deleted = 0 ORDER BY priority_order ASC LIMIT 1"
             )
@@ -3400,16 +3467,16 @@ async fn sync_module_completion_status(
                 sqlx::query("UPDATE local_module SET module_state = 'ACTIVE', updated_at = ? WHERE module_id = ?")
                 .bind(&now).bind(&nm.module_id).execute(pool).await.map_err(|e| e.to_string())?;
                 
-                // 다음 모듈의 첫 번째 노드(PRD)를 READY로 전환
+                // ??⑨옙 獄덂댖占??墉?縕믭옙耶??蘊덌옙(PRD)獄?READY獄??占쏙옙
                 sqlx::query("UPDATE document_node SET node_state = 'READY', updated_at = ? WHERE module_id = ? AND target_node_type = 'PRD' AND node_state = 'PENDING'")
                 .bind(&now).bind(&nm.module_id).execute(pool).await.map_err(|e| e.to_string())?;
             } else {
-                // 더 이상 남은 모듈이 없으면 프로젝트 전체 완료 처리
+                // ???歷ο옙 ??? 獄덂댖占???占썲컧獄??占쏙옙??틶???占썹쑝 ?占쏙옙 墉?겒??
                 sqlx::query("UPDATE project SET pipeline_phase = 'COMPLETED', updated_at = ? WHERE project_id = ?")
                 .bind(&now).bind(&m.project_id).execute(pool).await.map_err(|e| e.to_string())?;
             }
 
-            // UI 갱신 방송
+            // UI 令덃×占?獄삥떀占?
             if let Some(h) = app_handle {
                 let _ = h.emit("nodes-updated", ());
             }
@@ -3418,7 +3485,7 @@ async fn sync_module_completion_status(
     Ok(())
 }
 
-/// 모듈 내 DAG 전이 (module_id 기준)
+/// 獄덂댖占???DAG ?占쏜쬃?(module_id 影ｅ윜?)
 async fn trigger_module_next_nodes(app_handle: &tauri::AppHandle, module_id: &str, completed_node_type: &str) -> Result<(), String> {
     let pool = app_handle.state::<SqlitePool>();
 
@@ -3471,13 +3538,13 @@ async fn trigger_module_next_nodes(app_handle: &tauri::AppHandle, module_id: &st
         }
     }
 
-    // 모든 노드 완료 체크하여 모듈 및 프로젝트 상태 업데이트 (공통 헬퍼 사용)
+    // 獄덂댖占??蘊덌옙 ?占쏙옙 墉?르占???ㄹ?獄덂댖占?獄??占쏙옙??틶???占쏙옙 ?占썬ゲ?歷ｄ궩 (囹멱쎃占??燁믡? ?燁묌뭘)
     sync_module_completion_status(&*pool, Some(app_handle), module_id).await?;
 
     Ok(())
 }
 
-/// 파이프라인 수동 중단
+/// ?葯모쬃?占쏜쫱????わ옙 辱쀧궍靜?
 #[tauri::command]
 pub async fn stop_node_pipeline(
     pool: tauri::State<'_, SqlitePool>,
@@ -3492,12 +3559,12 @@ pub async fn stop_node_pipeline(
         .map_err(|e| e.to_string())?;
 
     let _ = app_handle.emit("nodes-updated", ());
-    let _ = app_handle.emit("pipeline-status", "사용자에 의해 파이프라인이 중단되었습니다.");
+    let _ = app_handle.emit("pipeline-status", "?燁묌뭘??좑옙 ?掠욁윸 ?葯모쬃?占쏜쫱?蘊꾭쬃?辱쀧궍靜????옙??잞옙??");
     println!(">>> Pipeline manually stopped for node: {}", node_id);
     Ok(())
 }
 
-/// 중단된 파이프라인 재개 (READY 상태로 복구)
+/// 辱쀧궍靜????葯모쬃?占쏜쫱???獵뱄옙 (READY ?占쏙옙獄?縕먫솠嶺?
 #[tauri::command]
 pub async fn resume_node_pipeline(
     pool: tauri::State<'_, SqlitePool>,
@@ -3516,7 +3583,7 @@ pub async fn resume_node_pipeline(
     Ok(())
 }
 
-/// 노드가 중단 상태인지 확인하는 내부 헬퍼
+/// ?蘊덌옙令덌옙 辱쀧궍靜? ?占쏙옙?蘊? ?屍귩쪟??わ옙 ?歷? ?燁믡?
 async fn is_node_stopped(pool: &SqlitePool, node_id: &str) -> bool {
     let state: Option<(String,)> = sqlx::query_as("SELECT node_state FROM document_node WHERE node_id = ?")
         .bind(node_id)
@@ -3560,7 +3627,7 @@ pub async fn get_all_active_nodes(
          FROM document_node n
          JOIN project p ON n.project_id = p.project_id
          LEFT JOIN local_module m ON n.module_id = m.module_id
-         WHERE (n.node_state = 'IN_PROGRESS' OR (n.node_state = 'COMPLETED' AND n.last_action LIKE '%RAG 임베딩 중%')) AND n.is_deleted = 0
+         WHERE (n.node_state = 'IN_PROGRESS' OR (n.node_state = 'COMPLETED' AND n.last_action LIKE '%RAG ?占쏙옙??辱?')) AND n.is_deleted = 0
          ORDER BY n.updated_at DESC"
     )
     .fetch_all(&*pool)
@@ -3570,7 +3637,7 @@ pub async fn get_all_active_nodes(
     Ok(active_nodes)
 }
 
-/// 생성된 특정 리비전(이터레이션)을 삭제하고 노드 상태를 동기화합니다.
+/// ??뽳옙???野?옙 玉붺┷占???歷ｏ옙?占쏜쬃??????占??섓옙 ?蘊덌옙 ?占쏙옙獄??邕롨맻?映앲쪛?占쏜졊?
 #[tauri::command]
 pub async fn delete_generation_iteration(
     handle: tauri::AppHandle,
@@ -3578,7 +3645,7 @@ pub async fn delete_generation_iteration(
 ) -> Result<(), String> {
     let pool = handle.state::<SqlitePool>();
 
-    // 1. 해당 이터레이션 정보 조회 (노드 및 타입 확인용)
+    // 1. ?歷좈컾 ?歷ｏ옙?占쏜쬃????낂쇃 邀썲쟿占?(?蘊덌옙 獄??占???屍귩쪟??
     let iter_row = sqlx::query(
         "SELECT i.node_id, n.target_node_type, i.is_pass, n.project_id 
          FROM generation_iteration i 
@@ -3594,36 +3661,36 @@ pub async fn delete_generation_iteration(
     let node_type: String = iter_row.get(1);
     let project_id: String = iter_row.get(3);
 
-    // 2. Lock Policy 체크 (후행 작업 진행 중이면 삭제 불가)
-    // - Genesis PRD: SAD 단계 이상 진행 확인
+    // 2. Lock Policy 墉?르占?(?占쏙옙 ?靜♥占?辱뷂옙占?辱쀰、언쬃?グ???占?蘊깍옙?)
+    // - Genesis PRD: SAD ??뤄옙 ?歷ο옙 辱뷂옙占??屍귩쪟?
     if node_type == "Genesis_PRD" || node_type.starts_with("GPRD_") {
         let sad_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM document_node WHERE project_id = ? AND target_node_type LIKE 'SAD_%' AND node_state != 'PENDING'")
             .bind(&project_id)
             .fetch_one(&*pool)
             .await
             .map_err(|e| e.to_string())?;
-        if sad_count > 0 { return Err("SAD 단계가 이미 진행 중이므로 PRD 리비전을 삭제할 수 없습니다.".into()); }
+        if sad_count > 0 { return Err("SAD ??뤄옙令덌옙 ?歷? 辱뷂옙占?辱쀰、언쬃?ク占썼ア?PRD 玉붺┷占?占쏙옙 ??占?????占쏜졐?占쏜졊?".into()); }
     }
-    // - SAD_Global: SAD_Module 진행 확인
+    // - SAD_Global: SAD_Module 辱뷂옙占??屍귩쪟?
     else if node_type == "SAD_Global" {
          let mod_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM document_node WHERE project_id = ? AND target_node_type = 'SAD_Module' AND node_state != 'PENDING'")
             .bind(&project_id)
             .fetch_one(&*pool)
             .await
             .map_err(|e| e.to_string())?;
-        if mod_count > 0 { return Err("모듈 분할 단계가 이미 진행 중이므로 SAD Global 리비전을 삭제할 수 없습니다.".into()); }
+        if mod_count > 0 { return Err("獄덂댖占?蘊깍옙占???뤄옙令덌옙 ?歷? 辱뷂옙占?辱쀰、언쬃?ク占썼ア?SAD Global 玉붺┷占?占쏙옙 ??占?????占쏜졐?占쏜졊?".into()); }
     }
-    // - SAD_Module: 하위 모듈 실제 데이터 생성 확인
+    // - SAD_Module: ???옙 獄덂댖占???⑨옙 ??잟쬃????뽳옙 ?屍귩쪟?
     else if node_type == "SAD_Module" {
          let sub_mod_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM document_node WHERE project_id = ? AND target_node_type NOT LIKE 'SAD_%' AND target_node_type NOT LIKE 'GPRD_%' AND target_node_type != 'Genesis_PRD' AND node_state != 'PENDING'")
             .bind(&project_id)
             .fetch_one(&*pool)
             .await
             .map_err(|e| e.to_string())?;
-        if sub_mod_count > 0 { return Err("실제 모듈 기획이 이미 진행 중이므로 모듈 분할 리비전을 삭제할 수 없습니다.".into()); }
+        if sub_mod_count > 0 { return Err("??⑨옙 獄덂댖占?影ｅ쟿占???歷? 辱뷂옙占?辱쀰、언쬃?ク占썼ア?獄덂댖占?蘊깍옙占?玉붺┷占?占쏙옙 ??占?????占쏜졐?占쏜졊?".into()); }
     }
 
-    // 3. Soft Delete 수행
+    // 3. Soft Delete ?掠욑옙
     sqlx::query("UPDATE generation_iteration SET is_deleted = 1, updated_at = ? WHERE iteration_id = ?")
         .bind(Utc::now().to_rfc3339())
         .bind(&iteration_id)
@@ -3631,7 +3698,7 @@ pub async fn delete_generation_iteration(
         .await
         .map_err(|e| e.to_string())?;
 
-    // 4. 노드 상태 및 최신 정보 업데이트
+    // 4. ?蘊덌옙 ?占쏙옙 獄?容뽴?곤옙 ??낂쇃 ?占썬ゲ?歷ｄ궩
     let remaining_iters: Vec<(String, i32)> = sqlx::query_as::<_, (String, i32)>(
         "SELECT iteration_id, calculated_score FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY iteration_number DESC"
     )
@@ -3641,7 +3708,7 @@ pub async fn delete_generation_iteration(
     .map_err(|e| e.to_string())?;
 
     if remaining_iters.is_empty() {
-        // 모든 리비전이 삭제됨 -> READY 상태로 리셋
+        // 獄덂댖占?玉붺┷占?占쏜쬃???占??-> READY ?占쏙옙獄?玉붺쭛占?
         sqlx::query("UPDATE document_node SET node_state = 'READY', current_iteration = 0, current_best_score = 0, updated_at = ? WHERE node_id = ?")
             .bind(Utc::now().to_rfc3339())
             .bind(&node_id)
@@ -3649,7 +3716,7 @@ pub async fn delete_generation_iteration(
             .await
             .map_err(|e| e.to_string())?;
     } else {
-        // 남은 것 중 최고점 및 개수 업데이트
+        // ??? 囹?辱?容뽴쮤덌옙??獄?令덍?곤옙 ?占썬ゲ?歷ｄ궩
         let best_score = remaining_iters.iter().map(|(_, s)| *s).max().unwrap_or(0);
         let count = remaining_iters.len() as i32;
         sqlx::query("UPDATE document_node SET current_iteration = ?, current_best_score = ?, updated_at = ? WHERE node_id = ?")
@@ -3670,24 +3737,35 @@ pub async fn delete_generation_iteration(
 // RAG Utilities (Phase 1)
 // ============================================================
 
-/// Gemini Embedding API 호출
+/// Gemini Embedding API ?蘊꾬옙
 async fn call_gemini_embedding(
     client: &Client,
     api_key: &str,
     text: &str,
     task_type: &str, // "RETRIEVAL_DOCUMENT" or "RETRIEVAL_QUERY"
 ) -> Result<Vec<f32>, String> {
-    let url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key={}",
-        api_key
-    );
+    if api_key.trim().is_empty() {
+        return Err("API key is empty. Please configure it in settings.".to_string());
+    }
+
+    // [縕먩른占?令덍ㄳ울옙] URL ?닸스???鼎븨啼돇獄?께占??占????덌옙 獄삥떀占???燁묌뭘???ㄹ?API ???蘊꾬옙 容뽴?곤옙??
+    let url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent";
+
     let body = serde_json::json!({
         "model": "models/gemini-embedding-001",
         "content": { "parts": [{ "text": text }] },
         "taskType": task_type,
     });
     
-    let resp = client.post(&url).json(&body).send().await.map_err(|e| e.to_string())?;
+    let resp = client.post(url)
+        .header("x-goog-api-key", api_key)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+
     
     if !resp.status().is_success() {
         let status = resp.status();
@@ -3706,21 +3784,21 @@ async fn call_gemini_embedding(
     Ok(values)
 }
 
-/// JSON 산출물을 의미 단위 청크로 분할 (노드 타입별 특화 전략)
+/// JSON ??잞옙獄→쉼占???? ??곤옙 墉?占썼ア?蘊깍옙占?(?蘊덌옙 ?占?占쏙옙 ?野ㅿ옙 ?占썲쵋)
 fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
     let val: serde_json::Value = serde_json::from_str(json_str).unwrap_or_default();
     let mut chunks = Vec::new();
     
     match node_type.to_lowercase().replace(" ", "_").as_str() {
-        // ── Genesis PRD: 비즈니스 컨텍스트 / 역할 / 에픽 / 기술스택 분리 ──
+        // ?占?占?Genesis PRD: 壅э옙占?占썸벆 ?℡댃占?轝졽궩 / ??占?/ ?劑뫊制첉 / 影ｅ윜占?轝좑옙 蘊깍옙???占?占?
         "genesis_prd" | "gprd_context_goal" | "gprd_capability_actor" | "gprd_architecture_schema" => {
-            // 비즈니스 컨텍스트 + 메타데이터 (프로젝트 개요)
+            // 壅э옙占?占썸벆 ?℡댃占?轝졽궩 + 獄곁콨???잟쬃??(?占쏙옙??틶??令덍?곤옙)
             if let (Some(meta), Some(biz)) = (val.get("metadata"), val.get("business_context")) {
                 chunks.push(format!("[GENESIS_PRD:OVERVIEW]\nmetadata: {}\nbusiness_context: {}",
                     serde_json::to_string_pretty(meta).unwrap_or_default(),
                     serde_json::to_string_pretty(biz).unwrap_or_default()));
             }
-            // 사용자 역할별 개별 청크
+            // ?燁묌뭘????占썼쾺?令덂텈占?墉?占?
             if let Some(roles) = val.get("user_roles").and_then(|v| v.as_array()) {
                 for role in roles {
                     let role_name = role.get("role_name").and_then(|n| n.as_str()).unwrap_or("unknown");
@@ -3728,7 +3806,7 @@ fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
                         role_name, serde_json::to_string_pretty(role).unwrap_or_default()));
                 }
             }
-            // 에픽별 개별 청크 (가장 핵심적인 검색 단위)
+            // ?劑뫊制첉縕?令덂텈占?墉?占?(令덌옙????숎줎?占쏜쪟?囹띰옙????곤옙)
             if let Some(epics) = val.get("core_epics").and_then(|v| v.as_array()) {
                 for epic in epics {
                     let epic_id = epic.get("epic_id").and_then(|e| e.as_str()).unwrap_or("unknown");
@@ -3737,27 +3815,27 @@ fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
                         epic_id, title, serde_json::to_string_pretty(epic).unwrap_or_default()));
                 }
             }
-            // 글로벌 제약사항
+            // 影ｏ옙獄℡텈占??帝같??燁믮Ŋ?
             if let Some(constraints) = val.get("global_constraints") {
                 chunks.push(format!("[GENESIS_PRD:CONSTRAINTS]\n{}",
                     serde_json::to_string_pretty(constraints).unwrap_or_default()));
             }
-            // 기술 스택 전체
+            // 影ｅ윜占??轝좑옙 ?占썹쑝
             if let Some(tech) = val.get("tech_stack") {
                 chunks.push(format!("[GENESIS_PRD:TECH_STACK]\n{}",
                     serde_json::to_string_pretty(tech).unwrap_or_default()));
             }
         }
 
-        // ── PRD (모듈): 개요 / 기능별 / 사용자 스토리 / 제약사항 분리 ──
+        // ?占?占?PRD (獄덂댖占?: 令덍?곤옙 / 影ｅ쐣劑걩縕?/ ?燁묌뭘???轝좑옙玉?/ ?帝같??燁믮Ŋ?蘊깍옙???占?占?
         "prd" => {
-            // 프로젝트 개요
+            // ?占쏙옙??틶??令덍?곤옙
             if let Some(overview) = val.get("overview") {
                 let name = val.get("project_name").and_then(|n| n.as_str()).unwrap_or("");
                 chunks.push(format!("[PRD:OVERVIEW:{}]\n{}",
                     name, serde_json::to_string_pretty(overview).unwrap_or_default()));
             }
-            // 핵심 기능별 개별 청크
+            // ??숎줎?影ｅ쐣劑걩縕?令덂텈占?墉?占?
             if let Some(features) = val.get("core_features").and_then(|v| v.as_array()) {
                 for feat in features {
                     let fname = feat.get("feature_name").and_then(|n| n.as_str()).unwrap_or("unknown");
@@ -3766,19 +3844,19 @@ fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
                         fname, priority, serde_json::to_string_pretty(feat).unwrap_or_default()));
                 }
             }
-            // 사용자 스토리 묶음
+            // ?燁묌뭘???轝좑옙玉?獄▼죷占?
             if let Some(stories) = val.get("user_stories") {
                 chunks.push(format!("[PRD:USER_STORIES]\n{}",
                     serde_json::to_string_pretty(stories).unwrap_or_default()));
             }
-            // 제약사항
+            // ?帝같??燁믮Ŋ?
             if let Some(constraints) = val.get("constraints") {
                 chunks.push(format!("[PRD:CONSTRAINTS]\n{}",
                     serde_json::to_string_pretty(constraints).unwrap_or_default()));
             }
         }
 
-        // ── FSD: 기능 명세 단위 분리 (개별 FUNC-ID가 검색 단위) ──
+        // ?占?占?FSD: 影ｅ쐣劑걩 獄덌옙占???곤옙 蘊깍옙??(令덂텈占?FUNC-ID令덌옙 囹띰옙????곤옙) ?占?占?
         "fsd" => {
             if let Some(features) = val.get("features").and_then(|v| v.as_array()) {
                 for feat in features {
@@ -3792,9 +3870,9 @@ fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
             }
         }
 
-        // ── User Flow: 시나리오(노드 그룹) 단위 분리 ──
+        // ?占?占?User Flow: ?蒻낉옙玉붺쭛?닎(?蘊덌옙 影욆퀓?? ??곤옙 蘊깍옙???占?占?
         "user_flow" => {
-            // 각 노드를 개별 시나리오 스텝으로 청킹
+            // 令??蘊덌옙獄?令덂텈占??蒻낉옙玉붺쭛?닎 ?轝좑옙?逆븝옙 墉?占?
             if let Some(nodes) = val.get("nodes").and_then(|v| v.as_array()) {
                 for node in nodes {
                     let id = node.get("id").and_then(|i| i.as_str()).unwrap_or("");
@@ -3809,21 +3887,21 @@ fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
                         serde_json::to_string_pretty(node).unwrap_or_default()));
                 }
             }
-            // 엣지(전이) 정보는 하나의 청크로 묶어 관계 맵 제공
+            // ?占?(?占쏜쬃? ??낂쇃????わ옙??墉?占썼ア?獄▼죷弟릎 囹듸옙囹?獄??帝걟??
             if let Some(edges) = val.get("edges") {
                 chunks.push(format!("[USER_FLOW:EDGES]\n{}",
                     serde_json::to_string_pretty(edges).unwrap_or_default()));
             }
         }
 
-        // ── IA: 화면 계층 + 화면별 엘리먼트 분리 ──
+        // ?占?占?IA: ?塋얍틬 囹몌옙??+ ?塋얍틬縕???ゆ뵸獄잍숴??蘊깍옙???占?占?
         "ia" => {
-            // 전체 화면 계층 트리 (네비게이션 구조 검색용)
+            // ?占썹쑝 ?塋얍틬 囹몌옙???蘊덃뵸 (??덌옙囹뜹돋啼슣??囹긺쭛??囹띰옙??ｉ뭘)
             if let Some(hierarchy) = val.get("hierarchy") {
                 chunks.push(format!("[IA:HIERARCHY]\n{}",
                     serde_json::to_string_pretty(hierarchy).unwrap_or_default()));
             }
-            // 각 화면의 엘리먼트를 화면 단위로 청킹
+            // 令??塋얍틬????ゆ뵸獄잍숴?삭쳺??塋얍틬 ??곤옙獄?墉?占?
             if let Some(screens) = val.get("screen_elements").and_then(|v| v.as_array()) {
                 for screen in screens {
                     let sid = screen.get("screen_id").and_then(|s| s.as_str()).unwrap_or("unknown");
@@ -3833,7 +3911,7 @@ fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
             }
         }
 
-        // ── ERD: 테이블별 + 관계별 분리 ──
+        // ?占?占?ERD: ?葯모쬃?납塋억옙 + 囹듸옙囹몌옙占?蘊깍옙???占?占?
         "erd" => {
             if let Some(tables) = val.get("tables").and_then(|v| v.as_array()) {
                 for table in tables {
@@ -3842,7 +3920,7 @@ fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
                         tname, serde_json::to_string_pretty(table).unwrap_or_default()));
                 }
             }
-            // 각 관계도 개별 청크 (테이블 간 참조 관계 검색용)
+            // 令?囹듸옙囹몌옙占?令덂텈占?墉?占?(?葯모쬃?납?令?墉녻퀎??囹듸옙囹?囹띰옙??ｉ뭘)
             if let Some(rels) = val.get("relationships").and_then(|v| v.as_array()) {
                 for rel in rels {
                     let src = rel.get("source_table").and_then(|s| s.as_str()).unwrap_or("");
@@ -3853,16 +3931,16 @@ fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
             }
         }
 
-        // ── Wireframe: 화면 단위 + 리전/컴포넌트 계층 분리 ──
+        // ?占?占?Wireframe: ?塋얍틬 ??곤옙 + 玉붺쭛占??€르靜⇔?榕꿜궩 囹몌옙??蘊깍옙???占?占?
         "wireframe" => {
             if let Some(screens) = val.get("screens").and_then(|v| v.as_array()) {
                 for screen in screens {
                     let sid = screen.get("screen_id").and_then(|s| s.as_str()).unwrap_or("unknown");
                     let sname = screen.get("screen_name").and_then(|n| n.as_str()).unwrap_or("");
-                    // 화면 전체를 하나의 청크로 (리전 포함)
+                    // ?塋얍틬 ?占썹쑝獄???わ옙??墉?占썼ア?(玉붺쭛占??燁믮쪡?
                     chunks.push(format!("[WIREFRAME:SCREEN:{}:{}]\n{}",
                         sid, sname, serde_json::to_string_pretty(screen).unwrap_or_default()));
-                    // 추가로 각 리전을 개별 청크로 (세밀한 컴포넌트 검색용)
+                    // 容븟??獄?令?玉붺쭛占??令덂텈占?墉?占썼ア?(?蘊????€르靜⇔?榕꿜궩 囹띰옙??ｉ뭘)
                     if let Some(regions) = screen.get("layout_regions").and_then(|r| r.as_array()) {
                         for region in regions {
                             let rname = region.get("region_name").and_then(|r| r.as_str()).unwrap_or("unknown");
@@ -3875,21 +3953,22 @@ fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
             }
         }
 
-        // ── API Spec: 엔드포인트별 분리 (메서드+경로 태깅) ──
+        // ?占?占?API Spec: ?塋억옙?燁묖쪟?蘊덌옙 蘊깍옙??(獄겻눢占??囹띈텫占??帝걟占? ?占?占?
         "api_spec" => {
             if let Some(endpoints) = val.get("endpoints").and_then(|v| v.as_array()) {
                 for ep in endpoints {
                     let method = ep.get("method").and_then(|m| m.as_str()).unwrap_or("GET");
                     let path = ep.get("path").and_then(|p| p.as_str()).unwrap_or("/");
                     let summary = ep.get("summary").and_then(|s| s.as_str()).unwrap_or("");
-                    chunks.push(format!("[API:{}:{}:{}]\n{}",
+                    // [RAG 縕먩른占? 囹띰옙??令덌옙辱쀰、억옙獄??占썬윸 ?帝걟繹???蘊꾬옙/?鼎븨啼돇獄?께占??獵? ??껓옙??容븟??
+                    chunks.push(format!("[API:{}:{}:{}] headers, path_params, query_params\n{}",
                         method, path, summary,
                         serde_json::to_string_pretty(ep).unwrap_or_default()));
                 }
             }
         }
 
-        // ── TC: 테스트 케이스별 분리 (TC-ID + 매핑된 기능 태깅) ──
+        // ?占?占?TC: ?葯멩벆???ㅿ옙?歷ζ벆縕?蘊깍옙??(TC-ID + 獄ㅶ쵟占??影ｅ쐣劑걩 ?帝걟占? ?占?占?
         "tc" => {
             if let Some(cases) = val.get("test_cases").and_then(|v| v.as_array()) {
                 for tc in cases {
@@ -3903,7 +3982,7 @@ fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
             }
         }
 
-        // ── SAD Core ERD: 엔티티별 + 관계 전체 ──
+        // ?占?占?SAD Core ERD: ?映앭돣??됵옙 + 囹듸옙囹??占썹쑝 ?占?占?
         "sad_core_erd" => {
             if let Some(entities) = val.get("entities").and_then(|v| v.as_array()) {
                 for entity in entities {
@@ -3922,9 +4001,9 @@ fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
             }
         }
 
-        // ── SAD Auth & RBAC: 인증 전략 + 역할별 분리 ──
+        // ?占?占?SAD Auth & RBAC: ?蘊꾬옙 ?占썲쵋 + ??占썼쾺?蘊깍옙???占?占?
         "sad_auth_rbac" => {
-            // 인증/토큰 전략 개요
+            // ?蘊꾬옙/?靜쪊占??占썲쵋 令덍?곤옙
             let auth = val.get("auth_method").and_then(|a| a.as_str()).unwrap_or("");
             let token = val.get("token_strategy").and_then(|t| t.as_str()).unwrap_or("");
             let policies = val.get("access_policies")
@@ -3932,7 +4011,7 @@ fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
                 .unwrap_or_default();
             chunks.push(format!("[SAD_AUTH:STRATEGY] auth={}, token={}\naccess_policies: {}",
                 auth, token, policies));
-            // 각 역할별 청크
+            // 令???占썼쾺?墉?占?
             if let Some(roles) = val.get("roles").and_then(|v| v.as_array()) {
                 for role in roles {
                     let rname = role.get("role_name").and_then(|r| r.as_str()).unwrap_or("unknown");
@@ -3942,15 +4021,15 @@ fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
             }
         }
 
-        // ── SAD Interface & Error: 전략 개요 + 에러 코드별 분리 ──
+        // ?占?占?SAD Interface & Error: ?占썲쵋 令덍?곤옙 + ??믣돰 ?좂ゾ占썼쾺?蘊깍옙???占?占?
         "sad_interface_error" => {
-            // API 규칙 전략 요약
+            // API 影욒?곤옙 ?占썲쵋 ??밭깂
             let versioning = val.get("api_versioning_strategy").and_then(|v| v.as_str()).unwrap_or("");
             let format = val.get("response_format").and_then(|f| f.as_str()).unwrap_or("");
             let pagination = val.get("pagination_strategy").and_then(|p| p.as_str()).unwrap_or("");
             chunks.push(format!("[SAD_IFACE:STRATEGY] versioning={}, format={}, pagination={}",
                 versioning, format, pagination));
-            // 에러 코드별 청크
+            // ??믣돰 ?좂ゾ占썼쾺?墉?占?
             if let Some(codes) = val.get("error_codes").and_then(|v| v.as_array()) {
                 for code in codes {
                     let c = code.get("code").and_then(|c| c.as_str()).unwrap_or("");
@@ -3961,13 +4040,13 @@ fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
             }
         }
 
-        // ── SAD Tech Stack: 전체를 하나의 청크 (항목이 적음) ──
+        // ?占?占?SAD Tech Stack: ?占썹쑝獄???わ옙??墉?占?(??????占쏙옙) ?占?占?
         "sad_tech_stack" => {
             chunks.push(format!("[SAD_TECH_STACK]\n{}",
                 serde_json::to_string_pretty(&val).unwrap_or_default()));
         }
 
-        // ── SAD Non-Tech: 카테고리별 분리 ──
+        // ?占?占?SAD Non-Tech: ??르占썹じ堤솘?띈쾺?蘊깍옙???占?占?
         "sad_non_tech" => {
             let categories = ["legal_constraints", "compliance_requirements",
                 "performance_targets", "scalability_requirements", "budget_constraints"];
@@ -3981,7 +4060,7 @@ fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
             }
         }
 
-        // ── SAD Module List: 모듈별 청크 ──
+        // ?占?占?SAD Module List: 獄덂댖占썼쾺?墉?占??占?占?
         "sad_module_list" => {
             if let Some(modules) = val.get("modules").and_then(|v| v.as_array()) {
                 for module in modules {
@@ -3992,7 +4071,7 @@ fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
             }
         }
 
-        // ── SAD Epic Mapping: 매핑별 청크 ──
+        // ?占?占?SAD Epic Mapping: 獄ㅶ쵟占썼쾺?墉?占??占?占?
         "sad_epic_mapping" => {
             if let Some(mappings) = val.get("mappings").and_then(|v| v.as_array()) {
                 for mapping in mappings {
@@ -4004,7 +4083,7 @@ fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
             }
         }
 
-        // ── SAD Module Deps: 의존 관계별 + 빌드 순서 분리 ──
+        // ?占?占?SAD Module Deps: ???뿈 囹듸옙囹몌옙占?+ 壅ю짆묕옙 ?帝같占?蘊깍옙???占?占?
         "sad_module_deps" => {
             if let Some(deps) = val.get("dependencies").and_then(|v| v.as_array()) {
                 for dep in deps {
@@ -4020,7 +4099,7 @@ fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
             }
         }
 
-        // ── 폴백: 최상위 키 기준 분할 ──
+        // ?占?占??歷졾걶: 容뽴?곤옙????影ｅ윜? 蘊깍옙占??占?占?
         _ => {
             if let Some(obj) = val.as_object() {
                 for (key, value) in obj {
@@ -4034,7 +4113,7 @@ fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
         }
     }
     
-    // 공통: 전체 문서 요약 청크 (최대 2000자, 문맥 파악용)
+    // 囹멱쎃占? ?占썹쑝 獄↑퀎占???밭깂 墉?占?(容뽩텈? 2000?? 獄↑퀓???葯몌옙??
     if let Ok(summary) = serde_json::to_string_pretty(&val) {
         if summary.len() > 100 {
             chunks.insert(0, format!("[FULL_DOCUMENT:{}]\n{}", node_type, 
@@ -4044,7 +4123,7 @@ fn chunk_json_document(json_str: &str, node_type: &str) -> Vec<String> {
     chunks
 }
 
-/// 완료된 노드의 산출물을 임베딩하여 벡터 DB에 저장
+/// ?占쏙옙???蘊덌옙????잞옙獄→쉼占??占쏙옙??쀯옙??縕믠댃占?DB???占??
 async fn store_document_embeddings(
     pool: &SqlitePool,
     client: &Client,
@@ -4057,8 +4136,8 @@ async fn store_document_embeddings(
     document_json: &str,
     score: i32,
 ) -> Result<(), String> {
-    // [중복 방지] 새로운 임베딩을 저장하기 전, 해당 노드(node_id)의 기존 데이터를 먼저 삭제
-    // vec0 테이블과 metadata 테이블 모두에서 삭제 처리
+    // [辱쀧궍??獄삥떀?] ?占쏙옙???占쏙옙??뽳옙 ?占?鴉뺧옙影??? ?歷좈컾 ?蘊덌옙(node_id)??影ｅ윜????잟쬃??? 獄잍쉼? ??占?
+    // vec0 ?葯모쬃?납劑칳??metadata ?葯모쬃?납?獄덂댖占??좑옙 ??占?墉?겒??
     sqlx::query("DELETE FROM document_embeddings WHERE rowid IN (SELECT rowid FROM embedding_metadata WHERE node_id = ?)")
         .bind(node_id)
         .execute(pool)
@@ -4074,11 +4153,11 @@ async fn store_document_embeddings(
     let chunks = chunk_json_document(document_json, node_type);
     
     for (idx, chunk) in chunks.iter().enumerate() {
-        // 1. Gemini Embedding API 호출
+        // 1. Gemini Embedding API ?蘊꾬옙
         let embedding = call_gemini_embedding(client, api_key, chunk, "RETRIEVAL_DOCUMENT").await?;
         let embedding_json = serde_json::to_string(&embedding).unwrap_or_default();
         
-        // 2. embedding_metadata에 메타 정보 먼저 삽입 → rowid 확보
+        // 2. embedding_metadata??獄곁콨? ??낂쇃 獄잍쉼? ?擁ｏ옙 ??rowid ??낂쇃
         let now = chrono::Utc::now().to_rfc3339();
         let result = sqlx::query(
             "INSERT INTO embedding_metadata (project_id, module_id, node_type, node_id, iteration_id, chunk_index, chunk_text, score, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
@@ -4098,7 +4177,7 @@ async fn store_document_embeddings(
         
         let rowid = result.last_insert_rowid();
         
-        // 3. vec0 가상 테이블에 임베딩 삽입 (같은 rowid)
+        // 3. vec0 令덌옙???葯모쬃?납?뱄옙 ?占쏙옙???擁ｏ옙 (令덅빱? rowid)
         sqlx::query("INSERT INTO document_embeddings (rowid, embedding) VALUES (?, ?)")
             .bind(rowid)
             .bind(&embedding_json)
@@ -4111,7 +4190,7 @@ async fn store_document_embeddings(
     Ok(())
 }
 
-/// 프로젝트의 모든 완료된 문서를 벡터 DB에 수동 색인
+/// ?占쏙옙??틶???獄덂댖占??占쏙옙??獄↑퀎占썼쳺?縕믠댃占?DB????わ옙 ??ｐ쪟?
 #[tauri::command]
 pub async fn index_project_embeddings(
     app_handle: tauri::AppHandle,
@@ -4120,7 +4199,7 @@ pub async fn index_project_embeddings(
     project_id: String,
     api_key: String,
 ) -> Result<i32, String> {
-    // 0. API 키 보완 (비어있을 경우 DB에서 조회)
+    // 0. API ??縕먩른占?(壅э옙弟릎?占쏙옙 囹띈땃容?DB??좑옙 邀썲쟿占?
     let mut actual_api_key = api_key;
     if actual_api_key.trim().is_empty() {
         println!(">>> [index_project_embeddings] API key is empty, fetching from DB...");
@@ -4129,13 +4208,13 @@ pub async fn index_project_embeddings(
         
         actual_api_key = match session_res {
             Some(row) => row.get::<String, _>("api_key_encrypted"),
-            None => return Err("API 키를 찾을 수 없습니다. 설정에서 API 키를 먼저 등록해 주세요.".to_string()),
+            None => return Err("API ??? 墉녷㉩占????占쏜졐?占쏜졊? ??⑨옙??좑옙 API ??? 獄잍쉼? ?歟듸옙??辱ζ쉼占??".to_string()),
         };
     }
-    let api_key = actual_api_key; // 섀도잉하여 이후 로직에서 사용
+    let api_key = actual_api_key; // ?占?占쏙옙???ㄹ??歷ｏ옙 獄??곤옙??좑옙 ?燁묌뭘
 
-    // 1. 해당 프로젝트의 모든 완료된 노드 조회
-    // [최적화] 마지막 인덱싱 시점 이후에 변경된 노드만 조회
+    // 1. ?歷좈컾 ?占쏙옙??틶???獄덂댖占??占쏙옙???蘊덌옙 邀썲쟿占?
+    // [容뽴?곤옙?? 獄ㅿ옙?獄??蘊덃쉾???帝같占??歷ｏ옙??縕먲옙囹띈텫占??蘊덌옙獄?邀썲쟿占?
     let nodes = sqlx::query_as::<_, DocumentNode>(
         "SELECT * FROM document_node 
          WHERE project_id = ? 
@@ -4164,24 +4243,24 @@ pub async fn index_project_embeddings(
     for node in nodes {
         if node.node_category == "GENESIS" {
             has_genesis = true;
-            // 1-C(Architecture_Schema) 노드가 있다면 이를 대표 ID로 사용, 없으면 아무 GENESIS 노드나 사용
+            // 1-C(Architecture_Schema) ?蘊덌옙令덌옙 ?占쏜졊삭グ??歷? ?占??ID獄??燁묌뭘, ?占썲컧獄??占썹궘 GENESIS ?蘊덌옙???燁묌뭘
             if genesis_node_id.is_none() || node.target_node_type == "GPRD_Architecture_Schema" {
                 genesis_node_id = Some(node.node_id.clone());
             }
             continue;
         }
 
-        // 상태 업데이트: 오버레이 표시 유도
-        let _ = app_handle.emit("pipeline-status", format!("[{}] RAG 임베딩 중...", node.target_node_type));
+        // ?占쏙옙 ?占썬ゲ?歷ｄ궩: ??덌옙?占쏜쬃??帝같占??堤솘占?
+        let _ = app_handle.emit("pipeline-status", format!("[{}] RAG 분석 진행 중..", node.target_node_type));
         let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-            .bind("RAG 임베딩 중...")
+            .bind("RAG ?占쏙옙??辱?..")
             .bind(Utc::now().to_rfc3339())
             .bind(&node.node_id)
             .execute(&*pool)
             .await;
         let _ = app_handle.emit("nodes-updated", ());
 
-        // 2. 각 노드의 최고 점수(최근) 리비전 조회
+        // 2. 令??蘊덌옙??容뽴쮤덌옙 ??좑옙(容뽴쮤덃퍋) 玉붺┷占??邀썲쟿占?
         let best_iter = sqlx::query_as::<_, GenerationIteration>(
             "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY calculated_score DESC, created_at DESC LIMIT 1"
         )
@@ -4191,7 +4270,7 @@ pub async fn index_project_embeddings(
         .map_err(|e| e.to_string())?;
         
         if let Some(iter) = best_iter {
-            // 색인 실행
+            // ??ｐ쪟??轝좑옙
             store_document_embeddings(
                 &*pool, &*client, &api_key,
                 &project_id, node.module_id.as_deref(),
@@ -4203,7 +4282,7 @@ pub async fn index_project_embeddings(
             indexed_count += 1;
         }
 
-        // 상태 초기화
+        // ?占쏙옙 容뺧옙???
         let _ = sqlx::query("UPDATE document_node SET last_action = NULL, updated_at = ? WHERE node_id = ?")
             .bind(Utc::now().to_rfc3339())
             .bind(&node.node_id)
@@ -4212,11 +4291,11 @@ pub async fn index_project_embeddings(
         let _ = app_handle.emit("nodes-updated", ());
     }
 
-    // 3. GPRD 통합본 색인 (진행된 내용이 있는 경우)
+    // 3. GPRD ???쪛縕???ｐ쪟?(辱뷂옙占???歷ι뭘???占쏙옙 囹띈땃容?
     if has_genesis {
         let full_prd = get_full_approved_prd(&*pool, &project_id).await;
         if full_prd != "{}" && !full_prd.is_empty() {
-            // 대표 ID가 지정되지 않았다면 다시 한 번 조회 시도
+            // ?占??ID令덌옙 辱뷂옙??낉옙辱뷂옙 ?劑눂占??덂틬 ??⑨옙 ??縕?邀썲쟿占??蒻낉옙
             let rep_id = match genesis_node_id {
                 Some(id) => id,
                 None => {
@@ -4225,17 +4304,17 @@ pub async fn index_project_embeddings(
                 }
             };
 
-            // 상태 업데이트: 통합 PRD 색인 알림
-            let _ = app_handle.emit("pipeline-status", "통합 PRD RAG 임베딩 중...");
+            // ?占쏙옙 ?占썬ゲ?歷ｄ궩: ???쪛 PRD ??ｐ쪟??鼎븨黎?
+            let _ = app_handle.emit("pipeline-status", "???쪛 PRD RAG ?占쏙옙??辱?..");
             let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-                .bind("통합 RAG 임베딩 중...")
+                .bind("???쪛 RAG ?占쏙옙??辱?..")
                 .bind(Utc::now().to_rfc3339())
                 .bind(&rep_id)
                 .execute(&*pool)
                 .await;
             let _ = app_handle.emit("nodes-updated", ());
 
-            // [수정] hardcoded "integrated-prd" 대신 실제 존재하는 iteration_id를 조회하여 사용 (FK 제약 조건 준수)
+            // [???옙] hardcoded "integrated-prd" ?占????⑨옙 邀썸른占??わ옙 iteration_id獄?邀썲쟿占???ㄹ??燁묌뭘 (FK ?帝같??邀썲쐦??辱쀯옙??
             let best_genesis_it: String = sqlx::query_scalar(
                 "SELECT iteration_id FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY is_pass DESC, calculated_score DESC LIMIT 1"
             )
@@ -4249,12 +4328,12 @@ pub async fn index_project_embeddings(
                 &project_id, None,
                 &rep_id, "Genesis_PRD",
                 &best_genesis_it, &full_prd,
-                100, // 통합본은 점수 임의 부여
+                100, // ???쪛縕먫퀎? ??좑옙 ?占쏙옙 蘊깍옙??
             ).await?;
 
             indexed_count += 1;
 
-            // 상태 초기화
+            // ?占쏙옙 容뺧옙???
             let _ = sqlx::query("UPDATE document_node SET last_action = NULL, updated_at = ? WHERE node_id = ?")
                 .bind(Utc::now().to_rfc3339())
                 .bind(&rep_id)
@@ -4267,7 +4346,7 @@ pub async fn index_project_embeddings(
     Ok(indexed_count as i32)
 }
 
-/// RAG 검색 결과를 정제된 텍스트 콘텍스트로 반환 (내부용)
+/// RAG 囹띰옙??囹뜹쐦?껇쳺??屍귨옙???鼎퐗????졾콪占?轝졽궩獄?獄삣콪占?(?歷???
 async fn get_rag_context(
     pool: &SqlitePool,
     client: &Client,
@@ -4277,12 +4356,12 @@ async fn get_rag_context(
     limit: i32,
     exclude_node_ids: Vec<String>,
 ) -> Result<String, String> {
-    // 1. 임베딩 모델 호출 (RETRIEVAL_QUERY 형식)
+    // 1. ?占쏙옙??獄덂댖旅??蘊꾬옙 (RETRIEVAL_QUERY ?屍귨옙)
     let query_vector = call_gemini_embedding(client, api_key, query_text, "RETRIEVAL_QUERY").await
         .map_err(|e| format!("Query embedding error: {}", e))?;
     let query_json = serde_json::to_string(&query_vector).unwrap_or_default();
 
-    // 2. 유사도 검색 (k-NN) - 제외 조건 반영
+    // 2. ?劑뵳占??囹띰옙??(k-NN) - ?帝같??邀썲쐦??獄삡겘占?
     let mut query_builder = sqlx::QueryBuilder::new(
         "SELECT m.chunk_text, m.node_type, v.distance 
          FROM document_embeddings v
@@ -4328,7 +4407,47 @@ async fn get_rag_context(
     Ok(context)
 }
 
-/// RAG 검색 테스트용 Tauri 커맨드
+/// 특정 노드의 기존 데이터와 변경 의도 간의 교집합(유사도)을 판별합니다.
+async fn check_node_intersection(
+    pool: &SqlitePool,
+    client: &Client,
+    api_key: &str,
+    project_id: &str,
+    node_id: &str,
+    query_text: &str,
+) -> Result<f64, String> {
+    // 1. 의도(Intent) 벡터화
+    let query_vector = call_gemini_embedding(client, api_key, query_text, "RETRIEVAL_QUERY").await
+        .map_err(|e| format!("Intersection query embedding error: {}", e))?;
+    let query_json = serde_json::to_string(&query_vector).unwrap_or_default();
+
+    // 2. 해당 노드에 속한 조각들 중 가장 높은 유사도 검색
+    let row = sqlx::query(
+        "SELECT v.distance 
+         FROM document_embeddings v
+         JOIN embedding_metadata m ON v.rowid = m.rowid
+         WHERE m.node_id = ? AND m.project_id = ? AND v.embedding MATCH ? AND k = 1
+         ORDER BY v.distance ASC LIMIT 1"
+    )
+    .bind(node_id)
+    .bind(project_id)
+    .bind(&query_json)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| format!("Intersection search error: {}", e))?;
+
+    if let Some(r) = row {
+        let dist: f64 = r.get(0);
+        let similarity = 1.0 - dist;
+        println!(">>> [RAG-Intersection] Node: {}, Similarity: {:.4}", node_id, similarity);
+        Ok(similarity)
+    } else {
+        println!(">>> [RAG-Intersection] Node: {}, No embeddings found", node_id);
+        Ok(0.0)
+    }
+}
+
+/// RAG 囹띰옙???葯멩벆?蘊꾦뭘 Tauri ?€쐢鸚??
 #[tauri::command]
 pub async fn search_similar_documents(
     pool: State<'_, SqlitePool>,
@@ -4369,5 +4488,776 @@ pub async fn search_similar_documents(
         })
     }).collect();
 
+
     Ok(results)
+}
+
+#[tauri::command]
+pub async fn parse_intent(
+    app_handle: tauri::AppHandle,
+    client: State<'_, Client>,
+    api_key: String,
+    raw_input: String,
+) -> Result<crate::schemas::IntentSchema, String> {
+    let prompts_dir = get_prompts_dir(&app_handle);
+    let mut prompt = std::fs::read_to_string(prompts_dir.join("generator/intent_parser.txt"))
+        .map_err(|e| format!("Failed to load intent parser prompt: {}", e))?;
+    
+    prompt = prompt.replace("{{RAW_INPUT}}", &raw_input);
+
+    let schema_json = schemars::schema_for!(crate::schemas::IntentSchema);
+    let flattened_schema = crate::schemas::flatten_schema(serde_json::to_value(schema_json).unwrap());
+
+    let response = call_gemini(&*client, &api_key, "You are a software requirement analyzer.", &prompt, Some(flattened_schema))
+        .await
+        .map_err(|e| match e {
+            PipelineError::ApiError(code, msg) => format!("API Error ({}): {}", code, msg),
+            PipelineError::Internal(msg) => format!("Internal Error: {}", msg),
+        })?;
+
+    let intent: crate::schemas::IntentSchema = serde_json::from_str(&response)
+        .map_err(|e| format!("Failed to parse intent JSON: {} | Content: {}", e, response))?;
+
+
+    Ok(intent)
+}
+
+#[tauri::command]
+pub async fn route_architecture_target(
+    app_handle: tauri::AppHandle,
+    pool: tauri::State<'_, SqlitePool>,
+    client: tauri::State<'_, Client>,
+    api_key: String,
+    project_id: String,
+    intent: crate::schemas::IntentSchema,
+) -> Result<crate::schemas::RoutingSchema, String> {
+    let prompts_dir = get_prompts_dir(&app_handle);
+    let mut prompt = std::fs::read_to_string(prompts_dir.join("generator/architecture_router.txt"))
+        .map_err(|e| format!("Failed to load architecture router prompt: {}", e))?;
+
+    // 1. ?占쏙옙????잟쬃??獄℡텈占?(God's Eye View獄??占쏙옙 ?占쏜　??℡댃占?轝졽궩)
+    let genesis_prd = get_full_approved_prd(&*pool, &project_id).await;
+    
+    let contexts = sqlx::query_as::<_, GlobalContext>(
+        "SELECT * FROM global_context WHERE project_id = ? AND is_deleted = 0"
+    )
+    .bind(&project_id)
+    .fetch_all(&*pool)
+    .await
+    .map_err(|e: sqlx::Error| e.to_string())?;
+
+    let sad_global = contexts.iter()
+        .filter(|c| c.context_type.to_lowercase().starts_with("sad_"))
+        .map(|c| format!("[{}] {}", c.context_type, c.context_data_json))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let modules = sqlx::query_as::<_, LocalModule>(
+        "SELECT * FROM local_module WHERE project_id = ? AND is_deleted = 0"
+    )
+    .bind(&project_id)
+    .fetch_all(&*pool)
+    .await
+    .map_err(|e: sqlx::Error| e.to_string())?;
+
+    let module_list = modules.iter()
+        .map(|m| format!("- Module ID: {}, Name: {}, Priority: {}", m.module_id, m.module_name, m.priority_order))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // 2. 縕먲옙??辱ζ쉼占?
+    let intent_json = serde_json::to_string_pretty(&intent).unwrap_or_default();
+    prompt = prompt.replace("{{INTENT_JSON}}", &intent_json);
+    prompt = prompt.replace("{{GENESIS_PRD}}", &genesis_prd);
+    prompt = prompt.replace("{{SAD_GLOBAL}}", &sad_global);
+    prompt = prompt.replace("{{MODULE_LIST}}", &module_list);
+
+    let schema_json = schemars::schema_for!(crate::schemas::RoutingSchema);
+    let flattened_schema = crate::schemas::flatten_schema(serde_json::to_value(schema_json).unwrap());
+
+    // 3. Gemini API ?蘊꾬옙
+    let response = call_gemini(&*client, &api_key, "You are a senior solution architect who determines the impact of changes.", &prompt, Some(flattened_schema))
+        .await
+        .map_err(|e| match e {
+            PipelineError::ApiError(code, msg) => format!("API Error ({}): {}", code, msg),
+            PipelineError::Internal(msg) => format!("Internal Error: {}", msg),
+        })?;
+
+    let routing: crate::schemas::RoutingSchema = serde_json::from_str(&response)
+        .map_err(|e| format!("Failed to parse routing JSON: {} | Content: {}", e, response))?;
+
+    // [Sprint 1 HITL] ?燁묌뭘??좑옙囹??占???蘊덌옙 ?℡댃占????밭뿆??わ옙 ?歷좂븼??獄삽?곤옙
+    app_handle.emit("requires-target-confirmation", &routing)
+        .map_err(|e| format!("Failed to emit HITL event: {}", e))?;
+
+
+    Ok(routing)
+}
+
+#[tauri::command]
+pub async fn confirm_architecture_routing(
+    app_handle: tauri::AppHandle,
+    _pool: tauri::State<'_, SqlitePool>,
+    _project_id: String,
+    targets: Vec<String>,
+) -> Result<(), String> {
+    println!(">>> Architecture Routing Confirmed by User: {:?}", targets);
+    
+    // Sprint 2??좑옙 囹긺쭜占??Taint Cascade(??ⓨ㈈ ?占쏙옙) 獄??곤옙???帝같占??좒쬃???섓옙??
+    // ?占쏙옙??獄?쮤덃벚獄???룩맻囹??歟볣솷 獄삣콪占?
+    
+    let _ = app_handle.emit("routing-confirmed", &targets);
+    
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn validate_intent_globally(
+    app_handle: tauri::AppHandle,
+    pool: tauri::State<'_, SqlitePool>,
+    client: tauri::State<'_, Client>,
+    api_key: String,
+    project_id: String,
+    intent: crate::schemas::IntentSchema,
+    targets: Vec<String>,
+) -> Result<crate::schemas::GlobalValidationSchema, String> {
+    let prompts_dir = get_prompts_dir(&app_handle);
+    let mut prompt = std::fs::read_to_string(prompts_dir.join("generator/global_validator.txt"))
+        .map_err(|e| format!("Failed to load global validator prompt: {}", e))?;
+
+    // 1. SAD Global ?℡댃占?轝졽궩 獄℡텈占?
+    let contexts = sqlx::query_as::<_, GlobalContext>(
+        "SELECT * FROM global_context WHERE project_id = ? AND is_deleted = 0"
+    )
+    .bind(&project_id)
+    .fetch_all(&*pool)
+    .await
+    .map_err(|e: sqlx::Error| e.to_string())?;
+
+    let sad_global = contexts.iter()
+        .filter(|c| c.context_type.to_lowercase().starts_with("sad_"))
+        .map(|c| format!("[{}] {}", c.context_type, c.context_data_json))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // 2. 縕먲옙??辱ζ쉼占?
+    let intent_json = serde_json::to_string_pretty(&intent).unwrap_or_default();
+    let targets_json = targets.join(", ");
+    
+    prompt = prompt.replace("{{INTENT_JSON}}", &intent_json);
+    prompt = prompt.replace("{{TARGET_NODES}}", &targets_json);
+    prompt = prompt.replace("{{SAD_GLOBAL}}", &sad_global);
+
+    let schema_json = schemars::schema_for!(crate::schemas::GlobalValidationSchema);
+    let flattened_schema = crate::schemas::flatten_schema(serde_json::to_value(schema_json).unwrap());
+
+    // 3. Gemini API ?蘊꾬옙
+    let response = call_gemini(&*client, &api_key, "You are a senior solution architect auditing system changes.", &prompt, Some(flattened_schema))
+        .await
+        .map_err(|e| match e {
+            PipelineError::ApiError(code, msg) => format!("API Error ({}): {}", code, msg),
+            PipelineError::Internal(msg) => format!("Internal Error: {}", msg),
+        })?;
+
+    let validation: crate::schemas::GlobalValidationSchema = serde_json::from_str(&response)
+        .map_err(|e| format!("Failed to parse validation JSON: {} | Content: {}", e, response))?;
+
+    Ok(validation)
+}
+
+#[tauri::command]
+pub async fn apply_taint_cascade(
+    app_handle: tauri::AppHandle,
+    pool: tauri::State<'_, SqlitePool>,
+    project_id: String,
+    intent: crate::schemas::IntentSchema,
+    targets: Vec<String>,
+) -> Result<(), String> {
+    println!(">>> Starting Taint Cascade for targets: {:?}", targets);
+    let now = Utc::now().to_rfc3339();
+
+    // 0. Intent ?占??
+    sqlx::query("UPDATE project SET increment_intent = ?, updated_at = ? WHERE project_id = ?")
+        .bind(serde_json::to_string(&intent).unwrap_or_default())
+        .bind(&now)
+        .bind(&project_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 1. ???뿈????잟쬃??獄℡텈占?(SAD_module_deps)
+    let deps_context = sqlx::query_as::<_, GlobalContext>(
+        "SELECT * FROM global_context WHERE project_id = ? AND context_type = 'sad_module_deps' AND is_deleted = 0 ORDER BY version DESC LIMIT 1"
+    )
+    .bind(&project_id)
+    .fetch_optional(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let mut impacted_modules = std::collections::HashSet::new();
+    for t in &targets { impacted_modules.insert(t.clone()); }
+
+    if let Some(ctx) = deps_context {
+        if let Ok(deps_schema) = serde_json::from_str::<crate::schemas::SadModuleDepsSchema>(&ctx.context_data_json) {
+            // BFS獄???ⓨ㈈ ?屍귨옙 容뷰눢占?
+            let mut queue: std::collections::VecDeque<String> = targets.clone().into();
+            while let Some(current) = queue.pop_front() {
+                for dep in &deps_schema.dependencies {
+                    if dep.to_module == current { // current令덌옙 縕먲옙囹띈텫占썼グ?current獄????뿈??わ옙 from_module????ⓨ㈈??
+                        if !impacted_modules.contains(&dep.from_module) {
+                            impacted_modules.insert(dep.from_module.clone());
+                            queue.push_back(dep.from_module.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    println!(">>> Impacted Modules: {:?}", impacted_modules);
+
+    // 2. DB ?占썬ゲ?歷ｄ궩: 囹듸옙???蘊덌옙??⑨옙 STALE ?占쏙옙獄??占쏜쬃?
+    // module_id ??믭옙 target_node_type??獄ㅶ쑉???わ옙 囹띈땃容?墉?겒??
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
+    for mid in impacted_modules {
+        // [令덍ㄳ울옙] ?歷좑옙 邀썲쟿占썼쳺??帝걟???섓옙 ??⑨옙 ID獄℡텈占?獄ㅶ쑉??(?制？蜈????낂쇃)
+        let module_ids: Vec<String> = sqlx::query_scalar(
+            "SELECT module_id FROM local_module WHERE project_id = ? AND module_id = ? AND is_deleted = 0"
+        )
+        .bind(&project_id)
+        .bind(&mid)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        for found_id in module_ids {
+            sqlx::query(
+                "UPDATE document_node SET node_state = 'STALE', updated_at = ? WHERE module_id = ? AND project_id = ?"
+            )
+            .bind(&now)
+            .bind(&found_id)
+            .bind(&project_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+        }
+        
+        // ?占쏜　??蘊덌옙(SAD_Global, SAD_Module, Genesis_PRD ?? 獄ㅶ쵟占?墉?겒??
+        let target_types = match mid.to_lowercase().as_str() {
+            "sad_non_tech" | "sad_tech_stack" | "sad_core_erd" | "sad_auth_rbac" | "sad_interface_error" | "sad_global" => 
+                vec!["SAD_Global".to_string()],
+            "sad_module_list" | "sad_epic_mapping" | "sad_module_deps" | "sad_module" => 
+                vec!["SAD_Module".to_string()],
+            "genesis_prd" | "prd" | "integrated-prd" => 
+                vec!["Genesis_PRD".to_string(), "GPRD_Architecture_Schema".to_string()],
+            _ => vec![mid.clone(), format!("SAD_{}", mid)],
+        };
+
+        for t_type in target_types {
+            sqlx::query(
+                "UPDATE document_node SET node_state = 'STALE', updated_at = ? WHERE project_id = ? AND (target_node_type = ? OR LOWER(target_node_type) = LOWER(?))"
+            )
+            .bind(&now)
+            .bind(&project_id)
+            .bind(&t_type)
+            .bind(&t_type)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+        }
+    }
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    // 3. UI 令덃×占??歷좂븼??獄삽?곤옙
+    let _ = app_handle.emit("nodes-updated", ());
+    let _ = app_handle.emit("pipeline-status", "Taint Cascade ?占쏙옙: ??? ?蘊덌옙??⑩쬃?STALE ?占쏙옙獄??占쏙옙???옙??잞옙??");
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn generate_and_apply_patch(
+    app_handle: tauri::AppHandle,
+    pool: tauri::State<'_, SqlitePool>,
+    client: tauri::State<'_, Client>,
+    api_key: String,
+    project_id: String,
+    node_id: String,
+) -> Result<(), String> {
+    println!(">>> Starting Patch Generation for node: {}", node_id);
+    let now = Utc::now().to_rfc3339();
+
+    // 1. 프로젝트 및 노드 정보 로드
+    let project = sqlx::query_as::<_, Project>("SELECT * FROM project WHERE project_id = ?")
+        .bind(&project_id)
+        .fetch_one(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let intent = project.increment_intent.ok_or("No refinement intent found for this project.")?;
+    
+    let node = sqlx::query_as::<_, DocumentNode>("SELECT * FROM document_node WHERE node_id = ?")
+        .bind(&node_id)
+        .fetch_one(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 2. 교집합 판별 (Similarity Check)
+    let similarity = check_node_intersection(&pool, &client, &api_key, &project_id, &node_id, &intent).await
+        .unwrap_or(0.0);
+
+    // 3. 기존 데이터 로드 (회복 및 패치 공통 필요)
+    let latest_pass_iter = sqlx::query_as::<_, GenerationIteration>(
+        "SELECT * FROM generation_iteration WHERE node_id = ? AND is_pass = 1 ORDER BY created_at DESC LIMIT 1"
+    )
+    .bind(&node_id)
+    .fetch_one(&*pool)
+    .await
+    .map_err(|e| format!("Failed to load original JSON for refinement: {}", e))?;
+
+    if similarity < 0.2 {
+        println!(">>> [RAG-Recovery] Similarity {:.4} < 0.2. Auto-restoring node {} to COMPLETED", similarity, node_id);
+        
+        sqlx::query("UPDATE document_node SET node_state = 'COMPLETED', last_action = ?, updated_at = ? WHERE node_id = ?")
+            .bind("교집합 없음: 자동 복구됨")
+            .bind(Utc::now().to_rfc3339())
+            .bind(&node_id)
+            .execute(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let _ = app_handle.emit("nodes-updated", ());
+        let _ = app_handle.emit("pipeline-status", format!("노드 {} 복구: 변경 사항 없음", node.target_node_type));
+
+
+        return Ok(());
+    }
+
+    // SAD Global 獄℡텈占?
+    let contexts = sqlx::query_as::<_, GlobalContext>(
+        "SELECT * FROM global_context WHERE project_id = ? AND is_deleted = 0"
+    )
+    .bind(&project_id)
+    .fetch_all(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let sad_global = contexts.iter()
+        .filter(|c| c.context_type.to_lowercase().starts_with("sad_"))
+        .map(|c| format!("[{}] {}", c.context_type, c.context_data_json))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // 2. ?占썩?占썰궩 辱쀯옙壅?
+    let rag_context = get_rag_context(&pool, &client, &api_key, &project_id, &intent, 5, vec![node_id.clone()]).await
+        .unwrap_or_else(|e| {
+            println!(">>> [RAG] refinement search failed: {}", e);
+            "No additional context found via RAG.".to_string()
+        });
+
+    let prompts_dir = get_prompts_dir(&app_handle);
+    let mut prompt_content = std::fs::read_to_string(prompts_dir.join("generator/patch_generator.txt"))
+        .map_err(|e| format!("Failed to load patch generator prompt: {}", e))?;
+
+    prompt_content = prompt_content.replace("{{INTENT_JSON}}", &intent);
+    prompt_content = prompt_content.replace("{{NODE_TYPE}}", &node.target_node_type);
+    prompt_content = prompt_content.replace("{{SAD_GLOBAL}}", &sad_global);
+    prompt_content = prompt_content.replace("{{RAG_CONTEXT}}", &rag_context);
+    prompt_content = prompt_content.replace("{{ORIGINAL_JSON}}", &latest_pass_iter.generated_draft_json);
+    
+    // 2-B. 이전 실패 시도 로드 (반복 최적화용)
+    let latest_any_iter = sqlx::query_as::<_, GenerationIteration>(
+        "SELECT * FROM generation_iteration WHERE node_id = ? ORDER BY created_at DESC LIMIT 1"
+    )
+    .bind(&node_id)
+    .fetch_optional(&*pool)
+    .await
+    .unwrap_or(None);
+
+    let previous_attempt = if let Some(iter) = latest_any_iter {
+        // 마지막 시도가 실패(is_pass=0)인 경우에만 피드백 전달
+        if iter.is_pass == Some(false) {
+            format!(
+                "Failed Refined JSON: {}\nScore: {}\nFeedback: {}\nCritical Errors: {}",
+                iter.generated_draft_json,
+                iter.calculated_score.unwrap_or(0),
+                iter.actionable_feedback_text.as_deref().unwrap_or("None"),
+                iter.critical_errors_array.as_deref().unwrap_or("None")
+            )
+        } else {
+            "None. This is the first attempt or the previous attempt passed.".to_string()
+        }
+    } else {
+        "None. This is the first attempt.".to_string()
+    };
+    prompt_content = prompt_content.replace("{{PREVIOUS_ATTEMPT}}", &previous_attempt);
+
+    // 3. AI ?蘊꾬옙
+    let response = call_gemini(&*client, &api_key, "You are a JSON Patch generation expert.", &prompt_content, None)
+        .await
+        .map_err(|e| format!("AI Generation failed: {:?}", e))?;
+
+    // 4. ??곤옙 ?占썽뭘
+    let mut original_doc: Value = serde_json::from_str(&latest_pass_iter.generated_draft_json)
+        .map_err(|e| format!("Failed to parse original JSON: {}", e))?;
+    
+    let patch_ops_result: Result<Vec<PatchOperation>, _> = serde_json::from_str(&response);
+    
+    if let Err(e) = patch_ops_result {
+        let error_msg = format!("AI returned invalid JSON Patch format: {} | Content: {}", e, response);
+        println!(">>> Patch Parsing Error: {}", error_msg);
+        
+        // ?葯멥삖 ?轝좒쨺??帝같占??HITL獄???섊뼅???燁묌뭘??? ?屍귩쪟??섓옙 ??
+        sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', updated_at = ? WHERE node_id = ?")
+            .bind(&now)
+            .bind(&node_id)
+            .execute(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+            
+        let _ = app_handle.emit("nodes-updated", ());
+        return Err(error_msg);
+    }
+
+    let patch_ops = patch_ops_result.unwrap();
+
+    if let Err(e) = patch(&mut original_doc, &patch_ops) {
+        let error_msg = format!("Failed to apply JSON Patch: {}. This might be due to structure mismatch.", e);
+        println!(">>> Patch Application Error: {}", error_msg);
+
+        sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', updated_at = ? WHERE node_id = ?")
+            .bind(&now)
+            .bind(&node_id)
+            .execute(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+            
+        let _ = app_handle.emit("nodes-updated", ());
+        return Err(error_msg);
+    }
+
+    let merged_json = original_doc.to_string();
+
+    // 5. 새로운 이터레이션 생성 (is_pass = 0, HITL 대기 상태)
+    let new_iter_id = Uuid::new_v4().to_string();
+    let next_iter_num = latest_pass_iter.iteration_number + 1;
+
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "INSERT INTO generation_iteration (iteration_id, node_id, iteration_number, generated_draft_json, is_pass, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, 0, ?, ?, 0)"
+    )
+    .bind(&new_iter_id)
+    .bind(&node_id)
+    .bind(next_iter_num)
+    .bind(&merged_json)
+    .bind(&now)
+    .bind(&now)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query("UPDATE document_node SET node_state = 'REFINING', current_iteration = ?, updated_at = ? WHERE node_id = ?")
+        .bind(next_iter_num)
+        .bind(&now)
+        .bind(&node_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    let _ = app_handle.emit("nodes-updated", ());
+    let _ = app_handle.emit("pipeline-status", format!("Patch applied to {}. Starting auto-validation...", node.target_node_type));
+
+    // 6. 자동 검증 프로세스 시작 (Sprint 4)
+    validate_refinement_node(app_handle, pool, client, api_key, project_id, node_id, response).await?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn validate_refinement_node(
+    app_handle: tauri::AppHandle,
+    pool: tauri::State<'_, SqlitePool>,
+    client: tauri::State<'_, Client>,
+    api_key: String,
+    project_id: String,
+    node_id: String,
+    patch_json: String,
+) -> Result<(), String> {
+    println!(">>> Starting Validation for Refined Node: {}", node_id);
+    let now = Utc::now().to_rfc3339();
+
+    // 1. 프로젝트 및 노드 정보 로드
+    let project = sqlx::query_as::<_, Project>("SELECT * FROM project WHERE project_id = ?")
+        .bind(&project_id)
+        .fetch_one(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let intent = project.increment_intent.ok_or("No refinement intent found.")?;
+    
+    let node = sqlx::query_as::<_, DocumentNode>("SELECT * FROM document_node WHERE node_id = ?")
+        .bind(&node_id)
+        .fetch_one(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 2. 교집합 판별 (Similarity Check)
+    let similarity = check_node_intersection(&pool, &client, &api_key, &project_id, &node_id, &intent).await
+        .unwrap_or(0.0);
+
+    if similarity < 0.2 {
+        println!(">>> [RAG-Validation-Recovery] Similarity {:.4} < 0.2. Auto-restoring node {} to COMPLETED", similarity, node_id);
+        
+        sqlx::query("UPDATE document_node SET node_state = 'COMPLETED', last_action = ?, updated_at = ? WHERE node_id = ?")
+            .bind("교집합 없음: 자동 복구됨")
+            .bind(Utc::now().to_rfc3339())
+            .bind(&node_id)
+            .execute(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let _ = app_handle.emit("nodes-updated", ());
+        return Ok(());
+    }
+
+    // 令덌옙??容뽴?곤옙 ?歷ｏ옙?占쏜쬃??(獄삥뒻占??占썽뭘????곤옙)
+    let latest_iter = sqlx::query_as::<_, GenerationIteration>(
+        "SELECT * FROM generation_iteration WHERE node_id = ? ORDER BY iteration_number DESC LIMIT 1"
+    )
+    .bind(&node_id)
+    .fetch_one(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // ?歷ο옙 pass 縕믭옙占?(Original)
+    let original_iter = sqlx::query_as::<_, GenerationIteration>(
+        "SELECT * FROM generation_iteration WHERE node_id = ? AND is_pass = 1 AND iteration_id != ? ORDER BY iteration_number DESC LIMIT 1"
+    )
+    .bind(&node_id)
+    .bind(&latest_iter.iteration_id)
+    .fetch_optional(&*pool)
+    .await
+    .map_err(|e| e.to_string())?
+    .ok_or_else(|| "No original version found to compare.".to_string())?;
+
+    // SAD Global 獄℡텈占?
+    let contexts = sqlx::query_as::<_, GlobalContext>(
+        "SELECT * FROM global_context WHERE project_id = ? AND is_deleted = 0"
+    )
+    .bind(&project_id)
+    .fetch_all(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let sad_global = contexts.iter()
+        .filter(|c| c.context_type.to_lowercase().starts_with("sad_"))
+        .map(|c| format!("[{}] {}", c.context_type, c.context_data_json))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // 2. ?占썩?占썰궩 辱쀯옙壅?
+    let rag_context = get_rag_context(&pool, &client, &api_key, &project_id, &intent, 5, vec![node_id.clone()]).await
+        .unwrap_or_else(|e| {
+            println!(">>> [RAG] refinement search failed: {}", e);
+            "No additional context found via RAG.".to_string()
+        });
+
+    let prompts_dir = get_prompts_dir(&app_handle);
+    let mut prompt_content = std::fs::read_to_string(prompts_dir.join("evaluator/refinement_evaluator.txt"))
+        .map_err(|e| format!("Failed to load refinement evaluator prompt: {}", e))?;
+
+    prompt_content = prompt_content.replace("{{INTENT_JSON}}", &intent);
+    prompt_content = prompt_content.replace("{{NODE_TYPE}}", &node.target_node_type);
+    prompt_content = prompt_content.replace("{{SAD_GLOBAL}}", &sad_global);
+    prompt_content = prompt_content.replace("{{RAG_CONTEXT}}", &rag_context);
+    prompt_content = prompt_content.replace("{{ORIGINAL_JSON}}", &original_iter.generated_draft_json);
+    prompt_content = prompt_content.replace("{{PATCHED_DRAFT}}", &latest_iter.generated_draft_json);
+
+    let schema_json = schemars::schema_for!(crate::schemas::EvaluationResult);
+    let flattened_schema = crate::schemas::flatten_schema(serde_json::to_value(schema_json).unwrap());
+
+    // 3. AI ?蘊꾬옙
+    let response = call_gemini(&*client, &api_key, "You are a senior refinement validator.", &prompt_content, Some(flattened_schema))
+        .await
+        .map_err(|e| format!("Validation AI call failed: {:?}", e))?;
+
+    let eval: crate::schemas::EvaluationResult = serde_json::from_str(&response)
+        .map_err(|e| format!("Failed to parse evaluation result: {} | Content: {}", e, response))?;
+
+    // 4. 囹뜹쐦???占??
+    let feedback_json = serde_json::to_string(&eval.feedback).unwrap_or_default();
+    let critical_json = serde_json::to_string(&eval.critical_errors).unwrap_or_default();
+
+    // 80???歷ο옙?疫딉옙 critical_errors令덌옙 ?占썲컧獄???믭옙 ??쏃쟽 令덌옙?鴉딉옙 囹띰옙??(???獄??占쏙옙????占?HITL ?堤솘占??屍귨옙)
+    let is_pass = eval.is_pass && eval.score >= 80;
+
+    sqlx::query(
+        "UPDATE generation_iteration SET calculated_score = ?, critical_errors_array = ?, actionable_feedback_text = ?, is_pass = ?, updated_at = ? WHERE iteration_id = ?"
+    )
+    .bind(eval.score)
+    .bind(&critical_json)
+    .bind(&feedback_json)
+    .bind(if is_pass { 1 } else { 0 })
+    .bind(&now)
+    .bind(&latest_iter.iteration_id)
+    .execute(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', current_best_score = ?, updated_at = ? WHERE node_id = ?")
+        .bind(eval.score)
+        .bind(&now)
+        .bind(&node_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let _ = app_handle.emit("nodes-updated", ());
+    let _ = app_handle.emit("pipeline-status", format!("{} Validation Complete (Score: {})", node.target_node_type, eval.score));
+    
+    // 리파인먼트 결과 수신 시, 클라이언트에게 결과 패키지 전송 (결과 모달 표시용)
+    let _ = app_handle.emit("refinement-validation-result", serde_json::json!({
+        "nodeId": node_id,
+        "score": eval.score,
+        "isPass": is_pass,
+        "errors": eval.critical_errors,
+        "feedback": eval.feedback,
+        "originalJson": original_iter.generated_draft_json,
+        "refinedJson": latest_iter.generated_draft_json,
+        "nodeType": node.target_node_type,
+        "patchOps": patch_json
+    }));
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn retry_patch_loop(
+    app_handle: tauri::AppHandle,
+    pool: tauri::State<'_, SqlitePool>,
+    client: tauri::State<'_, Client>,
+    api_key: String,
+    project_id: String,
+    node_id: String,
+    retry_count: i32,
+) -> Result<(), String> {
+    println!(">>> Starting Retry Patch Loop for node: {}, count: {}", node_id, retry_count);
+    
+    for i in 0..retry_count {
+        println!(">>> Retry Attempt {}/{}", i + 1, retry_count);
+        let _ = app_handle.emit("pipeline-status", format!("Retrying patch... (Attempt {}/{})", i + 1, retry_count));
+        
+        match generate_and_apply_patch(
+            app_handle.clone(),
+            pool.clone(),
+            client.clone(),
+            api_key.clone(),
+            project_id.clone(),
+            node_id.clone()
+        ).await {
+            Ok(_) => {
+                // ??곤옙 ?歟볣솷 ?? validate_refinement_node令덌옙 ?歷???좑옙 ?蘊꾬옙??
+                // 囹띰옙辱?囹뜹쐦?껇쳺??屍귩쪟???ㄹ???좑옙令덌옙 ?帝찂弱먫グ?獄닷댃占?辱쀧궍靜? 令덌옙?鴉뺧옙辱뷂옙獄? 
+                // ?獵배맻?蒻낉옙 ??곤옙??generate_and_apply_patch令덌옙 ?歟볣솷(??믣돰 ?占쏜쬃???껓옙)?占쏜졊??囹띰옙占??屍귩쪟?
+                // ??⑨옙 ??좑옙 影ｅ쐣占?辱쀧궍靜??占?validate_refinement_node ?歷ｏ옙??囹뜹쐦?껇쳺??獵배맻??墉?르占?歷η꽚 ??
+                
+                // 容뽴?곤옙 ??좑옙 ?屍귩쪟?
+                let score: i32 = sqlx::query_scalar("SELECT current_best_score FROM document_node WHERE node_id = ?")
+                    .bind(&node_id)
+                    .fetch_one(&*pool)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                
+                if score >= 80 {
+                    println!(">>> Target score reached. Ending retry loop.");
+                    return Ok(());
+                }
+            },
+            Err(e) => {
+                println!(">>> Retry {} failed: {}", i + 1, e);
+                // 獄ㅿ옙?獄??蒻낉옙?占??덂틬 ??믣돰 獄삣콪占?
+                if i == retry_count - 1 {
+                    return Err(format!("All retry attempts failed. Last error: {}", e));
+                }
+            }
+        }
+    }
+    
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn finalize_refinement_update(
+    app_handle: tauri::AppHandle,
+    pool: tauri::State<'_, SqlitePool>,
+    project_id: String,
+) -> Result<(), String> {
+    println!(">>> Finalizing Refinement Update (Global Commit) for project: {}", project_id);
+    let now = Utc::now().to_rfc3339();
+
+    let _ = app_handle.emit("pipeline-status", "Global Refinement: Committing all changes...");
+
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
+    // 1. 獄덂댖占?STALE ??믭옙 Refined(PAUSED_HITL) ?蘊덌옙 墉녷㉬??
+    let nodes = sqlx::query_as::<_, DocumentNode>(
+        "SELECT * FROM document_node WHERE project_id = ? AND (node_state = 'PAUSED_HITL' OR node_state = 'STALE')"
+    )
+    .bind(&project_id)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    for node in nodes {
+        // 容뽴?곤옙 ?歷ｏ옙?占쏜쬃???옙 ?屍귨옙?逆븝옙 ?野?쪟?
+        let latest_iter = sqlx::query_as::<_, GenerationIteration>(
+            "SELECT * FROM generation_iteration WHERE node_id = ? ORDER BY iteration_number DESC LIMIT 1"
+        )
+        .bind(&node.node_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        // 影ｅ윜???野?쪟??囹띰옙褶?容뺧옙???
+        sqlx::query("UPDATE generation_iteration SET is_pass = 0 WHERE node_id = ?")
+            .bind(&node.node_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        // ??縕믭옙占??野?쪟?
+        sqlx::query("UPDATE generation_iteration SET is_pass = 1 WHERE iteration_id = ?")
+            .bind(&latest_iter.iteration_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        // ?蘊덌옙 ?占쏙옙 ?占쏙옙墉?겒??
+        sqlx::query("UPDATE document_node SET node_state = 'COMPLETED', updated_at = ? WHERE node_id = ?")
+            .bind(&now)
+            .bind(&node.node_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    // 2. ?占쏙옙??틶???縕뀐옙??容뺧옙???獄????쬃?킒???끾뵸 (?占쏙옙??
+    sqlx::query("UPDATE project SET increment_intent = NULL, updated_at = ? WHERE project_id = ?")
+        .bind(&now)
+        .bind(&project_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    let _ = app_handle.emit("nodes-updated", ());
+    let _ = app_handle.emit("pipeline-status", "Global Refinement Committed Successfully.");
+
+    Ok(())
 }

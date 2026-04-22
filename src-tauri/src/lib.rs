@@ -52,6 +52,9 @@ pub fn run() {
                     .create_if_missing(true);
 
                 let pool = sqlx::SqlitePool::connect_with(options).await.map_err(|e| e.to_string())?;
+
+                // Migration: project 테이블에 increment_intent 컬럼 추가 (이미 있으면 무시되도록 별도 처리)
+                let _ = sqlx::query("ALTER TABLE project ADD COLUMN increment_intent TEXT").execute(&pool).await;
                 
                 // ============================================================
                 // v2 클린 슬레이트: 기존 테이블 DROP 후 새 스키마로 재생성
@@ -75,6 +78,7 @@ pub fn run() {
                         pipeline_execution_mode VARCHAR(20) NOT NULL,
                         pipeline_phase VARCHAR(30) NOT NULL DEFAULT 'GENESIS_PRD',
                         raw_input_text TEXT,
+                        increment_intent TEXT, -- Refinement 의도 저장용
                         created_at TIMESTAMP NOT NULL,
                         updated_at TIMESTAMP NOT NULL,
                         is_deleted BOOLEAN NOT NULL,
@@ -262,6 +266,15 @@ pub fn run() {
             commands::unconfirm_iteration,
             commands::search_similar_documents,
             commands::manually_trigger_next_nodes,
+            commands::parse_intent,
+            commands::route_architecture_target,
+            commands::confirm_architecture_routing,
+            commands::validate_intent_globally,
+            commands::apply_taint_cascade,
+            commands::generate_and_apply_patch,
+            commands::validate_refinement_node,
+            commands::finalize_refinement_update,
+            commands::retry_patch_loop,
         ])
         .plugin(tauri_plugin_dialog::init())
         .run(tauri::generate_context!())

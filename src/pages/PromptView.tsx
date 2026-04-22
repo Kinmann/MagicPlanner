@@ -9,6 +9,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import Header from '../components/layout/Header';
+import IncrementUpdateModal from '../components/Project/IncrementUpdateModal';
 import "./PromptView.scss";
 
 interface PromptViewProps {
@@ -29,6 +30,7 @@ const PromptView: React.FC<PromptViewProps> = ({ projectId, onBack, onHome }) =>
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
   const [apiKey, setApiKey] = useState<string>("");
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -352,12 +354,39 @@ const PromptView: React.FC<PromptViewProps> = ({ projectId, onBack, onHome }) =>
                     : 'CONTEXT UP TO DATE'
             )}
           </button>
+          <button 
+            className="refine-button" 
+            onClick={() => setIsUpdateModalOpen(true)}
+            style={{ 
+              background: 'var(--gradient-primary)', 
+              color: 'white',
+              border: 'none',
+              padding: '12px',
+              borderRadius: '8px',
+              display: 'flex',
+              align_items: 'center',
+              justify_content: 'center',
+              gap: '8px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              marginBottom: '8px'
+            }}
+          >
+            <span className="material-symbols-outlined">auto_awesome</span>
+            REFINE ARCHITECTURE
+          </button>
           <button className="delete-button" onClick={handleDeleteProject}>
             <span className="material-symbols-outlined">delete_forever</span>
             DELETE PROJECT
           </button>
         </div>
       </aside>
+
+      <IncrementUpdateModal
+        isOpen={isUpdateModalOpen}
+        onClose={() => setIsUpdateModalOpen(false)}
+        projectId={projectId}
+      />
     </div>
   );
 };

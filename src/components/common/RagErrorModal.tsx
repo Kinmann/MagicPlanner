@@ -24,8 +24,16 @@ const RagErrorModal: React.FC<RagErrorModalProps> = ({ isOpen, onClose, errorInf
     setLoading(true);
     setRetryStatus('idle');
     try {
+      const store = await Store.load('settings.json');
+      const apiKeyValue = await store.get<{ value: string }>('gemini_api_key');
+      const apiKey = apiKeyValue?.value || "";
+
       // 1. 임베딩만 다시 수행
-      await invoke("index_project_embeddings", { projectId: errorInfo.project_id });
+      await invoke("index_project_embeddings", { 
+        projectId: errorInfo.project_id,
+        apiKey: apiKey
+      });
+
       setRetryStatus('success');
       
       // 2. 성공 시 자동으로 다음 노드 활성화

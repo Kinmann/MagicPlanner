@@ -6,14 +6,16 @@ import './PipelineCard.scss';
 interface PipelineCardProps {
   node: DocumentNode;
   modules: LocalModule[];
-  onRun: (nodeType: string) => void;
+  onRun: (nodeId: string) => void;
   onStop: (nodeId: string) => void;
   onResume: (nodeId: string) => void;
   onView: (node: DocumentNode) => void;
   onHITLAction: (nodeId: string, action: 'APPROVE' | 'RETRY') => void;
+  onRetryLoop?: (nodeId: string, count: number) => void;
   onUpdateMaxIterations: (nodeId: string, maxIterations: number) => void;
   onDimensionsChange?: (nodeType: string, dimensions: { width: number, height: number }) => void;
   isLocked?: boolean;
+  isRefinementMode?: boolean;
 }
 
 const PipelineCard: React.FC<PipelineCardProps> = ({ 
@@ -24,13 +26,16 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
   onResume,
   onView, 
   onHITLAction, 
+  onRetryLoop,
   onUpdateMaxIterations,
   onDimensionsChange,
-  isLocked = false
+  isLocked = false,
+  isRefinementMode = false
 }) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [isEditingMax, setIsEditingMax] = useState(false);
   const [tempMax, setTempMax] = useState(node.max_iterations);
+  const [retryCount, setRetryCount] = useState(1);
 
   React.useLayoutEffect(() => {
     if (!containerRef.current || !onDimensionsChange) return;
@@ -85,6 +90,10 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
         return { variant: 'is-warning', label: 'WAITING', active: false };
       case 'PAUSED_API_ERROR':
         return { variant: 'is-error', label: 'ERROR', active: false };
+      case 'STALE':
+        return { variant: 'is-stale', label: 'STALE', active: false };
+      case 'REFINING':
+        return { variant: 'is-refining', label: 'REFINING', active: true };
       default:
         return { variant: 'is-pending', label: 'PENDING', active: false };
     }
@@ -176,6 +185,27 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
             <span className="value">{node.current_best_score}</span>
           </div>
         </div>
+
+        {isRefinementMode && node.node_state === 'PAUSED_HITL' && (
+          <div className="refinement-info-panel">
+            <div className="info-header">
+              <span className="material-symbols-outlined">analytics</span>
+              <span className="label">REFINE QUALITY</span>
+            </div>
+            <div className="quality-gauge">
+              <div 
+                className={`gauge-fill ${node.current_best_score < 80 ? 'low' : 'high'}`} 
+                style={{ width: `${node.current_best_score}%` }}
+              ></div>
+            </div>
+            {node.api_error_message && (
+              <div className="refinement-error-msg">
+                <span className="material-symbols-outlined">warning</span>
+                <span>{node.api_error_message}</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Actions */}
@@ -187,10 +217,22 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
             title={isLocked ? "다음 노드가 진행 중이므로 실행할 수 없습니다." : ""}
             onClick={(e) => {
               e.stopPropagation();
-              onRun(node.target_node_type);
+              onRun(node.node_id);
             }}
           >
             <span className="material-symbols-outlined">play_arrow</span> Execute Node
+          </button>
+        )}
+
+        {node.node_state === 'STALE' && (
+          <button 
+            className="btn btn-warning" 
+            onClick={(e) => {
+              e.stopPropagation();
+              onRun(node.node_id);
+            }}
+          >
+            <span className="material-symbols-outlined">update</span> Refine Node
           </button>
         )}
 
@@ -210,28 +252,66 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
         
         {node.node_state === 'PAUSED_HITL' && (
           <div className="hitl-actions">
-            <button 
-              className="btn btn-ghost is-pass" 
-              disabled={isLocked}
-              title={isLocked ? "다음 노드가 진행 중이므로 승인할 수 없습니다." : ""}
-              onClick={(e) => {
-                e.stopPropagation();
-                onHITLAction(node.node_id, 'APPROVE');
-              }}
-            >
-              <span className="material-symbols-outlined">check</span> Pass
-            </button>
-            <button 
-              className="btn btn-primary is-retry" 
-              disabled={isLocked}
-              title={isLocked ? "다음 노드가 진행 중이므로 재생성할 수 없습니다." : ""}
-              onClick={(e) => {
-                e.stopPropagation();
-                onHITLAction(node.node_id, 'RETRY');
-              }}
-            >
-              <span className="material-symbols-outlined">refresh</span> Retry
-            </button>
+            {isRefinementMode ? (
+              <div className="refinement-retry-control">
+                <div className="retry-input-group">
+                  <input 
+                    type="number" 
+                    min="1" 
+                    max="5"
+                    value={retryCount}
+                    onChange={(e) => setRetryCount(parseInt(e.target.value) || 1)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="retry-count-input"
+                  />
+                  <button 
+                    className="btn btn-primary is-retry" 
+                    disabled={isLocked}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onRetryLoop) onRetryLoop(node.node_id, retryCount);
+                    }}
+                  >
+                    <span className="material-symbols-outlined">refresh</span> 
+                    Retry Patch
+                  </button>
+                </div>
+                <button 
+                  className="btn btn-primary is-confirm"
+                  disabled={isLocked}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onHITLAction(node.node_id, 'APPROVE');
+                  }}
+                >
+                  <span className="material-symbols-outlined">done_all</span> 
+                  Confirm Refinement
+                </button>
+              </div>
+            ) : (
+              <>
+                <button 
+                  className="btn btn-ghost is-pass"
+                  disabled={isLocked}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onHITLAction(node.node_id, 'APPROVE');
+                  }}
+                >
+                  <span className="material-symbols-outlined">check</span> Pass
+                </button>
+                <button 
+                  className="btn btn-primary is-retry" 
+                  disabled={isLocked}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onHITLAction(node.node_id, 'RETRY');
+                  }}
+                >
+                  <span className="material-symbols-outlined">refresh</span> Retry
+                </button>
+              </>
+            )}
           </div>
         )}
 
@@ -260,6 +340,20 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
               }}
             >
               <span className="material-symbols-outlined">stop_circle</span> Stop
+            </button>
+          </div>
+        )}
+
+        {node.node_state === 'REFINING' && (
+          <div className="status-actions">
+            <button 
+              className="btn btn-ghost is-stop" 
+              onClick={(e) => {
+                e.stopPropagation();
+                onStop(node.node_id);
+              }}
+            >
+              <span className="material-symbols-outlined">stop_circle</span> Stop Refinement
             </button>
           </div>
         )}

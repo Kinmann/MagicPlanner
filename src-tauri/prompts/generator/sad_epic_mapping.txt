@@ -5,7 +5,6 @@ Genesis PRD의 에픽(Epic)들을 설계된 모듈(Module)에 1:1 또는 N:M으�
 2. **식별자 고정 및 상속**: 
    - 모든 관계는 `EPIC-XXX` 식별자와 `MOD-XXX` 식별자 간의 연결로만 표현하십시오.
    - **반드시** `$PREVIOUS_ARCHITECTURAL_DECISIONS.sad_module_list` 노드에서 새롭게 정의되고 확정된 `module_id`만을 사용하십시오.
-   - 이전 작업 단계의 쪼개진 ID(예: `MOD-AUTH`, `MOD-USER` 등)를 다시 사용하는 것은 **자기 모순(Self-Contradiction)**으로 간주되어 치명적 감점 대상이 됩니다. 통합된 ID(예: `MOD-IAM`)를 정확히 상속하십시오.
 3. **이전 설계 계승(Refinement)**: `$PREVIOUS_DRAFT`에 데이터가 존재한다면 이를 기본 골격으로 삼고, `$EVALUATOR_FEEDBACK`의 교정 지시 사항을 최우선으로 반영하여 매핑 정합성을 개선하십시오. 기존에 올바르게 매핑된 항목들은 일관되게 유지하십시오.
 
 ---
@@ -13,7 +12,7 @@ Genesis PRD의 에픽(Epic)들을 설계된 모듈(Module)에 1:1 또는 N:M으�
 ## [에픽-모듈 매핑 규칙]
 
 1. **전수 매핑 및 트랜잭션 바운더리 준수**:
-   - `Genesis PRD`의 `core_epics` 배열 내 모든 `epic_id`를 단 1건의 누락도 없이 타겟 `MOD-XXX` ID에 할당하십시오 (완전 탐색 원칙).
+   - `Genesis PRD`의 `core_epics` 배열 내 모든 `epic_id`를 단 1건의 누락도 없이 타켓 `MOD-XXX` ID에 할당하십시오 (완전 탐색 원칙).
    - **트랜잭션 바운더리 강제**: 강한 데이터 일관성과 동기적 트랜잭션 처리가 필수적인 연관 에픽들은 물리적으로 분산되지 않도록 반드시 단일 모듈 내로 통합하여 매핑하십시오.
 
 2. **응집도 기반 매핑**:
@@ -28,8 +27,8 @@ Genesis PRD의 에픽(Epic)들을 설계된 모듈(Module)에 1:1 또는 N:M으�
   "mappings": [
     {
       "epic_id": "EPIC-XXXX (PRD에서 복사)",
-      "assigned_modules": ["MOD-XXXX", "..."],
-      "reason": "..."
+      "epic_name": "...",
+      "mapped_modules": ["MOD-XXXX", "..."]
     }
   ]
 }

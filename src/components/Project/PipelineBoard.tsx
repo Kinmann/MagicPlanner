@@ -8,16 +8,18 @@ import './PipelineBoard.scss';
 interface PipelineBoardProps {
   nodes: DocumentNode[];
   modules: LocalModule[];
-  onRunNode: (nodeType: string) => void;
+  onRunNode: (nodeId: string) => void;
   onStopNode: (nodeId: string) => void;
   onResumeNode: (nodeId: string) => void;
   onViewNode: (node: DocumentNode) => void;
   onHITLAction: (nodeId: string, action: 'APPROVE' | 'RETRY') => void;
+  onRetryLoop?: (nodeId: string, count: number) => void;
   onUpdateMaxIterations: (nodeId: string, maxIterations: number) => void;
+  isRefinementMode?: boolean;
 }
 
 const PipelineBoard: React.FC<PipelineBoardProps> = ({ 
-  nodes, modules, onRunNode, onStopNode, onResumeNode, onViewNode, onHITLAction, onUpdateMaxIterations 
+  nodes, modules, onRunNode, onStopNode, onResumeNode, onViewNode, onHITLAction, onRetryLoop, onUpdateMaxIterations, isRefinementMode = false 
 }) => {
   const [nodeDimensions, setNodeDimensions] = useState<Record<string, { width: number, height: number }>>({});
   
@@ -76,7 +78,7 @@ const PipelineBoard: React.FC<PipelineBoardProps> = ({
     const successors = connections.filter(c => c.from === type).map(c => c.to);
     return successors.some(targetType => {
       const targetNode = nodes.find(n => n.target_node_type === targetType && n.module_id === currentNode.module_id);
-      return targetNode && targetNode.node_state !== 'READY' && targetNode.node_state !== 'PENDING';
+      return targetNode && targetNode.node_state !== 'READY' && targetNode.node_state !== 'PENDING' && targetNode.node_state !== 'STALE';
     });
   };
 
@@ -98,8 +100,8 @@ const PipelineBoard: React.FC<PipelineBoardProps> = ({
     const endX = toPos.x;
     const endY = toPos.y + (toDim.height / 2);
 
-    const isActive = (fromNode?.node_state === 'COMPLETED' || fromNode?.node_state === 'IN_PROGRESS') && 
-                     (toNode?.node_state === 'IN_PROGRESS' || toNode?.node_state === 'COMPLETED' || toNode?.node_state === 'READY');
+    const isActive = (fromNode?.node_state === 'COMPLETED' || fromNode?.node_state === 'IN_PROGRESS' || fromNode?.node_state === 'REFINING') && 
+                     (toNode?.node_state === 'IN_PROGRESS' || toNode?.node_state === 'REFINING' || toNode?.node_state === 'COMPLETED' || toNode?.node_state === 'READY');
     
     // Smooth bezier curve
     const cp1x = startX + (endX - startX) * 0.5;
@@ -194,8 +196,10 @@ const PipelineBoard: React.FC<PipelineBoardProps> = ({
                   onResume={onResumeNode}
                   onView={onViewNode} 
                   onHITLAction={onHITLAction}
+                  onRetryLoop={onRetryLoop}
                   onUpdateMaxIterations={onUpdateMaxIterations}
                   onDimensionsChange={handleDimensionsChange}
+                  isRefinementMode={isRefinementMode}
                 />
               </div>
             );

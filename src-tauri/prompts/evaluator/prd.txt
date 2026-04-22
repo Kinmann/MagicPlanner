@@ -6,7 +6,7 @@
 - **기본 점수: 20점**
 - **[Deduction Triggers]**
     - **[-20점] [Code D-1] 타 모듈 도메인 침범:** 산출된 기능 로직이 선행 `$SOURCE_DOCUMENTS`(SAD)에 명시된 타겟 모듈의 책임을 벗어나거나 타 모듈(`MOD-XXX`)의 명시적 책임에 해당하는 경우. (즉시 삭감)
-    - **[-10점] [Code D-2] 할당 외 에픽 포함:** 산출물 내에 참조된 `EPIC-XXX` 식별자가 타겟 모듈에 할당된 에픽 리스트에 존재하지 않음 (`Unmapped ID`).
+    - **[-10점] [Code D-2] 할당 외 에픽 포함:** 산출물 내에 참조된 `EPIC-XXX` 식별자가 타겟 모듈에 할당되지 않은 경우. `$GLOBAL_CONTEXT.sad_epic_mapping.mappings` 배열을 전수 조사하여, 해당 에픽의 `mapped_modules` 배열 내에 현재 타겟 모듈의 `module_id`가 포함되어 있는지 반드시 확인하십시오. (`Unmapped ID`).
     - **[-10점] [Code D-3] 마이크로 설계 개입:** 산출물 데이터에 물리적 DB 컬럼명, HTTP API 엔드포인트(URL), JSON 파라미터 타입 등 구현 레벨(FSD/ERD)의 데이터 규격이 포함됨.
 
 ### Metric E: 기능 분해의 해상도 (Feature Decomposition Specificity)
@@ -14,7 +14,7 @@
 - **[Deduction Triggers]**
     - **[-10점] [Code E-1] 동어반복 분해:** 도출된 Feature의 제목/설명이 상위 Epic의 텍스트와 의미적으로 90% 이상 동일함 (기능적 분해 없이 1:1 매핑만 수행됨).
     - **[-5점] [Code E-2] 엣지 케이스 누락:** 핵심 기능 명세에 정상 흐름(Happy Path)만 존재하고, 필수 예외 상황(데이터 부재, 권한 실패, 한도 초과 등 Unhappy Path)에 대한 분기 처리가 누락됨.
-    - **[-5점] [Code E-3] 에픽 추적성 단절:** 도출된 세부 기능에 부모 에픽의 식별자(`EPIC-XXX`)가 역방향 매핑(Traceability)되지 않음.
+    - **[-5점] [Code E-3] 에픽 추적성 단절:** 도출된 세부 기능(`core_features`)에 부모 에픽의 식별자가 `mapped_epic_id` 필드에 역방향 매핑(Traceability)되지 않음.
 
 ### Metric F: 글로벌 컨텍스트 상속 정합성 (Global Context Inheritance)
 - **기본 점수: 15점**

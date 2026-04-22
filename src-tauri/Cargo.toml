@@ -31,4 +31,5 @@ chrono = { version = "0.4", features = ["serde"] }
 sqlite-vec = "0.1"
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "chrono", "uuid"] }
 schemars = { version = "0.8", features = ["derive"] }
+json-patch = "1.2"
 

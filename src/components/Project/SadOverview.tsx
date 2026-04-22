@@ -139,11 +139,20 @@ const SadOverview: React.FC<SadOverviewProps> = ({
       const apiKeyValue = await store.get<{ value: string }>('gemini_api_key');
       if (!apiKeyValue?.value) throw new Error('API 키가 설정되지 않았습니다.');
 
-      const cmd = stage === 'GLOBAL' ? 'run_sad_global_pipeline' : 'run_sad_module_pipeline';
-      const args: any = { projectId, apiKey: apiKeyValue.value };
-      if (stage === 'MODULE') {
-        args.targetModuleCount = targetCount;
+      const currentNode = stage === 'GLOBAL' ? globalNode : moduleNode;
+      let cmd;
+      let args: any = { projectId, apiKey: apiKeyValue.value };
+
+      if (currentNode?.node_state === 'STALE') {
+        cmd = 'generate_and_apply_patch';
+        args.nodeId = currentNode.node_id;
+      } else {
+        cmd = stage === 'GLOBAL' ? 'run_sad_global_pipeline' : 'run_sad_module_pipeline';
+        if (stage === 'MODULE') {
+          args.targetModuleCount = targetCount;
+        }
       }
+      
       await invoke(cmd, args);
 
       await fetchContexts();
@@ -199,7 +208,16 @@ const SadOverview: React.FC<SadOverviewProps> = ({
     setLoading(true);
     setError(null);
     try {
-      await invoke('approve_sad_node', { projectId, nodeId: currentNode.node_id });
+      const store = await Store.load('settings.json');
+      const apiKeyValue = await store.get<{ value: string }>('gemini_api_key');
+      const apiKey = apiKeyValue?.value || "";
+
+      await invoke('approve_sad_node', { 
+        projectId, 
+        nodeId: currentNode.node_id,
+        apiKey: apiKey
+      });
+
       await fetchIterations();
       await fetchContexts();
       onRefresh();
@@ -452,14 +470,16 @@ const SadOverview: React.FC<SadOverviewProps> = ({
             <div className="button-group">
               <Button
                 onClick={() => handleRunStage(activeStage)}
-                disabled={loading || currentNode?.node_state === 'IN_PROGRESS' || (activeStage === 'MODULE' && !isGlobalDone) || isCurrentStageLocked}
-                variant={(currentNode?.node_state === 'PAUSED_HITL' || currentNode?.node_state === 'COMPLETED') ? 'ghost' : 'primary'}
-                className="proceed-btn"
+                disabled={loading || currentNode?.node_state === 'IN_PROGRESS' || (activeStage === 'MODULE' && !isGlobalDone) || (isCurrentStageLocked && currentNode?.node_state !== 'STALE')}
+                variant={(currentNode?.node_state === 'PAUSED_HITL' || currentNode?.node_state === 'COMPLETED' || currentNode?.node_state === 'STALE') ? 'ghost' : 'primary'}
+                className={`proceed-btn ${currentNode?.node_state === 'STALE' ? 'is-stale' : ''}`}
                 isLoading={loading || currentNode?.node_state === 'IN_PROGRESS'}
-                leftIcon={<span className="material-symbols-outlined">auto_awesome</span>}
-                title={isCurrentStageLocked ? (activeStage === 'GLOBAL' && isModuleStarted ? "모듈 분리 단계가 이미 시작되었습니다." : "다음 단계가 진행 중입니다.") : ""}
+                leftIcon={<span className="material-symbols-outlined">{currentNode?.node_state === 'STALE' ? 'update' : 'auto_awesome'}</span>}
+                title={currentNode?.node_state === 'STALE' ? "오염된 설계를 현재 의도에 맞춰 정제합니다." : (isCurrentStageLocked ? (activeStage === 'GLOBAL' && isModuleStarted ? "모듈 분리 단계가 이미 시작되었습니다." : "다음 단계가 진행 중입니다.") : "")}
               >
-                {(loading || currentNode?.node_state === 'IN_PROGRESS') ? '진행 중' : ((currentNode?.node_state === 'PAUSED_HITL' || currentNode?.node_state === 'COMPLETED') ? '재생성' : '생성 시작')}
+                {(loading || currentNode?.node_state === 'IN_PROGRESS') ? '진행 중' : 
+                 (currentNode?.node_state === 'STALE' ? 'Refine Node' : 
+                 ((currentNode?.node_state === 'PAUSED_HITL' || currentNode?.node_state === 'COMPLETED') ? '재생성' : '생성 시작'))}
               </Button>
 
               {(currentNode?.node_state === 'PAUSED_HITL' || (currentNode?.node_state === 'COMPLETED' && activeStage === 'GLOBAL')) && currentIters.some(it => it.is_pass) && (
@@ -763,9 +783,28 @@ const SadOverview: React.FC<SadOverviewProps> = ({
           <div className="code-window">
             <div className="code-content custom-scrollbar">
               <pre>
-                {activeIteration.generated_draft_json ? (
-                  renderJson(normalizeKeys(JSON.parse(activeIteration.generated_draft_json)))
-                ) : (
+                {activeIteration.generated_draft_json ? (() => {
+                  try {
+                    const fullData = JSON.parse(activeIteration.generated_draft_json);
+                    const normalizedData = normalizeKeys(fullData);
+                    
+                    // 현재 단계에 적합한 키들만 필터링
+                    const stage1Types = ['sad_non_tech', 'sad_tech_stack', 'sad_core_erd', 'sad_auth_rbac', 'sad_interface_error'];
+                    const stage2Types = ['sad_module_list', 'sad_epic_mapping', 'sad_module_deps'];
+                    const allowedKeys = activeStage === 'GLOBAL' ? stage1Types : stage2Types;
+                    
+                    const filteredData = Object.keys(normalizedData)
+                      .filter(key => allowedKeys.includes(key))
+                      .reduce((obj: any, key) => {
+                        obj[key] = normalizedData[key];
+                        return obj;
+                      }, {});
+
+                    return renderJson(filteredData);
+                  } catch (e) {
+                    return <span className="token-null">파싱 오류: {String(e)}</span>;
+                  }
+                })() : (
                   <span className="token-null">No data available for this revision.</span>
                 )}
               </pre>

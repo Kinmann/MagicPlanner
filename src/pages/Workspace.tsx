@@ -17,6 +17,7 @@ import FeedbackRenderer from '../components/common/FeedbackRenderer';
 import SadSpecRenderer from '../components/Project/SadSpecRenderer';
 import CriticalErrorModal from '../components/Project/CriticalErrorModal';
 import HitlWarningModal from '../components/Project/HitlWarningModal';
+import RefinementResultModal from '../components/Project/RefinementResultModal';
 import { convertToMarkdown } from '../utils/markdownConverter';
 import { formatNodeTitle } from '../utils/formatters';
 import "./Workspace.scss";
@@ -301,6 +302,8 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
   const [hitlNode, setHitlNode] = useState<DocumentNode | null>(null);
   const [iterations, setIterations] = useState<any[]>([]);
   const [selectedIteration, setSelectedIteration] = useState<any | null>(null);
+  const [showRefinementModal, setShowRefinementModal] = useState(false);
+  const [refinementResult, setRefinementResult] = useState<any>(null);
 
   // v2: Phase-based state
   const [project, setProject] = useState<Project | null>(null);
@@ -310,6 +313,16 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [showRawSpec, setShowRawSpec] = useState(false);
   const [showGuidance, setShowGuidance] = useState(false);
+  const [systemLogs, setSystemLogs] = useState<any[]>([]);
+  
+  // v2: Closure staleness protection for event listeners
+  const phaseRef = useRef(currentPhase);
+  const selectedModuleIdRef = useRef(selectedModuleId);
+
+  useEffect(() => {
+    phaseRef.current = currentPhase;
+    selectedModuleIdRef.current = selectedModuleId;
+  }, [currentPhase, selectedModuleId]);
 
   const selectedNode = useMemo(() => {
     return nodes.find(n => n.node_id === selectedNodeId) || null;
@@ -343,7 +356,6 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
 
 
 
-  // v2: Fetch project info
   const fetchProject = useCallback(async () => {
     try {
       const proj = await invoke<Project>('get_project', { projectId });
@@ -357,12 +369,12 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
     try {
       const mods = await invoke<LocalModule[]>('get_project_modules', { projectId });
       setModules(mods);
-      if (mods.length > 0 && !selectedModuleId) {
+      if (mods.length > 0 && !selectedModuleIdRef.current) {
         const active = mods.find(m => m.module_state === 'ACTIVE') || mods[0];
         setSelectedModuleId(active.module_id);
       }
     } catch {}
-  }, [projectId, selectedModuleId]);
+  }, [projectId]);
 
   const fetchNodes = useCallback(async () => {
     try {
@@ -370,8 +382,8 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
       setNodes(result);
       
       // MODULE_GENERATION phase에서는 선택된 모듈의 노드만 필터
-      const relevantNodes = currentPhase === 'MODULE_GENERATION' && selectedModuleId
-        ? result.filter(n => n.module_id === selectedModuleId)
+      const relevantNodes = phaseRef.current === 'MODULE_GENERATION' && selectedModuleIdRef.current
+        ? result.filter(n => n.module_id === selectedModuleIdRef.current)
         : result;
 
       const hasApiError = relevantNodes.some(n => n.node_state === 'PAUSED_API_ERROR');
@@ -392,16 +404,32 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
     } catch (err) {
       console.error(err);
     }
-  }, [projectId, currentPhase, selectedModuleId]);
+  }, [projectId]);
 
   useEffect(() => {
     fetchProject();
     fetchNodes();
     fetchModules();
     const interval = setInterval(() => { fetchNodes(); fetchProject(); fetchModules(); }, 3000);
+    
+    return () => {
+      clearInterval(interval);
+    };
+  }, [fetchNodes, fetchProject, fetchModules]);
+
+  useEffect(() => {
     const unlistenStatusPromise = listen<string>('pipeline-status', (event) => {
-      // 전역 상태가 필요한 경우 여기서 추가 처리 가능
       console.log(">>> Global Pipeline Status:", event.payload);
+      setSystemLogs(prev => [
+        { 
+          id: Date.now().toString(), 
+          time: new Date().toLocaleTimeString(), 
+          message: event.payload, 
+          type: event.payload.toLowerCase().includes('success') ? 'success' : 
+                event.payload.toLowerCase().includes('committing') || event.payload.toLowerCase().includes('starting') ? 'working' : 'info' 
+        },
+        ...prev
+      ].slice(0, 20));
     });
     
     const unlistenNodesPromise = listen<void>('nodes-updated', () => {
@@ -410,17 +438,31 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
       fetchModules();
     });
 
+    const unlistenRefinementPromise = listen<any>('refinement-validation-result', (event) => {
+      console.log(">>> Refinement Result Received:", event.payload);
+      setRefinementResult(event.payload);
+      setShowRefinementModal(true);
+    });
+
     return () => {
-      clearInterval(interval);
       unlistenStatusPromise.then(u => u());
       unlistenNodesPromise.then(u => u());
+      unlistenRefinementPromise.then(u => u());
     };
-  }, [fetchNodes, fetchProject, fetchModules]);
+  }, []); // Listeners are registered once on mount
 
-  const handleRunNode = async (nodeType: string) => {
+  const handleRunNode = async (nodeIdOrType: string) => {
     setLoading(true);
     setError(null);
     try {
+      // nodeId인지 nodeType인지 확인 (UUID v4 형식 여부로 판단하거나 nodes에서 먼저 검색)
+      let node = nodes.find(n => n.node_id === nodeIdOrType);
+      let nodeType = node ? node.target_node_type : nodeIdOrType;
+      
+      if (!node && currentPhase === 'MODULE_GENERATION') {
+        // nodeType으로 넘어왔을 경우 현재 선택된 모듈 내에서 해당 타입 노드를 찾음
+        node = nodes.find(n => n.target_node_type === nodeIdOrType && n.module_id === selectedModuleId);
+      }
       const store = await Store.load('settings.json');
       const apiKeyValue = await store.get<{ value: string }>('gemini_api_key');
       if (!apiKeyValue?.value) throw new Error("API 키가 설정되지 않았습니다.");
@@ -431,15 +473,43 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
       // v2: MODULE_GENERATION 페이즈인 경우 run_module_pipeline 호출
       if (currentPhase === 'MODULE_GENERATION' || currentPhase === 'COMPLETED') {
         if (!selectedModuleId) throw new Error("선택된 모듈이 없습니다.");
-        await invoke('run_module_pipeline', { 
-          projectId, 
-          moduleId: selectedModuleId, 
-          nodeType, 
-          apiKey: apiKeyValue.value 
-        });
+        
+        if (node?.node_state === 'STALE') {
+          try {
+            await invoke('generate_and_apply_patch', {
+              projectId,
+              nodeId: node.node_id,
+              apiKey: apiKeyValue.value
+            });
+          } catch (patchErr: any) {
+            console.error("Patch failed:", patchErr);
+            const shouldRegenerate = await window.confirm(
+              `패치 적용에 실패했습니다: ${patchErr}\n\n시스템 무결성을 위해 전체 재생성을 진행하시겠습니까?`
+            );
+            
+            if (shouldRegenerate) {
+              await invoke('run_module_pipeline', { 
+                projectId, 
+                moduleId: selectedModuleId, 
+                nodeType, 
+                apiKey: apiKeyValue.value 
+              });
+              fetchNodes();
+            }
+          }
+        } else {
+          await invoke('run_module_pipeline', { 
+            projectId, 
+            moduleId: selectedModuleId, 
+            nodeType, 
+            apiKey: apiKeyValue.value 
+          });
+          fetchNodes();
+        }
       } else {
         // 기존 및 기타 페이즈 대응 (Genesis PRD, SAD 등은 각 View에서 별도 처리하지만 보조적 유지)
         await invoke('run_pipeline', { projectId, nodeType, apiKey: apiKeyValue.value });
+        fetchNodes();
       }
       
       fetchNodes();
@@ -455,7 +525,33 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
     setShowHitlModal(false);
     hitlDismissed.current = false;
     try {
-      await invoke('handle_hitl_action', { nodeId, action });
+      const store = await Store.load('settings.json');
+      const apiKeyValue = await store.get<{ value: string }>('gemini_api_key');
+      const apiKey = apiKeyValue?.value || "";
+
+      await invoke('handle_hitl_action', { nodeId, action, apiKey });
+      fetchNodes();
+    } catch (err: any) {
+      setError(err.toString());
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRetryLoop = async (nodeId: string, retryCount: number) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const store = await Store.load('settings.json');
+      const apiKeyValue = await store.get<{ value: string }>('gemini_api_key');
+      if (!apiKeyValue?.value) throw new Error("API 키가 설정되지 않았습니다.");
+
+      await invoke('retry_patch_loop', {
+        projectId,
+        nodeId,
+        apiKey: apiKeyValue.value,
+        retryCount
+      });
       fetchNodes();
     } catch (err: any) {
       setError(err.toString());
@@ -660,6 +756,30 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
             </div>
           )}
         >
+          {viewMode === 'BOARD' && project?.increment_intent && (
+            <Button 
+              variant="primary"
+              className="header-action-button refinement-commit-btn"
+              onClick={async () => {
+                const confirmed = await window.confirm("모든 정제 사항을 시스템에 최종 반영하시겠습니까?");
+                if (confirmed) {
+                  setLoading(true);
+                  try {
+                    await invoke('finalize_refinement_update', { projectId });
+                    fetchNodes();
+                    fetchProject();
+                  } catch (err: any) {
+                    setError(err.toString());
+                  } finally {
+                    setLoading(false);
+                  }
+                }
+              }}
+              leftIcon={<span className="material-symbols-outlined">verified</span>}
+            >
+              Finalize System
+            </Button>
+          )}
           {viewMode === 'BOARD' && (
             <button 
               className="header-action-button"
@@ -759,7 +879,9 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
                       onResumeNode={handleResumeNode}
                       onViewNode={handleViewNode}
                       onHITLAction={handleHITLAction}
+                      onRetryLoop={handleRetryLoop}
                       onUpdateMaxIterations={handleUpdateMaxIterations}
+                      isRefinementMode={!!project?.increment_intent}
                     />
 
                     {/* Progress Overlay */}
@@ -928,6 +1050,17 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
 
         <div className="log-container custom-scrollbar">
           
+          {/* System Logs */}
+          {systemLogs.map(log => (
+            <div key={log.id} className={`log-item log-item--system log-item--${log.type}`}>
+              <div className="log-meta">
+                <span className="time">{log.time}</span>
+                <span className="source">SYSTEM</span>
+              </div>
+              <p className="message">{log.message}</p>
+            </div>
+          ))}
+
           {/* Node Activity Feed: Sorted by recent updates */}
           {nodes
             .filter(n => ['IN_PROGRESS', 'COMPLETED', 'PAUSED_HITL', 'PAUSED_API_ERROR', 'PAUSED_STOPPED'].includes(n.node_state))
@@ -1006,7 +1139,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
             setShowApiErrorModal(false);
             apiErrorDismissed.current = false;
             const errorNode = nodes.find(n => n.node_state === 'PAUSED_API_ERROR');
-            if (errorNode) handleRunNode(errorNode.target_node_type);
+            if (errorNode) handleRunNode(errorNode.node_id);
           }}
           onSettings={onOpenSettings}
         />
@@ -1075,6 +1208,11 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
           </BaseModal>
         )}
 
+      <RefinementResultModal 
+        isOpen={showRefinementModal}
+        onClose={() => setShowRefinementModal(false)}
+        data={refinementResult}
+      />
     </div>
   );
 };

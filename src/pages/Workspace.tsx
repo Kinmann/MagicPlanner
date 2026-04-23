@@ -319,6 +319,11 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
   const phaseRef = useRef(currentPhase);
   const selectedModuleIdRef = useRef(selectedModuleId);
 
+  // Optimization: Data snapshots to prevent redundant re-renders
+  const lastNodesJson = useRef("");
+  const lastProjectJson = useRef("");
+  const lastModulesJson = useRef("");
+
   useEffect(() => {
     phaseRef.current = currentPhase;
     selectedModuleIdRef.current = selectedModuleId;
@@ -359,8 +364,12 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
   const fetchProject = useCallback(async () => {
     try {
       const proj = await invoke<Project>('get_project', { projectId });
-      setProject(proj);
-      setCurrentPhase(proj.pipeline_phase as PipelinePhase);
+      const json = JSON.stringify(proj);
+      if (json !== lastProjectJson.current) {
+        lastProjectJson.current = json;
+        setProject(proj);
+        setCurrentPhase(proj.pipeline_phase as PipelinePhase);
+      }
     } catch {}
   }, [projectId]);
 
@@ -368,7 +377,12 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
   const fetchModules = useCallback(async () => {
     try {
       const mods = await invoke<LocalModule[]>('get_project_modules', { projectId });
-      setModules(mods);
+      const json = JSON.stringify(mods);
+      if (json !== lastModulesJson.current) {
+        lastModulesJson.current = json;
+        setModules(mods);
+      }
+      
       if (mods.length > 0 && !selectedModuleIdRef.current) {
         const active = mods.find(m => m.module_state === 'ACTIVE') || mods[0];
         setSelectedModuleId(active.module_id);
@@ -379,7 +393,12 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
   const fetchNodes = useCallback(async () => {
     try {
       const result = await invoke<DocumentNode[]>('get_project_nodes', { projectId });
-      setNodes(result);
+      const json = JSON.stringify(result);
+      
+      if (json !== lastNodesJson.current) {
+        lastNodesJson.current = json;
+        setNodes(result);
+      }
       
       // MODULE_GENERATION phase에서는 선택된 모듈의 노드만 필터
       const relevantNodes = phaseRef.current === 'MODULE_GENERATION' && selectedModuleIdRef.current
@@ -395,7 +414,9 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
 
       const hitlNodeFound = relevantNodes.find(n => n.node_state === 'PAUSED_HITL' && n.node_category === 'MODULE');
       if (hitlNodeFound) {
-        setHitlNode(hitlNodeFound);
+        // hitlNode도 변경되었을 때만 업데이트 (JSON 비교)
+        const hitlJson = JSON.stringify(hitlNodeFound);
+        setHitlNode(prev => JSON.stringify(prev) === hitlJson ? prev : hitlNodeFound);
         if (!hitlDismissed.current) setShowHitlModal(true);
       } else {
         hitlDismissed.current = false;
@@ -818,7 +839,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
         )}
 
         {/* v2: Phase-based content */}
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="popLayout">
           {displayPhase === 'GENESIS_PRD' && (
             <motion.div key="genesis" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <GenesisPrdView

@@ -72,7 +72,7 @@ function App() {
 
   return (
     <div className="app-container">
-      <AnimatePresence mode="wait">
+      <AnimatePresence mode="popLayout">
         {(!isSetup || showSettings) ? (
           <motion.div key="setup" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="page-wrapper">
             <SetupPage 

@@ -42,11 +42,16 @@ const NODE_TYPE_LABELS: Record<string, string> = {
 
 const EngineStatusOverlay: React.FC = () => {
   const [activeNodes, setActiveNodes] = useState<ActiveNodeInfo[]>([]);
+  const lastJson = React.useRef("");
   
   const fetchActiveNodes = async () => {
     try {
       const result = await invoke<ActiveNodeInfo[]>("get_all_active_nodes");
-      setActiveNodes(result);
+      const json = JSON.stringify(result);
+      if (json !== lastJson.current) {
+        lastJson.current = json;
+        setActiveNodes(result);
+      }
     } catch (err) {
       console.error("Failed to fetch active nodes:", err);
     }

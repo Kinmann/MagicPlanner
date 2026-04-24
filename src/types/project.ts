@@ -28,6 +28,7 @@ export interface DocumentNode {
   created_at: string;
   updated_at: string;
   last_action?: string;
+  is_active?: boolean;
 }
 
 export interface GenerationIteration {

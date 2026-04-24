@@ -37,6 +37,17 @@
       opacity: 0.8;
     }
     
+    .status-badge-inline {
+      font-size: 0.7rem;
+      background: rgba($primary, 0.15);
+      color: $primary;
+      padding: 0.1rem 0.6rem;
+      border-radius: $radius-full;
+      font-weight: 600;
+      width: fit-content;
+      border: 1px solid rgba($primary, 0.2);
+    }
+
     .title-group {
       display: flex;
       flex-direction: column;
@@ -46,18 +57,6 @@
         background: linear-gradient(135deg, $primary, lighten($primary, 15%));
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-      }
-
-      .status-badge-inline {
-        font-size: 0.7rem;
-        background: rgba($primary, 0.15);
-        color: $primary;
-        padding: 0.1rem 0.6rem;
-        border-radius: $radius-full;
-        font-weight: 600;
-        width: fit-content;
-        border: 1px solid rgba($primary, 0.2);
-        margin-top: 0.1rem;
       }
     }
   }

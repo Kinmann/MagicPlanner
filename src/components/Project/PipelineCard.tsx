@@ -213,14 +213,14 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
         {node.node_state === 'READY' && (
           <button 
             className="btn btn-primary" 
-            disabled={isLocked}
-            title={isLocked ? "다음 노드가 진행 중이므로 실행할 수 없습니다." : ""}
+            disabled={isLocked || node.is_active}
+            title={isLocked ? "다음 노드가 진행 중이므로 실행할 수 없습니다." : node.is_active ? "노드가 아직 종료 처리 중입니다." : ""}
             onClick={(e) => {
               e.stopPropagation();
               onRun(node.node_id);
             }}
           >
-            <span className="material-symbols-outlined">play_arrow</span> Execute Node
+            <span className="material-symbols-outlined">{node.is_active ? 'hourglass_empty' : 'play_arrow'}</span> {node.is_active ? 'Stopping...' : 'Execute Node'}
           </button>
         )}
 
@@ -239,14 +239,14 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
         {node.node_state === 'PAUSED_STOPPED' && (
           <button 
             className="btn btn-primary" 
-            disabled={isLocked}
-            title={isLocked ? "다음 노드가 진행 중이므로 재개할 수 없습니다." : ""}
+            disabled={isLocked || node.is_active}
+            title={isLocked ? "다음 노드가 진행 중이므로 재개할 수 없습니다." : node.is_active ? "노드가 아직 종료 처리 중입니다." : ""}
             onClick={(e) => {
               e.stopPropagation();
               onResume(node.node_id);
             }}
           >
-            <span className="material-symbols-outlined">settings_backup_restore</span> Resume Node
+            <span className="material-symbols-outlined">{node.is_active ? 'hourglass_empty' : 'settings_backup_restore'}</span> {node.is_active ? 'Stopping...' : 'Resume Node'}
           </button>
         )}
         
@@ -266,49 +266,49 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
                   />
                   <button 
                     className="btn btn-primary is-retry" 
-                    disabled={isLocked}
+                    disabled={isLocked || node.is_active}
                     onClick={(e) => {
                       e.stopPropagation();
                       if (onRetryLoop) onRetryLoop(node.node_id, retryCount);
                     }}
                   >
-                    <span className="material-symbols-outlined">refresh</span> 
-                    Retry Patch
+                    <span className="material-symbols-outlined">{node.is_active ? 'hourglass_empty' : 'refresh'}</span> 
+                    {node.is_active ? 'Wait...' : 'Retry Patch'}
                   </button>
                 </div>
                 <button 
                   className="btn btn-primary is-confirm"
-                  disabled={isLocked}
+                  disabled={isLocked || node.is_active}
                   onClick={(e) => {
                     e.stopPropagation();
                     onHITLAction(node.node_id, 'APPROVE');
                   }}
                 >
-                  <span className="material-symbols-outlined">done_all</span> 
-                  Confirm Refinement
+                  <span className="material-symbols-outlined">{node.is_active ? 'hourglass_empty' : 'done_all'}</span> 
+                  {node.is_active ? 'Wait...' : 'Confirm Refinement'}
                 </button>
               </div>
             ) : (
               <>
                 <button 
                   className="btn btn-ghost is-pass"
-                  disabled={isLocked}
+                  disabled={isLocked || node.is_active}
                   onClick={(e) => {
                     e.stopPropagation();
                     onHITLAction(node.node_id, 'APPROVE');
                   }}
                 >
-                  <span className="material-symbols-outlined">check</span> Pass
+                  <span className="material-symbols-outlined">{node.is_active ? 'hourglass_empty' : 'check'}</span> {node.is_active ? 'Wait...' : 'Pass'}
                 </button>
                 <button 
                   className="btn btn-primary is-retry" 
-                  disabled={isLocked}
+                  disabled={isLocked || node.is_active}
                   onClick={(e) => {
                     e.stopPropagation();
                     onHITLAction(node.node_id, 'RETRY');
                   }}
                 >
-                  <span className="material-symbols-outlined">refresh</span> Retry
+                  <span className="material-symbols-outlined">{node.is_active ? 'hourglass_empty' : 'refresh'}</span> {node.is_active ? 'Wait...' : 'Retry'}
                 </button>
               </>
             )}

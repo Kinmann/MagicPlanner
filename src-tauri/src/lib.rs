@@ -1,5 +1,8 @@
 mod commands;
 pub mod schemas;
+pub mod models;
+pub mod services;
+pub mod utils;
 use sqlite_vec::sqlite3_vec_init;
 
 use std::collections::HashSet;
@@ -220,8 +223,9 @@ pub fn run() {
                     }
                 }
                 
-                // 4. 버려진(Stale) RAG 상태 초기화 (앱 시작 시 오버레이 스턱 방지)
-                let _ = sqlx::query("UPDATE document_node SET last_action = NULL WHERE last_action LIKE '%RAG 임베딩 중%'").execute(&pool).await;
+                // 4. 버려진(Stale) RAG 상태 및 비정상 종료된 작업(IN_PROGRESS) 초기화 (앱 시작 시 오버레이 스턱 방지)
+                let _ = sqlx::query("UPDATE document_node SET last_action = NULL WHERE last_action LIKE '%RAG%'").execute(&pool).await;
+                let _ = sqlx::query("UPDATE document_node SET node_state = 'PAUSED_STOPPED' WHERE node_state IN ('IN_PROGRESS', 'REFINING')").execute(&pool).await;
                 
                 Ok::<sqlx::SqlitePool, String>(pool)
             })?;
@@ -231,50 +235,50 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::validate_api_key,
-            commands::save_api_key,
-            commands::list_projects,
-            commands::create_project,
-            commands::run_pipeline,
-            commands::get_project,
-            commands::get_project_nodes,
-            commands::get_node_iterations,
-            commands::get_latest_iteration,
-            commands::handle_hitl_action,
-            commands::update_node_max_iterations,
-            commands::index_project_embeddings,
-            commands::save_file,
-            commands::delete_project,
+            commands::settings::validate_api_key,
+            commands::settings::save_api_key,
+            commands::project::list_projects,
+            commands::project::create_project,
+            commands::pipeline::run_pipeline,
+            commands::project::get_project,
+            commands::node::get_project_nodes,
+            commands::node::get_node_iterations,
+            commands::node::get_latest_iteration,
+            commands::pipeline::handle_hitl_action,
+            commands::node::update_node_max_iterations,
+            commands::project::index_project_embeddings,
+            commands::project::save_file,
+            commands::project::delete_project,
             // v2 新 커맨드
-            commands::get_project_modules,
-            commands::get_module_nodes,
-            commands::get_global_contexts,
-            commands::run_genesis_prd_pipeline,
-            commands::run_sad_global_pipeline,
-            commands::run_sad_module_pipeline,
-            commands::approve_genesis_prd,
-            commands::create_local_modules,
-            commands::run_module_pipeline,
-            commands::confirm_sad_iteration,
-            commands::confirm_genesis_prd_iteration,
-            commands::approve_genesis_prd_node,
-            commands::stop_node_pipeline,
-            commands::resume_node_pipeline,
-            commands::get_all_active_nodes,
-            commands::delete_generation_iteration,
-            commands::approve_sad_node,
-            commands::unconfirm_iteration,
-            commands::search_similar_documents,
-            commands::manually_trigger_next_nodes,
-            commands::parse_intent,
-            commands::route_architecture_target,
-            commands::confirm_architecture_routing,
-            commands::validate_intent_globally,
-            commands::apply_taint_cascade,
-            commands::generate_and_apply_patch,
-            commands::validate_refinement_node,
-            commands::finalize_refinement_update,
-            commands::retry_patch_loop,
+            commands::module::get_project_modules,
+            commands::node::get_module_nodes,
+            commands::module::get_global_contexts,
+            commands::pipeline::run_genesis_prd_pipeline,
+            commands::pipeline::run_sad_global_pipeline,
+            commands::pipeline::run_sad_module_pipeline,
+            commands::approval::approve_genesis_prd,
+            commands::module::create_local_modules,
+            commands::pipeline::run_module_pipeline,
+            commands::approval::confirm_sad_iteration,
+            commands::approval::confirm_genesis_prd_iteration,
+            commands::approval::approve_genesis_prd_node,
+            commands::pipeline::stop_node_pipeline,
+            commands::pipeline::resume_node_pipeline,
+            commands::node::get_all_active_nodes,
+            commands::node::delete_generation_iteration,
+            commands::approval::approve_sad_node,
+            commands::approval::unconfirm_iteration,
+            commands::project::search_similar_documents,
+            commands::pipeline::manually_trigger_next_nodes,
+            commands::refinement::parse_intent,
+            commands::refinement::route_architecture_target,
+            commands::refinement::confirm_architecture_routing,
+            commands::refinement::validate_intent_globally,
+            commands::refinement::apply_taint_cascade,
+            commands::refinement::generate_and_apply_patch,
+            commands::refinement::validate_refinement_node,
+            commands::refinement::finalize_refinement_update,
+            commands::refinement::retry_patch_loop,
         ])
         .plugin(tauri_plugin_dialog::init())
         .run(tauri::generate_context!())

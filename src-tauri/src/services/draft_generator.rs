@@ -1,0 +1,216 @@
+use reqwest::Client;
+use sqlx::SqlitePool;
+use crate::models::PipelineError;
+use crate::services::gemini::call_gemini;
+use crate::services::prd_merger::get_approved_node_output;
+use crate::utils::get_prompts_dir;
+
+/// AI 초안을 생성합니다.
+/// 프롬프트 파일을 로드하고, 이전 피드백/초안을 반영하여 Gemini API를 호출합니다.
+pub async fn generate_draft(
+    app_handle: &tauri::AppHandle,
+    pool: &SqlitePool,
+    client: &Client,
+    api_key: &str,
+    project_id: &str,
+    node_type: &str,
+    input_text: &str,
+    previous_draft: &str,
+    previous_feedback: &Vec<String>,
+    iteration: i32,
+    _exclude_node_ids: Vec<String>,
+) -> Result<String, PipelineError> {
+    let node_normalized = node_type.to_lowercase().replace(" ", "_");
+    let prompts_dir = get_prompts_dir(app_handle);
+
+    let common_prompt =
+        std::fs::read_to_string(prompts_dir.join("generator/common.txt")).unwrap_or_else(|e| {
+            println!("!!! ERROR loading common schema: {}", e);
+            String::new()
+        });
+    let gen_path = prompts_dir
+        .join("generator")
+        .join(format!("{}.txt", node_normalized));
+    let mut domain_prompt = std::fs::read_to_string(&gen_path).unwrap_or_else(|e| {
+        println!("!!! ERROR loading domain schema at {:?}: {}", gen_path, e);
+        String::new()
+    });
+
+    // GPRD 서브 노드의 경우 템플릿 변수 치환
+    if node_type.starts_with("GPRD_") {
+        domain_prompt = domain_prompt.replace("{{RAW_INPUT}}", input_text);
+
+        if node_type == "GPRD_Capability_Actor" || node_type == "GPRD_Architecture_Schema" {
+            let approved_1a = get_approved_node_output(pool, project_id, "GPRD_Context_Goal").await;
+            domain_prompt = domain_prompt.replace("{{APPROVED_1A}}", &approved_1a);
+        }
+
+        if node_type == "GPRD_Architecture_Schema" {
+            let approved_1b =
+                get_approved_node_output(pool, project_id, "GPRD_Capability_Actor").await;
+            domain_prompt = domain_prompt.replace("{{APPROVED_1B}}", &approved_1b);
+        }
+
+        let feedback_text = if previous_feedback.is_empty() {
+            "없음".to_string()
+        } else {
+            previous_feedback.join("\n")
+        };
+        domain_prompt = domain_prompt.replace("{{EVALUATOR_FEEDBACK}}", &feedback_text);
+        domain_prompt = domain_prompt.replace("{{PREVIOUS_DRAFT}}", previous_draft);
+    }
+
+    let schema_obj = crate::schemas::get_schema_for_node(&node_normalized);
+
+    let combined_sys_prompt = format!(
+        "{}\n\n[DOMAIN SPECIFIC RULE]\n{}",
+        common_prompt, domain_prompt
+    );
+    println!(
+        ">>> System Prompt Loaded! Length: {} chars",
+        combined_sys_prompt.len()
+    );
+
+    let user_prompt = if node_type.starts_with("GPRD_") {
+        // GPRD 노드는 별도의 사용자 프롬프트 구조 사용
+        format!("$DOCUMENT_TYPE: {}\n$ITERATION: {}", node_type, iteration)
+    } else {
+        let mut up = format!(
+            "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}",
+            node_type, iteration, input_text
+        );
+
+        if !previous_feedback.is_empty() {
+            up = format!(
+                "{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n$PREVIOUS_DRAFT\n{}",
+                up,
+                previous_feedback.join("\n"),
+                previous_draft
+            );
+        }
+        up
+    };
+
+    call_gemini(client, api_key, &combined_sys_prompt, &user_prompt, schema_obj).await
+}
+
+/// AI 초안을 평가합니다.
+/// 생성된 초안과 소스 문서를 비교하여 점수와 피드백을 반환합니다.
+pub async fn evaluate_draft(
+    app_handle: &tauri::AppHandle,
+    pool: &SqlitePool,
+    client: &Client,
+    api_key: &str,
+    project_id: &str,
+    node_type: &str,
+    draft: &str,
+    input_text: Option<String>,
+    global_context: &str,
+    module_context: &str,
+    previous_feedback: &Vec<String>,
+    iteration: i32,
+    _exclude_node_ids: Vec<String>,
+) -> Result<crate::schemas::EvaluationResult, PipelineError> {
+    let node_normalized = node_type.to_lowercase().replace(" ", "_");
+    let prompts_dir = get_prompts_dir(app_handle);
+
+    let common_rubric =
+        std::fs::read_to_string(prompts_dir.join("evaluator/common.txt")).unwrap_or_else(|e| {
+            println!("!!! ERROR loading common rubric: {}", e);
+            String::new()
+        });
+    let eval_path = prompts_dir
+        .join("evaluator")
+        .join(format!("{}.txt", node_normalized));
+    let mut domain_rubric = std::fs::read_to_string(&eval_path).unwrap_or_else(|e| {
+        println!("!!! ERROR loading domain rubric at {:?}: {}", eval_path, e);
+        String::new()
+    });
+
+    // GPRD 서브 노드의 경우 평가 기준에 템플릿 변수 치환
+    if node_type.starts_with("GPRD_") {
+        if let Some(input) = &input_text {
+            domain_rubric = domain_rubric.replace("{{RAW_INPUT}}", input);
+        }
+        domain_rubric = domain_rubric.replace("{{GENERATED_1A}}", draft);
+        domain_rubric = domain_rubric.replace("{{GENERATED_1B}}", draft);
+        domain_rubric = domain_rubric.replace("{{GENERATED_1C}}", draft);
+
+        if node_type == "GPRD_Capability_Actor" || node_type == "GPRD_Architecture_Schema" {
+            let approved_1a = get_approved_node_output(pool, project_id, "GPRD_Context_Goal").await;
+            domain_rubric = domain_rubric.replace("{{APPROVED_1A}}", &approved_1a);
+        }
+
+        if node_type == "GPRD_Architecture_Schema" {
+            let approved_1b =
+                get_approved_node_output(pool, project_id, "GPRD_Capability_Actor").await;
+            domain_rubric = domain_rubric.replace("{{APPROVED_1B}}", &approved_1b);
+        }
+    }
+
+    let combined_sys_prompt = format!(
+        "$COMMON_RUBRIC\n{}\n\n$DOMAIN_RUBRIC\n{}",
+        common_rubric, domain_rubric
+    );
+    println!(
+        ">>> Evaluator Prompt Loaded! Length: {} chars",
+        combined_sys_prompt.len()
+    );
+
+    let target_schema = crate::schemas::get_schema_for_node(&node_normalized)
+        .map(|s| serde_json::to_string_pretty(&s).unwrap_or_default())
+        .unwrap_or_else(|| "No schema specification provided for this node type.".to_string());
+
+    let mut user_prompt = format!(
+        "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$TARGET_SCHEMA\n{}\n\n$GENERATED_DOCUMENT\n{}",
+        node_type, iteration, target_schema, draft
+    );
+
+    // $SOURCE_DOCUMENTS: 평가에 필요한 원본 문서 참조
+    let mut source_docs = String::new();
+    if node_type == "Genesis_PRD" {
+        if let Some(original_idea) = input_text {
+            source_docs = original_idea;
+        }
+    } else {
+        // 모듈 수준 노드: global_context에서 PRD, FSD, API_Spec 등 참조
+        if !global_context.is_empty() {
+            source_docs = global_context.to_string();
+        }
+    }
+
+    if !source_docs.is_empty() {
+        user_prompt = format!("{}\n\n$SOURCE_DOCUMENTS\n{}", user_prompt, source_docs);
+    }
+
+    if !module_context.is_empty() {
+        user_prompt = format!("{}\n\n$MODULE_CONTEXT\n{}", user_prompt, module_context);
+    }
+
+    if !previous_feedback.is_empty() {
+        user_prompt = format!(
+            "{}\n\n$EVALUATOR_FEEDBACK\n{}",
+            user_prompt,
+            previous_feedback.join("\n")
+        );
+    }
+
+    let schema_obj = crate::schemas::get_schema_for_node("evaluator");
+    let response_text =
+        call_gemini(client, api_key, &combined_sys_prompt, &user_prompt, schema_obj).await?;
+
+    // JSON 파싱 (Gemini Structured Output)
+    let json_str = response_text
+        .trim_start_matches("```json")
+        .trim_end_matches("```")
+        .trim();
+
+    let eval: crate::schemas::EvaluationResult = serde_json::from_str(json_str).map_err(|e| {
+        PipelineError::Internal(format!(
+            "Eval Deserialization Error: {} - Content: {}",
+            e, json_str
+        ))
+    })?;
+
+    Ok(eval)
+}

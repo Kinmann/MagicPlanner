@@ -106,9 +106,17 @@ const SadOverview: React.FC<SadOverviewProps> = ({
 
   useEffect(() => {
     fetchContexts();
-    // 노드 상태가 변했거나 처음 로드될 때만 이터레이션 정보를 가져옴 (배경 자동 갱신 시에는 기존 선택 유지)
+    // 노드 상태가 변했거나, 반복 횟수가 증가했거나, 처음 로드될 때만 이터레이션 정보를 가져옴
     fetchIterations(false);
-  }, [projectId, globalNode?.node_id, globalNode?.node_state, moduleNode?.node_id, moduleNode?.node_state]);
+  }, [
+    projectId, 
+    globalNode?.node_id, 
+    globalNode?.node_state, 
+    globalNode?.current_iteration, 
+    moduleNode?.node_id, 
+    moduleNode?.node_state,
+    moduleNode?.current_iteration
+  ]);
 
   useEffect(() => {
     if (currentNode && !isMaxFocused) {

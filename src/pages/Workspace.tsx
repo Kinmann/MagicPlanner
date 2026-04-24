@@ -441,16 +441,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
   useEffect(() => {
     const unlistenStatusPromise = listen<string>('pipeline-status', (event) => {
       console.log(">>> Global Pipeline Status:", event.payload);
-      setSystemLogs(prev => [
-        { 
-          id: Date.now().toString(), 
-          time: new Date().toLocaleTimeString(), 
-          message: event.payload, 
-          type: event.payload.toLowerCase().includes('success') ? 'success' : 
-                event.payload.toLowerCase().includes('committing') || event.payload.toLowerCase().includes('starting') ? 'working' : 'info' 
-        },
-        ...prev
-      ].slice(0, 20));
+      // setSystemLogs 사용 중단: 노드 로그로 충분하므로 UI에서 시스템 로그를 제거함
     });
     
     const unlistenNodesPromise = listen<void>('nodes-updated', () => {
@@ -1072,15 +1063,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
         <div className="log-container custom-scrollbar">
           
           {/* System Logs */}
-          {systemLogs.map(log => (
-            <div key={log.id} className={`log-item log-item--system log-item--${log.type}`}>
-              <div className="log-meta">
-                <span className="time">{log.time}</span>
-                <span className="source">SYSTEM</span>
-              </div>
-              <p className="message">{log.message}</p>
-            </div>
-          ))}
+          {/* 사용자 요청으로 시스템 로그 렌더링 제거 (노드 로그만 표시) */}
 
           {/* Node Activity Feed: Sorted by recent updates */}
           {nodes
@@ -1105,7 +1088,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId, onBack, onOpenSettings
                   </div>
                   <p className="message">
                     {isWorking 
-                      ? `${n.last_action || 'Synthesizing...'} (Iteration ${n.current_iteration}/${n.max_iterations})`
+                      ? `${n.last_action || 'Synthesizing...'} (Iteration ${Math.min(n.current_iteration + 1, n.max_iterations)}/${n.max_iterations})`
                       : isDone
                         ? `Synthesis complete. Score: ${n.current_best_score}`
                         : status === 'PAUSED_API_ERROR' ? 'Paused due to API Error' : 'Paused for Human-in-the-loop'

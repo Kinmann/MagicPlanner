@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import Spinner from "../common/Spinner";
 import "./EngineStatusOverlay.scss";
 
 interface ActiveNodeInfo {
@@ -53,7 +52,7 @@ const EngineStatusOverlay: React.FC = () => {
         setActiveNodes(result);
       }
     } catch (err) {
-      console.error("Failed to fetch active nodes:", err);
+      console.error("Critical: Failed to fetch active nodes in overlay:", err);
     }
   };
 
@@ -78,8 +77,10 @@ const EngineStatusOverlay: React.FC = () => {
   return (
     <div className="engine-status-overlay">
       <div className="status-row">
-        <Spinner size="sm" />
-        <span className="title">Engine Orchestrating...</span>
+        <div className="status-badge-inline animate-pulse">LIVE</div>
+        <div className="title-group">
+          <span className="title">Engine Orchestrating...</span>
+        </div>
       </div>
       <div className="status-description custom-scrollbar">
         {activeNodes.map((node) => (

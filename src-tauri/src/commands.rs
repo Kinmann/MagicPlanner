@@ -605,7 +605,7 @@ pub async fn run_pipeline(
         let mut tasks = active_tasks.0.lock().map_err(|e| e.to_string())?;
         if tasks.contains(&node.node_id) {
             println!(">>> [ABORT] Node is already running: {}", node.node_id);
-            return Err("?歷? ?占쏙옙?蘊꾣벆令덌옙 辱뷂옙占?辱쀰、억옙?占쏜졊? (ActiveTask Detect)".to_string());
+            return Err("이미 파이프라인이 실행 중입니다. (ActiveTask Detect)".to_string());
         }
         tasks.insert(node.node_id.clone());
     }
@@ -625,7 +625,7 @@ pub async fn run_pipeline(
     let _guard = TaskGuard { tasks: active_tasks.0.clone(), node_id: node.node_id.clone() };
 
     if node.node_state != "READY" && node.node_state != "PAUSED_HITL" && node.node_state != "PAUSED_API_ERROR" && node.node_state != "PAUSED_STOPPED" && node.node_state != "COMPLETED" && node.node_state != "STALE" {
-          return Err("?占쏙옙 ?占쏙옙??좑옙???轝좑옙?????占쏜졐?占쏜졊? (READY, PAUSED_HITL, PAUSED_API_ERROR, PAUSED_STOPPED ??믭옙 COMPLETED ?占쏙옙)".to_string());
+          return Err("현재 상태에서는 실행할 수 없는 노드입니다. (READY, PAUSED_HITL, PAUSED_API_ERROR, PAUSED_STOPPED 또는 COMPLETED 상태 필요)".to_string());
     }
 
     let project = sqlx::query_as::<_, Project>(
@@ -700,10 +700,10 @@ pub async fn run_pipeline(
     for i in start_iter..=max_iters {
         final_iteration_count = i;
         println!(">>> Iteration {}/{} starting for {}", i, max_iters, node_type);
-        let _ = app_handle.emit("pipeline-status", format!("{} ??뽳옙 辱?(獄삡겒??{}/{})", node_type, i, max_iters));
+        let _ = app_handle.emit("pipeline-status", format!("{} 초안 생성 중 (반복 {}/{})", node_type, i, max_iters));
         
         sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-            .bind("獄↑퀎占???뽳옙 辱?..").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
+            .bind("초안 생성 중...").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
             .execute(&*pool).await.map_err(|e| e.to_string())?;
 
         let draft_res = generate_draft(&app_handle, &pool, &client, &api_key, &project.project_id, &node_type, &project.raw_input_text, &previous_draft, &previous_feedback, i, vec![]).await;
@@ -722,10 +722,10 @@ pub async fn run_pipeline(
         }
 
         println!(">>> Iteration {}: Draft generated, evaluating...", i);
-        let _ = app_handle.emit("pipeline-status", format!("{} ?占쏙옙 囹띰옙辱?辱?(獄삡겒??{}/{})", node_type, i, max_iters));
+        let _ = app_handle.emit("pipeline-status", format!("{} 초안 평가 중 (반복 {}/{})", node_type, i, max_iters));
         
         sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-            .bind("?占쏙옙 囹띰옙辱?辱?..").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
+            .bind("초안 평가 중...").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
             .execute(&*pool).await.map_err(|e| e.to_string())?;
 
         let input_text_for_eval = if node_type == "Genesis_PRD" { Some(project.raw_input_text.clone()) } else { None };
@@ -877,9 +877,9 @@ pub async fn run_pipeline(
         
         if let Some(iter) = best_iter {
             if node.node_category != "GENESIS" {
-                let _ = app_handle.emit("pipeline-status", "RAG ?占쏙옙??辱?..");
+                let _ = app_handle.emit("pipeline-status", "RAG 임베딩 중...");
                 sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-                    .bind("RAG ?占쏙옙??辱?..")
+                    .bind("RAG 임베딩 중...")
                     .bind(Utc::now().to_rfc3339())
                     .bind(&node.node_id)
                     .execute(&*pool)
@@ -897,10 +897,10 @@ pub async fn run_pipeline(
 
                 match embedding_res {
                     Ok(_) => {
-                        let _ = app_handle.emit("pipeline-status", "RAG ?占쏙옙???占쏙옙");
+                        let _ = app_handle.emit("pipeline-status", "RAG 임베딩 완료");
                     },
                     Err(e) => {
-                        let err_msg = format!("RAG ?占쏙옙???轝좒쨺?({}): {}", node_type, e);
+                        let err_msg = format!("RAG 임베딩 실패({}): {}", node_type, e);
                         println!(">>> [RAG] {}", err_msg);
                         
                         let error_info = RagErrorInfo {
@@ -1023,9 +1023,9 @@ pub async fn handle_hitl_action(
 
                     // [RAG] GENESIS ??르占썹じ堤솘???令덂텈占??蘊덌옙 ??ｐ쪟????껃쵋??섓옙 容뽴?곤옙 ???쪛 ?帝같占????縕믭옙占??掠욑옙??
                     if node_category_for_bg != "GENESIS" {
-                        let _ = app_handle_clone.emit("pipeline-status", "RAG ?占쏙옙??辱?..");
+                        let _ = app_handle_clone.emit("pipeline-status", "RAG 임베딩 중...");
                         let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-                            .bind("RAG ?占쏙옙??辱?..")
+                            .bind("RAG 임베딩 중...")
                             .bind(Utc::now().to_rfc3339())
                             .bind(&node_id_clone)
                             .execute(&pool_clone)
@@ -1042,11 +1042,11 @@ pub async fn handle_hitl_action(
 
                         match embedding_res {
                             Ok(_) => {
-                                let _ = app_handle_clone.emit("pipeline-status", "RAG ?占쏙옙???占쏙옙");
+                                let _ = app_handle_clone.emit("pipeline-status", "RAG 임베딩 완료");
                             },
                             Err(e) => {
                                 embedding_success = false;
-                                let err_msg = format!("RAG ?占쏙옙???轝좒쨺?({}): {}", node_type_clone, e);
+                                let err_msg = format!("RAG 임베딩 실패({}): {}", node_type_clone, e);
                                 println!(">>> [RAG-BG] {}", err_msg);
                                 
                                 let error_info = RagErrorInfo {
@@ -1248,7 +1248,7 @@ async fn generate_draft(
         }
 
         let feedback_text = if previous_feedback.is_empty() {
-            "?占쏙옙".to_string()
+            "없음".to_string()
         } else {
             previous_feedback.join("\n")
         };
@@ -1669,9 +1669,9 @@ pub async fn approve_genesis_prd(
             };
 
 
-            let _ = app_handle_clone.emit("pipeline-status", "???쪛 PRD RAG ?占쏙옙??辱?..");
+            let _ = app_handle_clone.emit("pipeline-status", "전체 PRD RAG 임베딩 중...");
             let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-                .bind("???쪛 RAG ?占쏙옙??辱?..")
+                .bind("전체 RAG 임베딩 중...")
                 .bind(Utc::now().to_rfc3339())
                 .bind(&node_id_clone)
                 .execute(&pool_clone)
@@ -1690,7 +1690,7 @@ pub async fn approve_genesis_prd(
 
             match embedding_res {
                 Ok(_) => {
-                    let _ = app_handle_clone.emit("pipeline-status", "???쪛 PRD ?占쏙옙???占쏙옙");
+                    let _ = app_handle_clone.emit("pipeline-status", "전체 PRD 임베딩 완료");
                     let _ = sqlx::query("UPDATE document_node SET last_action = NULL, updated_at = ? WHERE node_id = ?")
                         .bind(Utc::now().to_rfc3339())
                         .bind(&node_id_clone)
@@ -1699,7 +1699,7 @@ pub async fn approve_genesis_prd(
                     let _ = app_handle_clone.emit("nodes-updated", ());
                 },
                 Err(e) => {
-                    let err_msg = format!("???쪛 PRD RAG ?占쏙옙???轝좒쨺? {}", e);
+                    let err_msg = format!("전체 PRD RAG 임베딩 실패 {}", e);
                     println!(">>> [RAG-BG] {}", err_msg);
                     
                     let error_info = RagErrorInfo {
@@ -1709,7 +1709,7 @@ pub async fn approve_genesis_prd(
                         error_message: e.to_string(),
                     };
                     let _ = app_handle_clone.emit("rag-error", error_info);
-                    let _ = app_handle_clone.emit("pipeline-status", "???쪛 PRD ?占쏙옙???轝좒쨺?(辱쀧궍靜?)");
+                    let _ = app_handle_clone.emit("pipeline-status", "전체 PRD 임베딩 실패(수동 중단)");
                 }
             }
         });
@@ -2832,9 +2832,9 @@ pub async fn approve_sad_node(
         };
 
 
-        let _ = app_handle_clone.emit("pipeline-status", "SAD RAG ?占쏙옙??辱?..");
+        let _ = app_handle_clone.emit("pipeline-status", "SAD RAG 임베딩 중...");
         let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-            .bind("RAG ?占쏙옙??辱?..")
+            .bind("RAG 임베딩 중...")
             .bind(Utc::now().to_rfc3339())
             .bind(&node_id_for_bg)
             .execute(&pool_clone)
@@ -2855,7 +2855,7 @@ pub async fn approve_sad_node(
                 let _ = app_handle_clone.emit("pipeline-status", "SAD ?占쏙옙???占쏙옙");
             },
             Err(e) => {
-                let err_msg = format!("SAD RAG ?占쏙옙???轝좒쨺?({}): {}", node_type_for_bg, e);
+                let err_msg = format!("SAD RAG 임베딩 실패({}): {}", node_type_for_bg, e);
                 println!(">>> [RAG-BG] {}", err_msg);
                 
                 let error_info = RagErrorInfo {
@@ -3326,9 +3326,9 @@ pub async fn run_module_pipeline(
         .map_err(|e| e.to_string())?;
         
         if let Some(iter) = best_iter {
-            let _ = app_handle.emit("pipeline-status", format!("[{}] RAG ?占쏙옙??辱?..", module.module_name));
+            let _ = app_handle.emit("pipeline-status", format!("[{}] RAG 임베딩 중...", module.module_name));
             sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-                .bind("RAG ?占쏙옙??辱?..")
+                .bind("RAG 임베딩 중...")
                 .bind(Utc::now().to_rfc3339())
                 .bind(&node.node_id)
                 .execute(&*pool)
@@ -3346,7 +3346,7 @@ pub async fn run_module_pipeline(
 
             match embedding_res {
                 Ok(_) => {
-                    let _ = app_handle.emit("pipeline-status", format!("[{}] ?占쏙옙???占쏙옙", module.module_name));
+                    let _ = app_handle.emit("pipeline-status", format!("[{}] 임베딩 완료", module.module_name));
                 },
                 Err(e) => {
                     println!(">>> [RAG] Embedding storage failed: {}", e);
@@ -3400,7 +3400,7 @@ async fn generate_draft_with_context(
     let combined_sys_prompt = format!("$COMMON_RULES\n{}\n\n$DOMAIN_SPECIFIC_RULE\n{}", common_prompt, domain_prompt);
     
     let mut user_prompt = format!(
-        "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}{}\n\n????낂쇃獄?獄사콨占?逆븝옙 影ｅ쟿占?蒻? ?靜♥占???쨫?帝같?닎.",
+        "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}{}\n\n위의 입력 내용과 참고 문서를 바탕으로 다음 문서를 생성해 주세요.",
         node_type, iteration, input_text, rag_context
     );
 
@@ -3415,12 +3415,12 @@ async fn generate_draft_with_context(
 
     if !previous_draft.is_empty() {
         let feedback_text = if previous_feedback.is_empty() {
-            "?占쏙옙".to_string()
+            "없음".to_string()
         } else {
             previous_feedback.iter().map(|f| format!("- {}", f)).collect::<Vec<_>>().join("\n")
         };
         user_prompt = format!(
-            "{}\n\n$PREVIOUS_DRAFT\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n???逆븝옙獄삥×占?獄삡겘占???ㄹ?影ｅ윜????곤옙獄?囹몌옙???섓옙 縕먩른占???ㄹ?容뽴?곤옙 囹뜹쐦?껇ァ逆곤옙 ?占쏙옙???쨫?帝같?닎.",
+            "{}\n\n$PREVIOUS_DRAFT\n{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n이전 초안과 평가 피드백을 반영하여 내용을 보완하고 점수를 높일 수 있도록 수정된 문서를 생성해 주세요.",
             user_prompt, previous_draft, feedback_text
         );
     }

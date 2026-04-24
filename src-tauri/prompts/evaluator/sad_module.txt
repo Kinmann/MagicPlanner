@@ -21,7 +21,7 @@
 - 시스템이 과적합 없이 거시적 관점으로 분할되었으며 요구사항을 100% 매핑했는지 검증합니다.
 - **감점 (건당 -5점 ~ -15점)**:
     - **고아 에픽 발생 (Orphaned Epic)**: `$SOURCE_DOCUMENTS`의 에픽이 단 하나라도 누락된 경우 **-15점**.
-    - **ID 정합성 실패 (Module ID Inconsistency)**: `sad_epic_mapping`에서 사용된 `module_id`가 `sad_module_list`에 존재하지 않는 경우 **-10점** (예: 통합 전의 낡은 ID 사용).
+    - **ID 정합성 실패 (Module ID Inconsistency)**: `sad_epic_mapping.mappings` 배열의 각 에픽 항목 내 `mapped_modules`에 선언된 ID가 `sad_module_list`에 존재하지 않는 경우 **-10점**.
     - **나노 서비스 파편화 (Nano-Service Fragmentation)**: Bounded Context로 병합되지 않고 테이블/CRUD 단위로 잘게 쪼개진 경우 **-10점**.
 
 ### Metric F: 의존성 위상수학 검증 (Dependency Topological Verification) (25점)

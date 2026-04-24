@@ -746,6 +746,11 @@
   &--completed { background: rgba($status-completed, 0.1); color: $status-completed; border: 1px solid rgba($status-completed, 0.2); }
   &--paused-hitl { background: rgba($primary, 0.15); color: $primary; border: 1px solid $primary; }
   &--paused-stopped { background: rgba($on-surface-variant, 0.1); color: $on-surface-variant; border: 1px solid rgba($on-surface-variant, 0.2); }
+  &--stale { 
+    background: rgba(#ff9800, 0.1); color: #ff9800; 
+    border: 1px solid rgba(#ff9800, 0.3);
+    box-shadow: 0 0 10px rgba(#ff9800, 0.1);
+  }
 }
 
 .genesis-json-overlay {

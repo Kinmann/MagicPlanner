@@ -33,6 +33,10 @@ pub struct PrdOverview {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct PrdCoreFeature {
+    #[schemars(regex(pattern = "^EPIC-[0-9]{3}$"))]
+    pub mapped_epic_id: String,
+    #[schemars(regex(pattern = "^REQ-[0-9]{3}$"))]
+    pub req_id: String,
     pub feature_name: String,
     pub description: String,
     /// Priority enum: P0, P1, P2
@@ -55,6 +59,8 @@ pub struct PrdSchema {
 pub struct FsdFeature {
     #[schemars(regex(pattern = "^FUNC-[0-9]{3}$"))]
     pub func_id: String,
+    #[schemars(regex(pattern = "^REQ-[0-9]{3}$"))]
+    pub mapped_req_id: String,
     pub module: String,
     pub summary: String,
     pub description: String,
@@ -102,8 +108,10 @@ pub struct UserFlowSchema {
 pub struct IaHierarchy {
     pub depth: i32,
     pub parent_id: Option<String>,
-    #[schemars(regex(pattern = "^SCR-[0-9]{3}$"))]
+    #[schemars(regex(pattern = "^[A-Z0-9-]+$"))]
     pub screen_id: String,
+    pub mapped_user_flow_id: Option<String>,
+    pub mapped_func_id: Option<String>,
     pub title: String,
     pub actor: String,
     pub path: String,
@@ -182,7 +190,7 @@ pub struct WireframeRegion {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct WireframeScreen {
-    #[schemars(regex(pattern = "^SCR-[0-9]{3}$"))]
+    #[schemars(regex(pattern = "^[A-Z0-9-]+$"))]
     pub screen_id: String,
     pub screen_name: String,
     pub layout_regions: Vec<WireframeRegion>,
@@ -207,6 +215,10 @@ pub struct ApiSpecEndpoint {
     pub path: String,
     pub summary: String,
     pub description: String,
+    pub mapped_func_id: Option<String>,
+    pub headers: String,
+    pub path_params: String,
+    pub query_params: String,
     pub request_body: String, // Changed from serde_json::Value
     pub responses: Vec<ApiSpecResponse>,
 }
@@ -273,7 +285,7 @@ fn resolve_refs(value: &mut serde_json::Value, definitions: &serde_json::Value) 
 
 /// Flattens a JSON Schema by inlining all definitions and removing unsupported metadata.
 /// Recursively cleans and flattens a JSON Schema for Gemini's strict Structured Outputs API.
-fn flatten_schema(mut schema: serde_json::Value) -> serde_json::Value {
+pub fn flatten_schema(mut schema: serde_json::Value) -> serde_json::Value {
     // 1. Resolve definitions if present at this level (usually only at root)
     let definitions = if let Some(map) = schema.as_object_mut() {
         map.remove("definitions").or_else(|| map.remove("$defs"))
@@ -372,6 +384,10 @@ pub fn get_schema_for_node(node_type: &str) -> Option<serde_json::Value> {
         "evaluator" => schemars::schema_for!(EvaluationResult),
         // v2: Genesis PRD
         "genesis_prd" => schemars::schema_for!(GenesisPrdSchema),
+        // v2: GPRD Sub-nodes
+        "gprd_context_goal" => schemars::schema_for!(GprdContextGoalSchema),
+        "gprd_capability_actor" => schemars::schema_for!(GprdCapabilityActorSchema),
+        "gprd_architecture_schema" => schemars::schema_for!(GprdArchitectureSchema),
         // v2: SAD 글로벌 5종
         "sad_core_erd" => schemars::schema_for!(SadCoreErdSchema),
         "sad_auth_rbac" => schemars::schema_for!(SadAuthRbacSchema),
@@ -385,6 +401,7 @@ pub fn get_schema_for_node(node_type: &str) -> Option<serde_json::Value> {
         // v2: SAD Batch
         "sad_global_batch" => schemars::schema_for!(SadGlobalBatchSchema),
         "sad_module_batch" => schemars::schema_for!(SadModuleBatchSchema),
+        "routing_schema" => schemars::schema_for!(RoutingSchema),
         _ => return None,
     };
     
@@ -392,6 +409,62 @@ pub fn get_schema_for_node(node_type: &str) -> Option<serde_json::Value> {
     
     // Gemini API responseSchema requires a flattened, self-contained schema (no $ref/definitions)
     Some(flatten_schema(val))
+}
+
+// ============================================================
+// v2: GPRD Sub-nodes Schemas (Phase 1)
+// ============================================================
+
+// 1-A: Context & Goal Builder
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct GprdContextGoalSchema {
+    pub metadata: GenesisPrdMetadata,
+    pub product_vision: String,
+    pub target_market: String,
+    pub success_metrics: Vec<String>,
+    pub global_constraints: GprdGlobalConstraints,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct GprdGlobalConstraints {
+    pub compliance: Vec<String>,
+    pub performance: Vec<String>,
+    pub legacy_integrations: Vec<String>,
+}
+
+// 1-B: Capability & Actor Brainstormer
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct GprdActor {
+    pub role_name: String,
+    pub description: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct GprdEpic {
+    pub epic_id: String,
+    pub title: String,
+    pub description: String,
+    pub required_actors: Vec<String>,
+    pub acceptance_criteria: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct GprdCapabilityActorSchema {
+    pub actors: Vec<GprdActor>,
+    pub core_epics: Vec<GprdEpic>,
+}
+
+// 1-C: Architecture & Schema Assembler
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct GprdArchitectureSchema {
+    pub user_roles: Vec<GenesisPrdUserRole>,
+    pub tech_stack: GenesisPrdTechStack,
 }
 
 // ============================================================
@@ -639,9 +712,10 @@ pub struct SadModuleBatchSchema {
 // ============================================================
 
 // 6. Module List
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct SadModuleEntry {
+    pub module_id: String,
     pub module_name: String,
     pub description: String,
     pub core_responsibility: String,
@@ -681,4 +755,44 @@ pub struct SadModuleDependency {
 pub struct SadModuleDepsSchema {
     pub dependencies: Vec<SadModuleDependency>,
     pub recommended_build_order: Vec<String>,
+}
+
+// ============================================================
+// v2: Increment Update Schemas (Sprint 1)
+// ============================================================
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum ActionType {
+    Add,
+    Modify,
+    Delete,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct IntentSchema {
+    pub action_type: ActionType,
+    pub target_feature: String,
+    pub search_keywords: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ValidationDecision { 
+    Pass, 
+    Fail, 
+    Refactoring 
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
+pub struct GlobalValidationSchema {
+    pub decision: ValidationDecision,
+    pub rationale: String,
+    pub violations: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
+pub struct RoutingSchema {
+    pub target_nodes: Vec<String>,
 }

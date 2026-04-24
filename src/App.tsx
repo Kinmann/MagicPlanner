@@ -1,18 +1,32 @@
 import { useState, useEffect } from "react";
 import { load } from "@tauri-apps/plugin-store";
 import { motion, AnimatePresence } from "framer-motion";
+import { listen } from "@tauri-apps/api/event";
+import { message } from "@tauri-apps/plugin-dialog";
 import SetupPage from "./SetupPage";
 import Dashboard from "./pages/Dashboard";
 import Workspace from "./pages/Workspace";
 import PromptView from "./pages/PromptView";
 import CreateProject from "./pages/CreateProject";
 import EngineStatusOverlay from "./components/layout/EngineStatusOverlay";
+import RagErrorModal from "./components/common/RagErrorModal";
 import "./App.scss";
+
+interface RagErrorInfo {
+  project_id: string;
+  node_id: string;
+  node_type: string;
+  error_message: string;
+}
 
 function App() {
   const [isSetup, setIsSetup] = useState<boolean | null>(null);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [viewingPromptProjectId, setViewingPromptProjectId] = useState<string | null>(null);
+
+  // RAG Error state
+  const [ragError, setRagError] = useState<RagErrorInfo | null>(null);
+  const [isRagModalOpen, setIsRagModalOpen] = useState(false);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -32,6 +46,16 @@ function App() {
     checkAuth();
   }, []);
 
+  useEffect(() => {
+    const unlisten = listen<RagErrorInfo>("rag-error", (event) => {
+      setRagError(event.payload);
+      setIsRagModalOpen(true);
+    });
+    return () => {
+      unlisten.then(f => f());
+    };
+  }, []);
+
   if (loading) {
     return (
       <div className="loading-screen">
@@ -48,7 +72,7 @@ function App() {
 
   return (
     <div className="app-container">
-      <AnimatePresence mode="wait">
+      <AnimatePresence mode="popLayout">
         {(!isSetup || showSettings) ? (
           <motion.div key="setup" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="page-wrapper">
             <SetupPage 
@@ -100,6 +124,11 @@ function App() {
         )}
       </AnimatePresence>
       <EngineStatusOverlay />
+      <RagErrorModal 
+        isOpen={isRagModalOpen} 
+        onClose={() => setIsRagModalOpen(false)} 
+        errorInfo={ragError} 
+      />
     </div>
   );
 }

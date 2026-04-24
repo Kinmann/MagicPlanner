@@ -1,13 +1,15 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
-import { ask } from '@tauri-apps/plugin-dialog';
+import { ask, message } from '@tauri-apps/plugin-dialog';
+import { Store } from '@tauri-apps/plugin-store';
 import { Project, DocumentNode } from '../types/project';
 import Spinner from '../components/common/Spinner';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import Header from '../components/layout/Header';
+import IncrementUpdateModal from '../components/Project/IncrementUpdateModal';
 import "./PromptView.scss";
 
 interface PromptViewProps {
@@ -23,10 +25,20 @@ const PromptView: React.FC<PromptViewProps> = ({ projectId, onBack, onHome }) =>
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'rendered' | 'raw'>('rendered');
   const [copied, setCopied] = useState(false);
+  const [indexing, setIndexing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [apiKey, setApiKey] = useState<string>("");
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
+        const store = await Store.load('settings.json');
+        const apiKeyValue = await store.get<{ value: string }>('gemini_api_key');
+        if (apiKeyValue?.value) setApiKey(apiKeyValue.value);
+
         const [projectData, nodesData] = await Promise.all([
           invoke<Project>('get_project', { projectId }),
           invoke<DocumentNode[]>('get_project_nodes', { projectId })
@@ -91,6 +103,48 @@ const PromptView: React.FC<PromptViewProps> = ({ projectId, onBack, onHome }) =>
     } catch (err: any) {
       console.error("Failed to delete project:", err);
       alert("프로젝트 삭제에 실패했습니다: " + err);
+    }
+  };
+
+  const handleIndexProject = async () => {
+    if (!apiKey) {
+      alert("API Key is required to index context.");
+      return;
+    }
+    setIndexing(true);
+    try {
+      await invoke("index_project_embeddings", { projectId: project?.project_id, apiKey: apiKey });
+      alert("Project context has been indexed successfully.");
+      // 로컬 상태 업데이트: 즉각적인 UI 반영
+      if (project) {
+        setProject({ ...project, is_indexed: true, needs_indexing: false });
+      }
+    } catch (err: any) {
+      alert(`Index error: ${err}`);
+    } finally {
+      setIndexing(false);
+    }
+  };
+
+  const handleSearch = async () => {
+    if (!searchQuery.trim() || !apiKey || !project) {
+        if (!apiKey) alert("API Key is required for RAG search.");
+        return;
+    }
+    setSearching(true);
+    try {
+      const results = await invoke("search_similar_documents", {
+        projectId: project.project_id,
+        apiKey: apiKey,
+        query: searchQuery,
+        limit: 3
+      });
+      setSearchResults(results as any[]);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Search error: ${err}`);
+    } finally {
+      setSearching(false);
     }
   };
 
@@ -253,15 +307,86 @@ const PromptView: React.FC<PromptViewProps> = ({ projectId, onBack, onHome }) =>
               <span className="value">{iterationStats.current} / {iterationStats.total}</span>
             </div>
           </div>
+
+          <div className="rag-search-zone">
+            <h4 className="zone-title">Search Context</h4>
+            <div className="search-input-group">
+              <input 
+                type="text" 
+                placeholder="Query vector DB..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              />
+              <button onClick={handleSearch} disabled={searching}>
+                <span className="material-symbols-outlined">{searching ? 'sync' : 'search'}</span>
+              </button>
+            </div>
+            
+            {searchResults.length > 0 && (
+              <div className="search-results custom-scrollbar">
+                {searchResults.map((res, idx) => (
+                  <div key={idx} className="result-item">
+                    <div className="result-header">
+                      <span className="type">{res.node_type}</span>
+                      <span className="score">{(res.similarity * 100).toFixed(1)}%</span>
+                    </div>
+                    <p className="text">{res.text}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="sidebar-footer">
+          <button 
+            className={`index-button ${!project.needs_indexing ? 'up-to-date' : ''}`} 
+            onClick={handleIndexProject}
+            disabled={indexing || !project.needs_indexing}
+          >
+            <span className="material-symbols-outlined">
+              {indexing ? 'sync' : (project.needs_indexing ? 'database' : 'verified')}
+            </span>
+            {indexing ? 'INDEXING...' : (
+                project.needs_indexing 
+                    ? (project.is_indexed ? 'UPDATE CONTEXT' : 'SAVE AS CONTEXT')
+                    : 'CONTEXT UP TO DATE'
+            )}
+          </button>
+          <button 
+            className="refine-button" 
+            onClick={() => setIsUpdateModalOpen(true)}
+            style={{ 
+              background: 'var(--gradient-primary)', 
+              color: 'white',
+              border: 'none',
+              padding: '12px',
+              borderRadius: '8px',
+              display: 'flex',
+              align_items: 'center',
+              justify_content: 'center',
+              gap: '8px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              marginBottom: '8px'
+            }}
+          >
+            <span className="material-symbols-outlined">auto_awesome</span>
+            REFINE ARCHITECTURE
+          </button>
           <button className="delete-button" onClick={handleDeleteProject}>
             <span className="material-symbols-outlined">delete_forever</span>
             DELETE PROJECT
           </button>
         </div>
       </aside>
+
+      <IncrementUpdateModal
+        isOpen={isUpdateModalOpen}
+        onClose={() => setIsUpdateModalOpen(false)}
+        projectId={projectId}
+      />
     </div>
   );
 };

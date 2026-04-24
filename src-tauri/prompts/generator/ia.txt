@@ -11,20 +11,30 @@
 - 만약 `$PREVIOUS_DRAFT`에 데이터가 존재한다면 이를 기본 골격으로 삼으십시오.
 - `$EVALUATOR_FEEDBACK`의 내용을 분석하여 결함 사항을 최우선으로 교정하고, 기존의 정합성 있는 정보 구조는 최대한 유지하십시오.
 
-### B. 스크린 식별자 동기화 (Screen ID Synchronization)
-- **식별자 계승**: IA의 모든 화면에 User Flow의 `SCR-{NNN}` 1:1 매핑 필수.
-- **환각 통제**: User Flow에 없는 화면의 임의 창조 금지. 다중 호출되는 화면은 참조 경로(Path)만 다중 명시.
+### B. 스크린 및 기능 식별자 동기화 (ID Synchronization)
+- **Screen ID (screen_id)**:
+    - IA 내부에서 계층 구조를 관리하기 위한 고유 식별자. 
+    - IA의 구조(Depth)와 의미를 잘 나타낼 수 있도록 자유롭게 명명(예: `SCR-DASHBOARD`, `SCR-001` 등).
+- **Dependency Mapping (mapped_user_flow_id, mapped_func_id)**:
+    - **mapped_user_flow_id**: 해당 화면이 유도된 User Flow의 노드 `id`를 정확히 매핑. (필수 권장)
+    - **mapped_func_id**: 해당 화면이 특정 기능과 1:1 대응될 경우 FSD의 `FUNC-{ID}`를 매핑. 
+    - **최소 요건**: 모든 화면 노드는 `mapped_user_flow_id` 또는 `mapped_func_id` 중 최소 하나 이상의 상위 근거 ID를 가져야 함. (단, 단순 그룹핑용 L1 노드는 예외)
 
 ### B. 다중 주체별 계층 분리 (Actor-based Separation)
 - **진입점 분리**: 식별된 주체별(User, Admin 등) 진입 포털을 논리적으로 분리 설계.
-- **접근 권한(RBAC)**: 화면 단위별 접근 주체 및 최소 권한 레벨 명시.
+- **접근 권한 및 상태(RBAC & State)**:
+    - 화면 단위별 접근 주체 및 최소 권한 레벨 명시.
+    - 서비스 초기화 전(PENDING)과 정상 운영(READY) 등 시스템 상태에 따른 동적 메뉴 구조 변화 반영 필수.
 
 ### C. 계층적 구조 설계 (Hierarchical Depth)
 - **3단계 뎁스 구조화**:
     1. Depth 1 (L1): 최상위 메뉴/핵심 서비스 영역.
     2. Depth 2 (L2): L1 하위 개별 화면.
     3. Depth 3 (L3): 화면 내 탭, 모달, 기능 블록.
-- **예외 화면 편입**: 대체 흐름(에러 화면, 인증 모달 등)도 누락 없이 IA 구조에 편입.
+- **상향 탐색 경로**: 모든 화면에 GNB(Global Navigation Bar) 또는 Breadcrumb 등 상위 계층으로 복귀 가능한 탐색 요소 필수 포함.
+- **전역 인터럽트 및 예외**:
+    - 장애나 수동 개입 시 화면 전체를 덮는 전역 인터럽트(Global Modal) 레이어 정의.
+    - 대체 흐름(에러 화면, 인증 모달 등)도 누락 없이 IA 구조에 편입.
 
 ### D. 기능 및 데이터 매핑 (Functional Component Mapping)
 - **기능 배치**: 각 화면(`SCR`)에 FSD의 `FUNC-{NNN}` 매핑하여 실행 가능한 동작 명세.

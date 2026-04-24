@@ -11,16 +11,16 @@
 ### A. 이전 설계 계승 및 발전 (Refinement)
 - 만약 `$PREVIOUS_DRAFT`에 데이터가 존재한다면 이를 기본 골격으로 삼으십시오.
 - `$EVALUATOR_FEEDBACK`의 내용을 분석하여 결함 사항을 최우선으로 교정하고, 기존의 정합성 있는 식별자(EPIC, FEAT, REQ 등)와 논리 구조는 최대한 유지하여 일관성을 확보하십시오.
+- **[중요: 에픽 매핑 엄수]**: 반드시 `$GLOBAL_CONTEXT.sad_epic_mapping` 또는 `$MODULE_CONTEXT`에 명시된, **현재 모듈에 할당된 에픽 식별자(`EPIC-XXX`)만 사용**하십시오. 할당되지 않은 에픽을 사용하거나 임의의 에픽 ID를 생성하는 것은 절대 금지됩니다.
 
 ### B. Genesis Identifier (초기 식별자 부여 규칙)
 - **명명 규칙**:
     - Epic 레벨: `EPIC-{NNN}` (예: EPIC-001)
-    - Feature 레벨: `FEAT-{NNN}` (예: FEAT-001)
     - Requirement 레벨: `REQ-{NNN}` (예: REQ-001)
 - **제약**: 식별자 중복 절대 불가, 계층 간 매핑 명확 필수.
 
 ### B. 요구사항의 계층적 분해 (Hierarchical Decomposition)
-- Epic (최상위 그룹) -> Feature (동작 단위) -> Requirement (상세 수용 조건) 단계로 분해.
+- Epic (최상위 그룹) -> Requirement (상세 수용 조건) 단계로 분해.
 
 ### C. 비기능 요구사항 (NFR) 범용 도출 강제
 - 운영/호환성, 성능, 보안, 데이터/인프라 4대 카테고리 필수 도출.
@@ -33,3 +33,34 @@
 - 1~3회차: 구조화 및 필독 기능 정의 집중.
 - 4~7회차: 혁신적 UX 및 차별화 기능 제안 (측면 사고 적용).
 - 8회차 이상: 시스템적 실현 가능성 점검 및 데이터 정합성 정제.
+
+---
+
+## [출력 규격 및 JSON 구조]
+모든 PRD는 다음 JSON 필드를 포함해야 하며, 특히 **`core_features` 내부의 `mapped_epic_id`**를 통해 상위 에픽과의 추적성을 확보해야 합니다.
+
+```json
+{
+  "project_name": "...",
+  "overview": {
+    "problem_statement": "...",
+    "solution_vision": "...",
+    "target_audience": "..."
+  },
+  "goals": ["...", "..."],
+  "core_features": [
+    {
+      "mapped_epic_id": "EPIC-001 (부모 에픽 식별자)",
+      "req_id": "REQ-001 (고유 요구사항 식별자)",
+      "feature_name": "...",
+      "description": "...",
+      "priority": "P0/P1/P2"
+    }
+  ],
+  "user_stories": ["...", "..."],
+  "constraints": ["...", "..."]
+}
+```
+
+반드시 마크다운 백틱(```json)이나 인사말 없이, 순수하고 유효한 JSON 객체 1개만 출력하십시오.
+인사말이나 부연 설명을 절대 붙이지 마십시오.

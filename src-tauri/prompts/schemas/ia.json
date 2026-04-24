@@ -3,7 +3,7 @@
     {
       "depth": "number (1-3)",
       "parent_id": "string",
-      "screen_id": "string (SCR-NNN)",
+      "screen_id": "string (SCR-{ID})",
       "title": "string",
       "actor": "string",
       "path": "string"
@@ -14,7 +14,7 @@
       "screen_id": "string",
       "elements": [
         {
-          "type": "string",
+          "type": "string (NAV_GNB | NAV_BREADCRUMB | FUNC_BUTTON | DATA_DISPLAY | TAB_ITEM | MODAL_TRIGGER)",
           "label": "string",
           "mapped_func_id": "string"
         }

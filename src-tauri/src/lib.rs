@@ -1,5 +1,6 @@
 mod commands;
 pub mod schemas;
+use sqlite_vec::sqlite3_vec_init;
 
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
@@ -7,16 +8,18 @@ use std::sync::{Arc, Mutex};
 pub struct ActiveTasks(pub Arc<Mutex<HashSet<String>>>);
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
+// #[tauri::command]
+// fn greet(name: &str) -> String {
+//     format!("Hello, {}! You've been greeted from Rust!", name)
+// }
 
+use reqwest::Client;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let active_tasks = ActiveTasks(Arc::new(Mutex::new(HashSet::new())));
+    let client = Client::new();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -31,14 +34,27 @@ pub fn run() {
             let db_path = app_dir.join("magic_planner.db");
             println!("Initializing database at: {:?}", db_path);
             
+            // sqlite-vec 확장 등록 (Pool 생성 전 전역 등록)
+            unsafe {
+                libsqlite3_sys::sqlite3_auto_extension(Some(std::mem::transmute(
+                    sqlite3_vec_init as *const (),
+                )));
+            }
+
             let pool = tauri::async_runtime::block_on(async {
-                use sqlx::sqlite::SqliteConnectOptions;
+                use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode};
+                use std::time::Duration;
                 
                 let options = SqliteConnectOptions::new()
                     .filename(&db_path)
+                    .journal_mode(SqliteJournalMode::Wal)
+                    .busy_timeout(Duration::from_secs(5))
                     .create_if_missing(true);
 
                 let pool = sqlx::SqlitePool::connect_with(options).await.map_err(|e| e.to_string())?;
+
+                // Migration: project 테이블에 increment_intent 컬럼 추가 (이미 있으면 무시되도록 별도 처리)
+                let _ = sqlx::query("ALTER TABLE project ADD COLUMN increment_intent TEXT").execute(&pool).await;
                 
                 // ============================================================
                 // v2 클린 슬레이트: 기존 테이블 DROP 후 새 스키마로 재생성
@@ -62,6 +78,7 @@ pub fn run() {
                         pipeline_execution_mode VARCHAR(20) NOT NULL,
                         pipeline_phase VARCHAR(30) NOT NULL DEFAULT 'GENESIS_PRD',
                         raw_input_text TEXT,
+                        increment_intent TEXT, -- Refinement 의도 저장용
                         created_at TIMESTAMP NOT NULL,
                         updated_at TIMESTAMP NOT NULL,
                         is_deleted BOOLEAN NOT NULL,
@@ -151,6 +168,31 @@ pub fn run() {
                         is_deleted BOOLEAN NOT NULL,
                         FOREIGN KEY(node_id) REFERENCES document_node(node_id)
                     );
+
+                    -- 8. 벡터 임베딩 저장 (vec0 가상 테이블)
+                    -- Phase 2: 거리 측정 방식을 cosine으로 명시 (Gemini 임베딩 최적화)
+                    -- v2.1: Gemini-embedding-001/004의 3072 차원 대응을 위해 차원 상향
+                    -- [FIX] 데이터 영속성을 위해 앱 시작 시마다 DROP 하던 로직 제거
+                    CREATE VIRTUAL TABLE IF NOT EXISTS document_embeddings USING vec0(
+                        embedding float[3072] distance_metric=cosine
+                    );
+
+                    -- 9. 임베딩 메타데이터 (rowid로 vec0 테이블과 1:1 매핑)
+                    CREATE TABLE IF NOT EXISTS embedding_metadata (
+                        rowid INTEGER PRIMARY KEY,
+                        project_id VARCHAR(36) NOT NULL,
+                        module_id VARCHAR(36),
+                        node_type VARCHAR(50) NOT NULL,
+                        node_id VARCHAR(36) NOT NULL,
+                        iteration_id VARCHAR(36) NOT NULL,
+                        chunk_index INTEGER NOT NULL DEFAULT 0,
+                        chunk_text TEXT NOT NULL,
+                        score INTEGER,
+                        created_at TIMESTAMP NOT NULL,
+                        FOREIGN KEY(project_id) REFERENCES project(project_id),
+                        FOREIGN KEY(node_id) REFERENCES document_node(node_id),
+                        FOREIGN KEY(iteration_id) REFERENCES generation_iteration(iteration_id)
+                    );
                 ").execute(&pool).await.map_err(|e| e.to_string())?;
 
                 // ============================================================
@@ -177,14 +219,15 @@ pub fn run() {
                         }
                     }
                 }
-
-
-
+                
+                // 4. 버려진(Stale) RAG 상태 초기화 (앱 시작 시 오버레이 스턱 방지)
+                let _ = sqlx::query("UPDATE document_node SET last_action = NULL WHERE last_action LIKE '%RAG 임베딩 중%'").execute(&pool).await;
                 
                 Ok::<sqlx::SqlitePool, String>(pool)
             })?;
             app.manage(pool);
             app.manage(active_tasks);
+            app.manage(client);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -199,6 +242,7 @@ pub fn run() {
             commands::get_latest_iteration,
             commands::handle_hitl_action,
             commands::update_node_max_iterations,
+            commands::index_project_embeddings,
             commands::save_file,
             commands::delete_project,
             // v2 新 커맨드
@@ -213,12 +257,24 @@ pub fn run() {
             commands::run_module_pipeline,
             commands::confirm_sad_iteration,
             commands::confirm_genesis_prd_iteration,
+            commands::approve_genesis_prd_node,
             commands::stop_node_pipeline,
             commands::resume_node_pipeline,
             commands::get_all_active_nodes,
             commands::delete_generation_iteration,
             commands::approve_sad_node,
             commands::unconfirm_iteration,
+            commands::search_similar_documents,
+            commands::manually_trigger_next_nodes,
+            commands::parse_intent,
+            commands::route_architecture_target,
+            commands::confirm_architecture_routing,
+            commands::validate_intent_globally,
+            commands::apply_taint_cascade,
+            commands::generate_and_apply_patch,
+            commands::validate_refinement_node,
+            commands::finalize_refinement_update,
+            commands::retry_patch_loop,
         ])
         .plugin(tauri_plugin_dialog::init())
         .run(tauri::generate_context!())

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { Store } from '@tauri-apps/plugin-store';
 import { ask } from '@tauri-apps/plugin-dialog';
 import { GlobalContext, CONTEXT_TYPE_LABELS, DocumentNode, GenerationIteration } from '../../types/project';
@@ -48,6 +49,7 @@ const SadOverview: React.FC<SadOverviewProps> = ({
   const [isAiGuidanceOpen, setIsAiGuidanceOpen] = useState(false);
   const [showRawView, setShowRawView] = useState(false);
   const [targetCount, setTargetCount] = useState(8);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
 
   const fetchContexts = async () => {
@@ -57,15 +59,18 @@ const SadOverview: React.FC<SadOverviewProps> = ({
     } catch { }
   };
 
-  const fetchIterations = async () => {
+  const fetchIterations = async (forceSelect = false) => {
     try {
       if (globalNode?.node_id) {
         const result = await invoke<GenerationIteration[]>('get_node_iterations', { nodeId: globalNode.node_id });
         setGlobalIters(result);
-        if (result.length > 0 && !selectedGlobalIterId) {
-          // 최신 리비전을 기본으로 선택 (Genesis PRD와 동일하게 자동 확정/선택 방지)
-          const defaultIter = result[result.length - 1];
-          setSelectedGlobalIterId(defaultIter.iteration_id);
+        if (result.length > 0) {
+          if (!selectedGlobalIterId || forceSelect) {
+            // confirmed(is_pass=true) 항목이 있으면 그것을 선택, 없으면 가장 최신(마지막 인덱스) 선택
+            const passIter = result.find(it => it.is_pass);
+            const target = passIter || result[result.length - 1];
+            setSelectedGlobalIterId(target.iteration_id);
+          }
         }
       }
 
@@ -75,9 +80,12 @@ const SadOverview: React.FC<SadOverviewProps> = ({
       if (moduleNode?.node_id) {
         const result = await invoke<GenerationIteration[]>('get_node_iterations', { nodeId: moduleNode.node_id });
         setModuleIters(result);
-        if (result.length > 0 && !selectedModuleIterId) {
-          const defaultIter = result[result.length - 1];
-          setSelectedModuleIterId(defaultIter.iteration_id);
+        if (result.length > 0) {
+          if (!selectedModuleIterId || forceSelect) {
+            const passIter = result.find(it => it.is_pass);
+            const target = passIter || result[result.length - 1];
+            setSelectedModuleIterId(target.iteration_id);
+          }
         }
       }
     } catch { }
@@ -98,20 +106,30 @@ const SadOverview: React.FC<SadOverviewProps> = ({
 
   useEffect(() => {
     fetchContexts();
-    fetchIterations();
-  }, [projectId, globalNode?.node_id, moduleNode?.node_id]);
-
-  useEffect(() => {
-    if (globalNode?.node_state === 'COMPLETED' && activeStage === 'GLOBAL') {
-      setActiveStage('MODULE');
-    }
-  }, [globalNode?.node_state]);
+    // 노드 상태가 변했거나 처음 로드될 때만 이터레이션 정보를 가져옴 (배경 자동 갱신 시에는 기존 선택 유지)
+    fetchIterations(false);
+  }, [projectId, globalNode?.node_id, globalNode?.node_state, moduleNode?.node_id, moduleNode?.node_state]);
 
   useEffect(() => {
     if (currentNode && !isMaxFocused) {
       setTempMax(currentNode.max_iterations);
     }
   }, [currentNode?.node_id, currentNode?.max_iterations, isMaxFocused]);
+
+  useEffect(() => {
+    const unlisten = listen<string>('pipeline-status', (event) => {
+      const msg = event.payload;
+      if (msg.includes('임베딩 중')) {
+        setStatusMsg(msg);
+      } else if (msg.includes('임베딩 완료') || msg.includes('임베딩 실패')) {
+        setStatusMsg(null);
+        onRefresh();
+      }
+    });
+    return () => {
+      unlisten.then(fn => fn());
+    };
+  }, [onRefresh]);
 
   const handleRunStage = async (stage: 'GLOBAL' | 'MODULE') => {
     setLoading(true);
@@ -121,26 +139,36 @@ const SadOverview: React.FC<SadOverviewProps> = ({
       const apiKeyValue = await store.get<{ value: string }>('gemini_api_key');
       if (!apiKeyValue?.value) throw new Error('API 키가 설정되지 않았습니다.');
 
-      const cmd = stage === 'GLOBAL' ? 'run_sad_global_pipeline' : 'run_sad_module_pipeline';
-      const args: any = { projectId, apiKey: apiKeyValue.value };
-      if (stage === 'MODULE') {
-        args.targetModuleCount = targetCount;
+      const currentNode = stage === 'GLOBAL' ? globalNode : moduleNode;
+      let cmd;
+      let args: any = { projectId, apiKey: apiKeyValue.value };
+
+      if (currentNode?.node_state === 'STALE') {
+        cmd = 'generate_and_apply_patch';
+        args.nodeId = currentNode.node_id;
+      } else {
+        cmd = stage === 'GLOBAL' ? 'run_sad_global_pipeline' : 'run_sad_module_pipeline';
+        if (stage === 'MODULE') {
+          args.targetModuleCount = targetCount;
+        }
       }
+      
       await invoke(cmd, args);
 
       await fetchContexts();
-      await fetchIterations();
+      await fetchIterations(true);
       onRefresh();
     } catch (err: any) {
       setError(err.toString());
     } finally {
       // 에러가 나더라도 생성된 이터레이션이나 컨텍스트가 있을 수 있으므로 동기화
       await fetchContexts();
-      await fetchIterations();
+      await fetchIterations(true);
       onRefresh();
       setLoading(false);
     }
   };
+
   const handleConfirmIteration = async (stage: 'GLOBAL' | 'MODULE') => {
     const iterId = stage === 'GLOBAL' ? selectedGlobalIterId : selectedModuleIterId;
     if (!iterId) return;
@@ -148,7 +176,7 @@ const SadOverview: React.FC<SadOverviewProps> = ({
     setLoading(true);
     try {
       await invoke('confirm_sad_iteration', { projectId, iterationId: iterId });
-      await fetchIterations();
+      await fetchIterations(true);
       await fetchContexts();
       onRefresh();
     } catch (err: any) {
@@ -180,10 +208,24 @@ const SadOverview: React.FC<SadOverviewProps> = ({
     setLoading(true);
     setError(null);
     try {
-      await invoke('approve_sad_node', { projectId, nodeId: currentNode.node_id });
+      const store = await Store.load('settings.json');
+      const apiKeyValue = await store.get<{ value: string }>('gemini_api_key');
+      const apiKey = apiKeyValue?.value || "";
+
+      await invoke('approve_sad_node', { 
+        projectId, 
+        nodeId: currentNode.node_id,
+        apiKey: apiKey
+      });
+
       await fetchIterations();
       await fetchContexts();
       onRefresh();
+
+      // [수정] 승인 시 다음 단계로 명시적 전환 (버그 방지를 위해 useEffect 대신 이곳에서 처리)
+      if (activeStage === 'GLOBAL') {
+        setActiveStage('MODULE');
+      }
     } catch (err: any) {
       setError(err.toString());
     } finally {
@@ -428,14 +470,16 @@ const SadOverview: React.FC<SadOverviewProps> = ({
             <div className="button-group">
               <Button
                 onClick={() => handleRunStage(activeStage)}
-                disabled={loading || currentNode?.node_state === 'IN_PROGRESS' || (activeStage === 'MODULE' && !isGlobalDone) || isCurrentStageLocked}
-                variant={(currentNode?.node_state === 'PAUSED_HITL' || currentNode?.node_state === 'COMPLETED') ? 'ghost' : 'primary'}
-                className="proceed-btn"
+                disabled={loading || currentNode?.node_state === 'IN_PROGRESS' || (activeStage === 'MODULE' && !isGlobalDone) || (isCurrentStageLocked && currentNode?.node_state !== 'STALE')}
+                variant={(currentNode?.node_state === 'PAUSED_HITL' || currentNode?.node_state === 'COMPLETED' || currentNode?.node_state === 'STALE') ? 'ghost' : 'primary'}
+                className={`proceed-btn ${currentNode?.node_state === 'STALE' ? 'is-stale' : ''}`}
                 isLoading={loading || currentNode?.node_state === 'IN_PROGRESS'}
-                leftIcon={<span className="material-symbols-outlined">auto_awesome</span>}
-                title={isCurrentStageLocked ? (activeStage === 'GLOBAL' && isModuleStarted ? "모듈 분리 단계가 이미 시작되었습니다." : "다음 단계가 진행 중입니다.") : ""}
+                leftIcon={<span className="material-symbols-outlined">{currentNode?.node_state === 'STALE' ? 'update' : 'auto_awesome'}</span>}
+                title={currentNode?.node_state === 'STALE' ? "오염된 설계를 현재 의도에 맞춰 정제합니다." : (isCurrentStageLocked ? (activeStage === 'GLOBAL' && isModuleStarted ? "모듈 분리 단계가 이미 시작되었습니다." : "다음 단계가 진행 중입니다.") : "")}
               >
-                {(loading || currentNode?.node_state === 'IN_PROGRESS') ? '진행 중' : ((currentNode?.node_state === 'PAUSED_HITL' || currentNode?.node_state === 'COMPLETED') ? '재생성' : '생성 시작')}
+                {(loading || currentNode?.node_state === 'IN_PROGRESS') ? '진행 중' : 
+                 (currentNode?.node_state === 'STALE' ? 'Refine Node' : 
+                 ((currentNode?.node_state === 'PAUSED_HITL' || currentNode?.node_state === 'COMPLETED') ? '재생성' : '생성 시작'))}
               </Button>
 
               {(currentNode?.node_state === 'PAUSED_HITL' || (currentNode?.node_state === 'COMPLETED' && activeStage === 'GLOBAL')) && currentIters.some(it => it.is_pass) && (
@@ -514,6 +558,24 @@ const SadOverview: React.FC<SadOverviewProps> = ({
         </div>
 
       </div>
+      
+      {statusMsg && (
+        <div className="sad-overview__status-msg" style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '8px', 
+          margin: '12px 24px', 
+          padding: '10px 16px', 
+          background: 'rgba(52, 199, 89, 0.1)', 
+          borderRadius: '8px', 
+          color: '#34c759',
+          fontSize: '0.9rem',
+          border: '1px solid rgba(52, 199, 89, 0.2)' 
+        }}>
+          <span className="material-symbols-outlined spinning" style={{ fontSize: '1.2rem' }}>sync</span>
+          <span>{statusMsg}</span>
+        </div>
+      )}
 
       {error && (
         <div className="sad-overview__error">
@@ -721,9 +783,28 @@ const SadOverview: React.FC<SadOverviewProps> = ({
           <div className="code-window">
             <div className="code-content custom-scrollbar">
               <pre>
-                {activeIteration.generated_draft_json ? (
-                  renderJson(normalizeKeys(JSON.parse(activeIteration.generated_draft_json)))
-                ) : (
+                {activeIteration.generated_draft_json ? (() => {
+                  try {
+                    const fullData = JSON.parse(activeIteration.generated_draft_json);
+                    const normalizedData = normalizeKeys(fullData);
+                    
+                    // 현재 단계에 적합한 키들만 필터링
+                    const stage1Types = ['sad_non_tech', 'sad_tech_stack', 'sad_core_erd', 'sad_auth_rbac', 'sad_interface_error'];
+                    const stage2Types = ['sad_module_list', 'sad_epic_mapping', 'sad_module_deps'];
+                    const allowedKeys = activeStage === 'GLOBAL' ? stage1Types : stage2Types;
+                    
+                    const filteredData = Object.keys(normalizedData)
+                      .filter(key => allowedKeys.includes(key))
+                      .reduce((obj: any, key) => {
+                        obj[key] = normalizedData[key];
+                        return obj;
+                      }, {});
+
+                    return renderJson(filteredData);
+                  } catch (e) {
+                    return <span className="token-null">파싱 오류: {String(e)}</span>;
+                  }
+                })() : (
                   <span className="token-null">No data available for this revision.</span>
                 )}
               </pre>

@@ -72,6 +72,34 @@
         margin-top: 0.25rem;
       }
     }
+
+    &.is-success {
+      background: rgba($status-completed, 0.1);
+      border-bottom-color: rgba($status-completed, 0.2);
+
+      .warning-icon-box {
+        background: $status-completed;
+        color: $surface-container-lowest;
+        box-shadow: 0 0 20px rgba($status-completed, 0.3);
+      }
+
+      .warning-title-group {
+        .warning-title {
+          color: $status-completed;
+        }
+        .warning-subtitle {
+          color: rgba($status-completed, 0.8);
+        }
+      }
+    }
+  }
+
+  &.modal--hitl-success {
+    .hitl-detail-section .detail-container .detail-list .detail-item {
+      .dot, .content .highlight {
+        color: $status-completed;
+      }
+    }
   }
 
   // 3. Body Content

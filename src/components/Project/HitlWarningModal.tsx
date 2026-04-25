@@ -9,6 +9,7 @@ interface HitlWarningModalProps {
   onApprove: () => void;
   nodeType: string;
   currentScore: number;
+  threshold?: number;
 }
 
 const HitlWarningModal: React.FC<HitlWarningModalProps> = ({
@@ -17,23 +18,26 @@ const HitlWarningModal: React.FC<HitlWarningModalProps> = ({
   onRetry,
   onApprove,
   nodeType,
-  currentScore
+  currentScore,
+  threshold = 80
 }) => {
+  const isThresholdMet = currentScore >= threshold;
+
   return (
     <BaseModal
       isOpen={isOpen}
       onClose={onClose}
       size="md"
-      className="modal--hitl"
+      className={`modal--hitl ${isThresholdMet ? 'modal--hitl-success' : ''}`}
     >
       {/* 1. Custom Warning Header Bar */}
-      <div className="warning-header-bar">
+      <div className={`warning-header-bar ${isThresholdMet ? 'is-success' : ''}`}>
         <div className="warning-icon-box">
-          <span className="material-symbols-outlined">warning</span>
+          <span className="material-symbols-outlined">{isThresholdMet ? 'verified' : 'warning'}</span>
         </div>
         <div className="warning-title-group">
-          <h2 className="warning-title">Quality Threshold Alert</h2>
-          <p className="warning-subtitle">Human-in-the-Loop Intervention Required</p>
+          <h2 className="warning-title">{isThresholdMet ? 'Checkpoint Reached' : 'Quality Threshold Alert'}</h2>
+          <p className="warning-subtitle">{isThresholdMet ? 'Human-in-the-Loop Approval Required' : 'Human-in-the-Loop Intervention Required'}</p>
         </div>
       </div>
 
@@ -53,19 +57,19 @@ const HitlWarningModal: React.FC<HitlWarningModalProps> = ({
               <div className="detail-item">
                 <span className="dot">●</span>
                 <span className="content">
-                  <span className="highlight">SCORE:</span> {currentScore}% (Below Threshold)
+                  <span className="highlight">SCORE:</span> {currentScore}% ({isThresholdMet ? 'Threshold Met' : 'Below Threshold'})
                 </span>
               </div>
               <div className="detail-item">
                 <span className="dot">●</span>
                 <span className="content">
-                  <span className="highlight">STATUS:</span> Quality check failed by LLM judge.
+                  <span className="highlight">STATUS:</span> {isThresholdMet ? 'Quality check passed by LLM judge.' : 'Quality check failed by LLM judge.'}
                 </span>
               </div>
               <div className="detail-item">
                 <span className="dot">●</span>
                 <span className="content">
-                  <span className="highlight">ACTION REQUIRED:</span> Manual override or pipeline retry.
+                  <span className="highlight">ACTION REQUIRED:</span> {isThresholdMet ? 'Review and approve to proceed.' : 'Manual override or pipeline retry.'}
                 </span>
               </div>
             </div>

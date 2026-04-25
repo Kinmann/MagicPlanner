@@ -2,10 +2,10 @@
 
 .engine-status-overlay {
   position: fixed;
-  bottom: 2rem; // 전역 배치를 위해 위치 조정 (Workspace 8rem -> 2rem)
+  bottom: 2rem;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 1000; // 최상단 노출
+  z-index: $z-navbar - 10;
   min-width: 320px;
   max-width: 90vw;
   background: rgba($surface-container-high, 0.85);

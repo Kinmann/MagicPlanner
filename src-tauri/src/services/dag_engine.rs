@@ -1,6 +1,6 @@
 use chrono::Utc;
 use sqlx::SqlitePool;
-use tauri::Manager;
+use tauri::{Manager, Emitter};
 use crate::models::{DocumentNode, LocalModule};
 
 /// DAG 의존성에 따라 다음 노드를 READY 상태로 전환합니다.
@@ -81,6 +81,56 @@ pub async fn trigger_next_nodes(
         }
     }
 
+    let _ = app_handle.emit("nodes-updated", ());
+
+    Ok(())
+}
+
+/// 특정 노드의 상태가 COMPLETED가 아니게 되었을 때, READY 상태인 하위 노드들을 PENDING으로 되돌립니다.
+pub async fn reset_downstream_ready_nodes(
+    app_handle: &tauri::AppHandle,
+    project_id: &str,
+    parent_node_type: &str,
+) -> Result<(), String> {
+    let pool = app_handle.state::<SqlitePool>();
+
+    // 프로젝트 수준 DAG 의존성 맵 (선행 노드 → 후속 노드)
+    let next_map = vec![
+        ("GPRD_Context_Goal", vec!["GPRD_Capability_Actor"]),
+        ("GPRD_Capability_Actor", vec!["GPRD_Architecture_Schema"]),
+        ("GPRD_Architecture_Schema", vec!["SAD_Global"]),
+        ("SAD_Global", vec!["SAD_Module"]),
+        ("Genesis_PRD", vec!["SAD_Global"]),
+    ];
+
+    let mut nodes_to_check = Vec::new();
+    for (parent, children) in next_map {
+        if parent == parent_node_type {
+            for child in children {
+                nodes_to_check.push(child);
+            }
+        }
+    }
+
+    for target in nodes_to_check {
+        // 하위 노드가 READY인 경우 PENDING으로 변경 (선행 조건이 깨졌으므로)
+        let updated = sqlx::query(
+            "UPDATE document_node SET node_state = 'PENDING', updated_at = ? WHERE project_id = ? AND target_node_type = ? AND node_state = 'READY'",
+        )
+        .bind(chrono::Utc::now().to_rfc3339())
+        .bind(project_id)
+        .bind(target)
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        if updated.rows_affected() > 0 {
+            println!(">>> [DAG] Reset downstream node {} to PENDING because parent {} is no longer COMPLETED", target, parent_node_type);
+            // 재귀적으로 해당 노드의 하위 노드들도 체크
+            Box::pin(reset_downstream_ready_nodes(app_handle, project_id, target)).await?;
+        }
+    }
+
     Ok(())
 }
 
@@ -158,6 +208,52 @@ pub async fn trigger_module_next_nodes(
     Ok(())
 }
 
+/// 특정 모듈 노드의 상태가 COMPLETED가 아니게 되었을 때, READY 상태인 하위 노드들을 PENDING으로 되돌립니다.
+pub async fn reset_module_downstream_ready_nodes(
+    app_handle: &tauri::AppHandle,
+    module_id: &str,
+    parent_node_type: &str,
+) -> Result<(), String> {
+    let pool = app_handle.state::<SqlitePool>();
+
+    let next_map = vec![
+        ("PRD", vec!["FSD"]),
+        ("FSD", vec!["User Flow", "ERD", "Wireframe", "API_Spec", "TC"]),
+        ("User Flow", vec!["IA", "Wireframe"]),
+        ("IA", vec!["Wireframe"]),
+        ("ERD", vec!["API_Spec"]),
+        ("API_Spec", vec!["TC"]),
+    ];
+
+    let mut nodes_to_check = Vec::new();
+    for (parent, children) in next_map {
+        if parent == parent_node_type {
+            for child in children {
+                nodes_to_check.push(child);
+            }
+        }
+    }
+
+    for target in nodes_to_check {
+        let updated = sqlx::query(
+            "UPDATE document_node SET node_state = 'PENDING', updated_at = ? WHERE module_id = ? AND target_node_type = ? AND node_state = 'READY'",
+        )
+        .bind(chrono::Utc::now().to_rfc3339())
+        .bind(module_id)
+        .bind(target)
+        .execute(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        if updated.rows_affected() > 0 {
+            println!(">>> [DAG-Module] Reset downstream node {} to PENDING because parent {} is no longer COMPLETED", target, parent_node_type);
+            Box::pin(reset_module_downstream_ready_nodes(app_handle, module_id, target)).await?;
+        }
+    }
+
+    Ok(())
+}
+
 /// 모듈의 모든 노드가 완료되었는지 확인하고, 완료 시 모듈 상태를 업데이트합니다.
 /// 다음 모듈 활성화 및 프로젝트 완료 처리도 수행합니다.
 pub async fn sync_module_completion_status(
@@ -218,7 +314,6 @@ pub async fn sync_module_completion_status(
 
             // UI 이벤트 발행
             if let Some(h) = app_handle {
-                use tauri::Emitter;
                 let _ = h.emit("nodes-updated", ());
             }
         }

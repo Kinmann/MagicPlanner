@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { invoke } from "@tauri-apps/api/core";
+import { load } from "@tauri-apps/plugin-store";
+import { useEngineStore } from '../../store/engineStore';
 import BaseModal from './BaseModal';
 import './RagErrorModal.scss';
 
@@ -15,20 +17,19 @@ interface RagErrorModalProps {
 }
 
 const RagErrorModal: React.FC<RagErrorModalProps> = ({ isOpen, onClose, errorInfo }) => {
-  const [loading, setLoading] = useState(false);
+  const { isProcessing, setProcessing, setLastError } = useEngineStore();
   const [retryStatus, setRetryStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   if (!errorInfo) return null;
 
   const handleRetry = async () => {
-    setLoading(true);
+    setProcessing(true);
     setRetryStatus('idle');
     try {
-      const store = await Store.load('settings.json');
+      const store = await load('settings.json');
       const apiKeyValue = await store.get<{ value: string }>('gemini_api_key');
       const apiKey = apiKeyValue?.value || "";
 
-      // 1. 임베딩만 다시 수행
       await invoke("index_project_embeddings", { 
         projectId: errorInfo.project_id,
         apiKey: apiKey
@@ -42,28 +43,32 @@ const RagErrorModal: React.FC<RagErrorModalProps> = ({ isOpen, onClose, errorInf
         completedNodeType: errorInfo.node_type 
       });
       
-      // 약간의 지연 후 닫기
-      setTimeout(onClose, 1500);
+      // 약간의 지연 후 닫기 및 에러 클리어
+      setTimeout(() => {
+        setLastError(null);
+        onClose();
+      }, 1500);
     } catch (err) {
       console.error("Retry failed:", err);
       setRetryStatus('error');
     } finally {
-      setLoading(false);
+      setProcessing(false);
     }
   };
 
   const handleSkip = async () => {
-    setLoading(true);
+    setProcessing(true);
     try {
       await invoke("manually_trigger_next_nodes", { 
         projectId: errorInfo.project_id, 
         completedNodeType: errorInfo.node_type 
       });
+      setLastError(null);
       onClose();
     } catch (err) {
       console.error("Skip failed:", err);
     } finally {
-      setLoading(false);
+      setProcessing(false);
     }
   };
 
@@ -94,7 +99,7 @@ const RagErrorModal: React.FC<RagErrorModalProps> = ({ isOpen, onClose, errorInf
           <button 
             className="btn-secondary btn-small" 
             onClick={handleSkip}
-            disabled={loading}
+            disabled={isProcessing}
             title="Skip & Proceed"
           >
             <span className="material-symbols-outlined">fast_forward</span>
@@ -104,9 +109,9 @@ const RagErrorModal: React.FC<RagErrorModalProps> = ({ isOpen, onClose, errorInf
           <button 
             className={`btn-primary ${retryStatus === 'success' ? 'btn-success' : ''}`}
             onClick={handleRetry}
-            disabled={loading || retryStatus === 'success'}
+            disabled={isProcessing || retryStatus === 'success'}
           >
-            {loading ? (
+            {isProcessing ? (
               <span className="material-symbols-outlined spin">sync</span>
             ) : (
               <>

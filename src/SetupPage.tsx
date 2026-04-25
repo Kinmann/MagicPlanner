@@ -40,6 +40,11 @@ export default function SetupPage({ onComplete, onBack }: SetupPageProps) {
         await invoke("save_api_key", { apiKey });
         await store.set("gemini_api_key", { value: apiKey });
         await store.save();
+        
+        // settingsStore 상태 즉시 업데이트
+        const { useSettingsStore } = await import("./store/settingsStore");
+        useSettingsStore.getState().setApiKey(apiKey);
+
         setStatus("success");
         setTimeout(onComplete, 1200);
       }

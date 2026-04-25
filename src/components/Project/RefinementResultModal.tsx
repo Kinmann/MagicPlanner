@@ -79,7 +79,7 @@ const RefinementResultModal: React.FC<RefinementResultModalProps> = ({ isOpen, o
       isOpen={isOpen}
       onClose={onClose}
       title={`${data.nodeType} 정제 결과 비교 (상하 대조)`}
-      maxWidth="1000px"
+      size="xl"
     >
       <div className="refinement-result-modal">
         {/* Score Dashboard */}

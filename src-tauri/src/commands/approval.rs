@@ -89,7 +89,9 @@ pub async fn approve_genesis_prd_node(
     .map_err(|e| e.to_string())?;
 
     // 3. ??⑨옙 ?蘊덌옙 ?蘊덃뵸令?(Stage 1 -> Stage 2 ??
-    trigger_next_nodes(app_handle, &node.project_id, &node.target_node_type).await?;
+    trigger_next_nodes(app_handle.clone(), &node.project_id, &node.target_node_type).await?;
+
+    let _ = app_handle.emit("nodes-updated", ());
 
     Ok(())
 }
@@ -408,10 +410,34 @@ pub async fn unconfirm_iteration(
         .await
         .map_err(|e| e.to_string())?;
 
+    // 4. 노드 상태 업데이트 (COMPLETED -> PAUSED_HITL)
+    // 확정이 취소되었으므로 더 이상 COMPLETED 상태를 유지할 수 없음
+    sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', updated_at = ? WHERE node_id = ? AND node_state = 'COMPLETED'")
+        .bind(&now)
+        .bind(&_iteration.node_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 후행 노드 리셋을 위해 현재 노드 정보 미리 가져오기
+    let node = sqlx::query_as::<_, DocumentNode>("SELECT * FROM document_node WHERE node_id = ?")
+        .bind(&_iteration.node_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
     tx.commit().await.map_err(|e| e.to_string())?;
 
+    // 5. 후행 노드 상태 리셋 (READY -> PENDING)
+    // 트랜잭션 커밋 이후에 호출하여 데이터 가시성 확보
+    if let Some(mid) = &node.module_id {
+        let _ = crate::services::dag_engine::reset_module_downstream_ready_nodes(&app_handle, mid, &node.target_node_type).await;
+    } else {
+        let _ = crate::services::dag_engine::reset_downstream_ready_nodes(&app_handle, &project_id, &node.target_node_type).await;
+    }
+
     let _ = app_handle.emit("nodes-updated", ());
-    println!(">>> Iteration {} unconfirmed (is_pass=0) for project: {}", iteration_id, project_id);
+    println!(">>> Iteration {} unconfirmed and downstream nodes reset for project: {}", iteration_id, project_id);
     Ok(())
 }
 

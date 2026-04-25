@@ -1,17 +1,22 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
+import { useShallow } from 'zustand/react/shallow';
 import SimpleMde from 'react-simplemde-editor';
 import Header from '../components/layout/Header';
+import { useUIStore } from '../store/uiStore';
 import 'easymde/dist/easymde.min.css';
 import './CreateProject.scss';
 
 interface CreateProjectProps {
-  onBack: () => void;
-  onSuccess: (projectId: string) => void;
 }
 
-const CreateProject: React.FC<CreateProjectProps> = ({ onBack, onSuccess }) => {
+const CreateProject: React.FC<CreateProjectProps> = () => {
+  const { navigateTo, openProject } = useUIStore(useShallow(state => ({
+    navigateTo: state.navigateTo,
+    openProject: state.openProject
+  })));
+  const onBack = () => navigateTo('DASHBOARD');
   const [name, setName] = useState('');
   const [mode, setMode] = useState<'AUTO' | 'MANUAL'>('AUTO');
   const [concept, setConcept] = useState('');
@@ -37,7 +42,7 @@ const CreateProject: React.FC<CreateProjectProps> = ({ onBack, onSuccess }) => {
         mode,
         inputText: concept,
       });
-      onSuccess(projectId);
+      openProject(projectId);
     } catch (err: any) {
       setError(String(err));
     } finally {

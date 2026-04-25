@@ -1,43 +1,30 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { invoke } from '@tauri-apps/api/core';
+import { useShallow } from 'zustand/react/shallow';
+import { useProjectStore } from '../store/projectStore';
+import { useUIStore } from '../store/uiStore';
 import Spinner from '../components/common/Spinner';
 import Header from '../components/layout/Header';
 import './Dashboard.scss';
 
-interface Project {
-  project_id: string;
-  project_name: string;
-  pipeline_execution_mode: string;
-  raw_input_text: string;
-  created_at: string;
-  current_node_type: string | null;
-}
-
 interface DashboardProps {
-  onSelectProject: (projectId: string) => void;
-  onOpenSettings: () => void;
-  onCreateProject: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ onSelectProject, onOpenSettings, onCreateProject }) => {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const fetchProjects = async () => {
-    try {
-      const list = await invoke<Project[]>('list_projects');
-      setProjects(list);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+const Dashboard: React.FC<DashboardProps> = () => {
+  const { projects, isLoadingProjects, fetchProjects } = useProjectStore(useShallow(state => ({
+    projects: state.projects,
+    isLoadingProjects: state.isLoadingProjects,
+    fetchProjects: state.fetchProjects
+  })));
+  const { openProject, navigateTo, toggleSettings } = useUIStore(useShallow(state => ({
+    openProject: state.openProject,
+    navigateTo: state.navigateTo,
+    toggleSettings: state.toggleSettings
+  })));
 
   useEffect(() => {
     fetchProjects();
-  }, []);
+  }, [fetchProjects]);
 
 
   const getCategoryIcon = (name: string) => {
@@ -80,7 +67,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSelectProject, onOpenSettings, 
           </nav>
           
           <div className="sidebar-footer">
-             <button className="nav-button" title="Settings" onClick={onOpenSettings}>
+             <button className="nav-button" title="Settings" onClick={() => toggleSettings(true)}>
                 <span className="material-symbols-outlined">settings</span>
              </button>
           </div>
@@ -99,7 +86,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSelectProject, onOpenSettings, 
         >
           <button 
             className="header-action-button"
-            onClick={onCreateProject}
+            onClick={() => navigateTo('CREATE_PROJECT')}
           >
             <span className="material-symbols-outlined">add</span>
             New Project
@@ -117,7 +104,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSelectProject, onOpenSettings, 
               </div>
             </section>
 
-            {isLoading ? (
+            {isLoadingProjects ? (
               <div className="loader-container flex justify-center items-center py-32">
                 <Spinner size="xl" />
               </div>
@@ -140,7 +127,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onSelectProject, onOpenSettings, 
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: idx * 0.05 }}
-                    onClick={() => onSelectProject(project.project_id)}
+                    onClick={() => openProject(project.project_id)}
                     className="project-card group relative bg-surface-container-high p-6 rounded-xl hover:bg-surface-bright transition-all duration-300 flex flex-col gap-4 overflow-hidden"
                   >
                     <div className={`project-card__accent-bar transition-all duration-300 ${getAccentClass(idx)}`}></div>

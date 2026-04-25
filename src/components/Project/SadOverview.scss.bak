@@ -462,21 +462,6 @@
         }
       }
     }
-    .revisions-action {
-      display: flex;
-      justify-content: flex-end;
-      gap: 0.75rem;
-      margin-top: 0.5rem;
-      padding: 0 0.5rem;
-
-      .delete-btn {
-        color: rgba($on-surface, 0.4);
-        &:hover {
-          color: $error;
-          background: rgba($error, 0.1);
-        }
-      }
-    }
   }
 
   .sad-content-container {
@@ -486,155 +471,127 @@
     flex: 1;
     min-height: 0;
 
-    .sad-category-view {
+    .category-sidebar {
+      width: 280px;
       display: flex;
-      gap: 1.5rem;
-      flex: 1;
-      min-height: 0;
+      flex-direction: column;
+      gap: 0.5rem;
+      overflow-y: auto;
+      padding-right: 0.5rem;
+      @include custom-scrollbar;
 
-      .category-sidebar {
-        width: 280px;
+      .category-btn {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem 1.25rem;
+        border-radius: $radius-xl;
+        background: rgba($surface-container-low, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        color: rgba($on-surface, 0.6);
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        text-align: left;
+
+        .icon {
+          font-size: 1.25rem;
+          opacity: 0.7;
+        }
+
+        .name {
+          font-size: 0.875rem;
+          font-weight: 700;
+        }
+
+        &:hover {
+          background: rgba($surface-container-highest, 0.6);
+          color: $on-surface;
+          transform: translateX(4px);
+        }
+
+        &.active {
+          background: rgba($primary, 0.15);
+          color: $primary;
+          border-color: rgba($primary, 0.3);
+          box-shadow: 0 4px 20px rgba($primary, 0.1);
+
+          .icon { opacity: 1; }
+        }
+      }
+    }
+
+    .category-main-content {
+      flex: 1;
+      overflow-y: auto;
+      padding-right: 0.5rem;
+      @include custom-scrollbar;
+
+      .active-category-card {
+        background: rgba($surface-container, 0.5);
+        backdrop-filter: blur(20px);
+        border-radius: $radius-2xl;
+        border: 1px solid rgba(255, 255, 255, 0.08);
         display: flex;
         flex-direction: column;
-        gap: 0.65rem;
-        overflow-y: auto;
-        padding: 0.5rem;
-        background: rgba(0, 0, 0, 0.2);
-        border-radius: $radius-2xl;
-        border: 1px solid rgba(255, 255, 255, 0.03);
-        @include custom-scrollbar;
+        min-height: 100%;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
 
-        .category-btn {
+        .card-header {
           display: flex;
           align-items: center;
-          gap: 1.15rem;
-          padding: 0.9rem 1.25rem;
-          border-radius: $radius-xl;
-          background: transparent;
-          border: 1px solid transparent;
-          color: rgba($on-surface, 0.4);
-          cursor: pointer;
-          transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
-          text-align: left;
-          position: relative;
-          overflow: hidden;
+          justify-content: space-between;
+          padding: 1.5rem 2rem;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 
-          &::before {
-            content: '';
-            position: absolute;
-            left: 0; top: 0; bottom: 0;
-            width: 4px;
-            background: $primary;
-            transform: scaleY(0);
-            transition: transform 0.4s cubic-bezier(0.23, 1, 0.32, 1);
-            border-radius: 0 4px 4px 0;
+          h3 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            color: $on-surface;
           }
 
-          .icon {
-            font-size: 1.35rem;
-            opacity: 0.5;
-            transition: all 0.4s ease;
-            font-variation-settings: 'FILL' 0, 'wght' 300;
-          }
-
-          .name {
-            font-size: 0.85rem;
-            font-weight: 600;
-            letter-spacing: 0.01em;
-            transition: all 0.4s ease;
-          }
-
-          &:hover:not(.active) {
-            background: rgba(255, 255, 255, 0.03);
-            color: rgba($on-surface, 0.8);
-            transform: translateX(6px);
-            .icon { opacity: 0.8; }
-          }
-
-          &.active {
-            background: linear-gradient(90deg, rgba($primary, 0.12) 0%, rgba($primary, 0.02) 100%);
+          .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.7rem;
+            font-weight: 900;
             color: $primary;
-            border-color: rgba($primary, 0.15);
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            background: rgba($primary, 0.1);
+            padding: 0.4rem 0.8rem;
+            border-radius: $radius-full;
 
-            &::before {
-              transform: scaleY(0.6);
-            }
-
-            .icon {
-              opacity: 1;
-              font-variation-settings: 'FILL' 1, 'wght' 400;
-              filter: drop-shadow(0 0 8px rgba($primary, 0.4));
-            }
-
-            .name {
-              font-weight: 800;
-              text-shadow: 0 0 12px rgba($primary, 0.3);
+            .material-symbols-outlined {
+              font-size: 1rem;
             }
           }
+        }
+
+        .card-body {
+          padding: 2rem;
+          flex: 1;
         }
       }
 
-      .category-main-content {
-        flex: 1;
-        overflow-y: auto;
-        padding-right: 0.5rem;
-        @include custom-scrollbar;
+      .empty-category-notice {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: rgba($on-surface, 0.2);
+        gap: 1.5rem;
 
-        .active-category-card {
-          background: rgba($surface-container, 0.35);
-          backdrop-filter: blur(30px);
-          border-radius: $radius-2xl;
-          border: 1px solid rgba(255, 255, 255, 0.06);
-          display: flex;
-          flex-direction: column;
-          min-height: 100%;
-          box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
-
-          .card-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 1.75rem 2.5rem;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-            background: linear-gradient(180deg, rgba(255,255,255,0.02) 0%, transparent 100%);
-
-            h3 {
-              margin: 0;
-              font-size: 1.65rem;
-              font-weight: 900;
-              letter-spacing: -0.03em;
-              color: $on-surface;
-              background: linear-gradient(180deg, #fff 0%, rgba(255,255,255,0.7) 100%);
-              -webkit-background-clip: text;
-              background-clip: text;
-              -webkit-text-fill-color: transparent;
-            }
-          }
-
-          .card-body {
-            padding: 2rem;
-            flex: 1;
-          }
+        .material-symbols-outlined {
+          font-size: 4rem;
         }
 
-        .empty-category-notice {
-          height: 100%;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          color: rgba($on-surface, 0.2);
-          gap: 1.5rem;
-
-          .material-symbols-outlined {
-            font-size: 4rem;
-          }
-
-          p {
-            font-size: 1.1rem;
-            font-weight: 600;
-          }
+        p {
+          font-size: 1.1rem;
+          font-weight: 600;
         }
       }
     }
@@ -999,140 +956,3 @@
 @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 @keyframes slideInWorkspace { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 
-// Visual View & Card Styles (for Workspace & Integrated View)
-.visual-view {
-  width: 100%;
-  padding: 1rem;
-  animation: fadeIn 0.4s ease;
-}
-
-.sad-overview-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
-  gap: 1.5rem;
-  padding-bottom: 2rem;
-  
-  @media (max-width: 1100px) {
-    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-  }
-  
-  @media (max-width: 600px) {
-    grid-template-columns: 1fr;
-  }
-}
-
-.context-card {
-  background: rgba($surface-container, 0.35);
-  backdrop-filter: blur(30px);
-  border-radius: $radius-2xl;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
-  position: relative;
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-    z-index: 1;
-  }
-
-  &:hover {
-    transform: translateY(-6px);
-    border-color: rgba($primary, 0.25);
-    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.5);
-    background: rgba($surface-container, 0.45);
-    
-    .spec-card-top .file-name {
-      color: $primary;
-      opacity: 1;
-    }
-  }
-
-  &.single-card {
-    max-width: 1000px;
-    margin: 0 auto;
-  }
-
-  .spec-card-top {
-    padding: 0.75rem 1.5rem;
-    background: rgba(0, 0, 0, 0.4);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-
-    .group-label {
-      font-size: 0.65rem;
-      font-weight: 900;
-      color: rgba($on-surface, 0.4);
-      text-transform: uppercase;
-      letter-spacing: 0.15em;
-    }
-
-    .file-name {
-      font-family: $font-mono;
-      font-size: 0.65rem;
-      color: $on-surface-variant;
-      opacity: 0.6;
-      letter-spacing: 0.05em;
-      transition: all 0.3s ease;
-    }
-  }
-
-  .spec-card-inner {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
-
-    .card-header {
-      padding: 1.5rem 1.75rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 100%);
-
-      .title-group {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-
-        .icon {
-          color: $primary;
-          font-size: 1.75rem;
-          font-variation-settings: 'FILL' 1;
-          filter: drop-shadow(0 0 12px rgba($primary, 0.4));
-        }
-
-        .name {
-          font-size: 1.25rem;
-          font-weight: 900;
-          color: $on-surface;
-          letter-spacing: -0.02em;
-          background: linear-gradient(180deg, #fff 0%, rgba(255, 255, 255, 0.8) 100%);
-          -webkit-background-clip: text;
-          background-clip: text;
-          -webkit-text-fill-color: transparent;
-        }
-      }
-    }
-
-    .card-content-wrapper {
-      padding: 0 1.75rem 1.75rem;
-      flex: 1;
-      overflow-y: auto;
-      max-height: 600px;
-      @include custom-scrollbar(5px);
-      
-      & > div {
-        animation: slideUp 0.5s cubic-bezier(0.23, 1, 0.32, 1);
-      }
-    }
-  }
-}

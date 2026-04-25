@@ -1,18 +1,6 @@
-import React, { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import React from "react";
+import { useEngineStore } from "../../store/engineStore";
 import "./EngineStatusOverlay.scss";
-
-interface ActiveNodeInfo {
-  node_id: string;
-  project_id: string;
-  project_name: string;
-  module_id: string | null;
-  module_name: string | null;
-  target_node_type: string;
-  node_state: string;
-  last_action: string | null;
-}
 
 const NODE_TYPE_LABELS: Record<string, string> = {
   // Genesis PRD Stages
@@ -40,39 +28,9 @@ const NODE_TYPE_LABELS: Record<string, string> = {
 };
 
 const EngineStatusOverlay: React.FC = () => {
-  const [activeNodes, setActiveNodes] = useState<ActiveNodeInfo[]>([]);
-  const lastJson = React.useRef("");
-  
-  const fetchActiveNodes = async () => {
-    try {
-      const result = await invoke<ActiveNodeInfo[]>("get_all_active_nodes");
-      const json = JSON.stringify(result);
-      if (json !== lastJson.current) {
-        lastJson.current = json;
-        setActiveNodes(result);
-      }
-    } catch (err) {
-      console.error("Critical: Failed to fetch active nodes in overlay:", err);
-    }
-  };
+  const runningNodes = useEngineStore(state => state.runningNodes);
 
-  useEffect(() => {
-    // 초기 로드 및 폴링
-    fetchActiveNodes();
-    const interval = setInterval(fetchActiveNodes, 3000);
-
-    // 노드 업데이트 이벤트 수신 시 즉시 갱신
-    const unlistenNodes = listen("nodes-updated", () => {
-      fetchActiveNodes();
-    });
-
-    return () => {
-      clearInterval(interval);
-      unlistenNodes.then(fn => fn());
-    };
-  }, []);
-
-  if (activeNodes.length === 0) return null;
+  if (runningNodes.length === 0) return null;
 
   return (
     <div className="engine-status-overlay">
@@ -83,15 +41,15 @@ const EngineStatusOverlay: React.FC = () => {
         </div>
       </div>
       <div className="status-description custom-scrollbar">
-        {activeNodes.map((node) => (
-          <div key={node.node_id} className="status-item">
+        {runningNodes.map((node) => (
+          <div key={node.nodeId} className="status-item">
             <span className="project-tag">
-              {node.project_name}
+              {node.projectName}
             </span>
             <span className="node-name">
-              [{NODE_TYPE_LABELS[node.target_node_type] || node.target_node_type}]
+              [{NODE_TYPE_LABELS[node.nodeType] || node.nodeType}]
             </span>
-            <span className="node-last-action">{node.last_action || "Initializing..."}</span>
+            <span className="node-last-action">{node.lastAction || "Initializing..."}</span>
           </div>
         ))}
       </div>

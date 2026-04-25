@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
-import { ask, message } from '@tauri-apps/plugin-dialog';
+import { ask } from '@tauri-apps/plugin-dialog';
 import { Store } from '@tauri-apps/plugin-store';
 import { Project, DocumentNode } from '../types/project';
 import Spinner from '../components/common/Spinner';
@@ -10,15 +10,17 @@ import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import Header from '../components/layout/Header';
 import IncrementUpdateModal from '../components/Project/IncrementUpdateModal';
+import { useUIStore } from '../store/uiStore';
 import "./PromptView.scss";
 
 interface PromptViewProps {
   projectId: string;
-  onBack: () => void;
-  onHome: () => void;
 }
 
-const PromptView: React.FC<PromptViewProps> = ({ projectId, onBack, onHome }) => {
+const PromptView: React.FC<PromptViewProps> = ({ projectId }) => {
+  const { setViewingPromptProject, closeProject, toggleSettings } = useUIStore();
+  const onBack = () => setViewingPromptProject(null);
+  const onHome = () => closeProject();
   const [project, setProject] = useState<Project | null>(null);
   const [nodes, setNodes] = useState<DocumentNode[]>([]);
   const [loading, setLoading] = useState(true);
@@ -188,7 +190,7 @@ const PromptView: React.FC<PromptViewProps> = ({ projectId, onBack, onHome }) =>
             </button>
           </nav>
           <div className="sidebar-footer">
-             <button className="sidebar-nav-button" title="Settings">
+             <button className="sidebar-nav-button" title="Settings" onClick={() => toggleSettings(true)}>
                 <span className="material-symbols-outlined">settings</span>
              </button>
           </div>
@@ -364,8 +366,8 @@ const PromptView: React.FC<PromptViewProps> = ({ projectId, onBack, onHome }) =>
               padding: '12px',
               borderRadius: '8px',
               display: 'flex',
-              align_items: 'center',
-              justify_content: 'center',
+              alignItems: 'center',
+              justifyContent: 'center',
               gap: '8px',
               fontWeight: '600',
               cursor: 'pointer',

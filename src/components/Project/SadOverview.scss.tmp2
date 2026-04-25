@@ -1,7 +1,6 @@
 @use "../../styles/mixins" as *;
 
 .sad-overview {
-  display: flex;
   flex-direction: column;
   gap: 1.5rem;
   padding: 1.5rem;
@@ -10,7 +9,6 @@
   color: $on-surface;
 
   &__header-row {
-    display: flex;
     justify-content: space-between;
     align-items: flex-start;
     gap: 3rem;
@@ -20,7 +18,6 @@
 
     .header-info {
       flex: 1;
-      display: flex;
       flex-direction: column;
       gap: 0.75rem;
 
@@ -43,7 +40,6 @@
       }
 
       .header-controls {
-        display: flex;
         align-items: center;
         gap: 1.5rem;
         background: $surface-container;
@@ -55,7 +51,6 @@
         width: fit-content;
 
         .iteration-field {
-          display: flex;
           flex-direction: column;
           align-items: center;
           gap: 0.5rem;
@@ -70,7 +65,6 @@
           }
 
           .iteration-control-group {
-            display: flex;
             align-items: center;
             gap: 0.5rem;
             background: rgba(0, 0, 0, 0.25);
@@ -125,7 +119,6 @@
         }
 
         .button-group {
-          display: flex;
           align-items: center;
           gap: 0.75rem;
 
@@ -159,13 +152,11 @@
     }
 
     .header-right {
-      display: flex;
       flex-direction: column;
       align-items: flex-end;
       gap: 1.5rem;
 
       .stage-stepper {
-        display: flex;
         flex-direction: column;
         gap: 0.65rem;
         background: rgba($surface-container-low, 0.4);
@@ -177,7 +168,6 @@
         box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
 
         .stage-step {
-          display: flex;
           align-items: center;
           gap: 0.85rem;
           padding: 0.65rem 1rem;
@@ -196,7 +186,6 @@
             height: 24px;
             border-radius: 50%;
             background: rgba($on-surface, 0.05);
-            display: flex;
             align-items: center;
             justify-content: center;
             font-size: 0.75rem;
@@ -274,26 +263,22 @@
 
 
   .revisions-horizontal {
-    display: flex;
     flex-direction: column;
     gap: 0.75rem;
     margin-bottom: 0.5rem;
 
     .revisions-header {
-      display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 0.5rem;
       padding: 0 0.25rem;
 
       .left {
-        display: flex;
         align-items: center;
         gap: 0.5rem;
       }
 
       .right {
-        display: flex;
         align-items: center;
         gap: 1.25rem;
 
@@ -304,7 +289,6 @@
           width: 36px;
           height: 36px;
           border-radius: $radius-lg;
-          display: flex;
           align-items: center;
           justify-content: center;
           cursor: pointer;
@@ -323,7 +307,6 @@
         }
 
         .view-mode-selector {
-          display: flex;
           align-items: center;
           background: rgba(0, 0, 0, 0.3);
           padding: 0.25rem;
@@ -372,7 +355,6 @@
     }
 
     .revisions-list {
-      display: flex;
       align-items: center;
       gap: 0.75rem;
       overflow-x: auto;
@@ -388,7 +370,6 @@
         border-radius: $radius-full;
         background: none;
         border: 1px solid transparent;
-        display: flex;
         flex-direction: column;
         align-items: center;
         min-width: 140px;
@@ -462,39 +443,106 @@
         }
       }
     }
-    .revisions-action {
-      display: flex;
-      justify-content: flex-end;
-      gap: 0.75rem;
-      margin-top: 0.5rem;
-      padding: 0 0.5rem;
-
-      .delete-btn {
-        color: rgba($on-surface, 0.4);
-        &:hover {
-          color: $error;
-          background: rgba($error, 0.1);
-        }
-      }
-    }
   }
 
   .sad-content-container {
-    display: flex;
     flex-direction: column;
     gap: 1.5rem;
     flex: 1;
     min-height: 0;
+    margin-top: 1rem;
+
+    .sad-raw-spec {
+      background: $surface-container-lowest;
+      border: 1px solid $outline-variant;
+      border-radius: $radius-xl;
+      padding: 2rem;
+      font-family: $font-mono;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      overflow: auto;
+      margin: 0;
+    }
+
+    .sad-integrated-view {
+      flex: 1;
+      overflow-y: auto;
+      padding-right: 0.5rem;
+      @include custom-scrollbar;
+
+      .integrated-view-header {
+        background: linear-gradient(135deg, rgba($primary, 0.1) 0%, rgba($secondary, 0.05) 100%);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: $radius-xl;
+        padding: 3rem 2rem;
+        margin-bottom: 2.5rem;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+
+        .header-badge {
+          display: inline-block;
+          background: $primary-gradient;
+          color: white;
+          padding: 0.4rem 1rem;
+          border-radius: 2rem;
+          font-size: 0.7rem;
+          font-weight: 900;
+          letter-spacing: 0.2em;
+          margin-bottom: 1.5rem;
+        }
+
+        h2 {
+          font-size: 2.5rem;
+          font-weight: 900;
+          letter-spacing: -0.03em;
+          margin: 0 0 0.75rem;
+          color: $on-surface;
+        }
+
+        p {
+          color: $on-surface-variant;
+          font-size: 1.1rem;
+          opacity: 0.8;
+          margin: 0;
+        }
+      }
+
+      .integrated-stack {
+        flex-direction: column;
+        gap: 3rem;
+        padding-bottom: 5rem;
+      }
+
+      .integrated-section {
+        flex-direction: column;
+        gap: 1.5rem;
+        
+        .section-label {
+          align-items: center;
+          gap: 0.75rem;
+          font-size: 0.9rem;
+          font-weight: 900;
+          color: $primary;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          padding-left: 0.5rem;
+          border-left: 4px solid $primary;
+
+          .material-symbols-outlined {
+            font-size: 1.25rem;
+          }
+        }
+      }
+    }
 
     .sad-category-view {
-      display: flex;
       gap: 1.5rem;
       flex: 1;
       min-height: 0;
 
       .category-sidebar {
         width: 280px;
-        display: flex;
         flex-direction: column;
         gap: 0.65rem;
         overflow-y: auto;
@@ -505,7 +553,6 @@
         @include custom-scrollbar;
 
         .category-btn {
-          display: flex;
           align-items: center;
           gap: 1.15rem;
           padding: 0.9rem 1.25rem;
@@ -534,7 +581,7 @@
             font-size: 1.35rem;
             opacity: 0.5;
             transition: all 0.4s ease;
-            font-variation-settings: 'FILL' 0, 'wght' 300;
+            font-variation-settings: ''FILL'' 0, ''wght'' 300;
           }
 
           .name {
@@ -563,7 +610,7 @@
 
             .icon {
               opacity: 1;
-              font-variation-settings: 'FILL' 1, 'wght' 400;
+              font-variation-settings: ''FILL'' 1, ''wght'' 400;
               filter: drop-shadow(0 0 8px rgba($primary, 0.4));
             }
 
@@ -586,13 +633,11 @@
           backdrop-filter: blur(30px);
           border-radius: $radius-2xl;
           border: 1px solid rgba(255, 255, 255, 0.06);
-          display: flex;
           flex-direction: column;
           min-height: 100%;
           box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
 
           .card-header {
-            display: flex;
             align-items: center;
             justify-content: space-between;
             padding: 1.75rem 2.5rem;
@@ -607,7 +652,6 @@
               color: $on-surface;
               background: linear-gradient(180deg, #fff 0%, rgba(255,255,255,0.7) 100%);
               -webkit-background-clip: text;
-              background-clip: text;
               -webkit-text-fill-color: transparent;
             }
           }
@@ -620,7 +664,6 @@
 
         .empty-category-notice {
           height: 100%;
-          display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
@@ -646,7 +689,6 @@
     background: rgba(0, 0, 0, 0.8);
     backdrop-filter: blur(8px);
     z-index: 3000;
-    display: flex;
     align-items: center;
     justify-content: center;
     padding: 2rem;
@@ -659,12 +701,10 @@
       width: 100%;
       max-width: 600px;
       max-height: 80vh;
-      display: flex;
       flex-direction: column;
       box-shadow: 0 30px 100px rgba(0, 0, 0, 0.8);
 
       .feedback-header {
-        display: flex;
         align-items: center;
         justify-content: space-between;
         padding: 1.5rem 2rem;
@@ -683,7 +723,6 @@
         @include custom-scrollbar;
 
         .score-section {
-          display: flex;
           align-items: center;
           justify-content: space-between;
           padding: 1rem 1.5rem;
@@ -720,7 +759,6 @@
   }
 
   &__error {
-    display: flex;
     align-items: center;
     gap: 0.75rem;
     padding: 1rem 1.5rem;
@@ -772,7 +810,6 @@
   right: 20rem; // Workspace log sidebar width
   background: $surface;
   z-index: 2500;
-  display: flex;
   flex-direction: column;
   border-radius: $radius-xl;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -780,7 +817,6 @@
   animation: slideInWorkspace 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 
   .overlay-header {
-    display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 1.5rem 2rem;
@@ -803,7 +839,6 @@
       width: 36px;
       height: 36px;
       border-radius: 50%;
-      display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
@@ -824,7 +859,6 @@
     border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: $radius-xl;
     overflow: hidden;
-    display: flex;
     flex-direction: column;
 
     .code-content {
@@ -878,7 +912,6 @@
     background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(8px);
     z-index: 3000;
-    display: flex;
     align-items: center;
     justify-content: center;
     animation: fadeIn 0.3s ease;
@@ -890,13 +923,11 @@
       border-radius: $radius-2xl;
       border: 1px solid rgba(255, 255, 255, 0.1);
       box-shadow: 0 30px 100px rgba(0, 0, 0, 0.6);
-      display: flex;
       flex-direction: column;
       overflow: hidden;
       animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 
       .feedback-header {
-        display: flex;
         align-items: center;
         justify-content: space-between;
         padding: 1.5rem 2rem;
@@ -925,7 +956,6 @@
 
       .feedback-body {
         padding: 2rem;
-        display: flex;
         flex-direction: column;
         gap: 2rem;
         max-height: 70vh;
@@ -933,7 +963,6 @@
         @include custom-scrollbar;
 
         .score-section {
-          display: flex;
           flex-direction: column;
           align-items: center;
           gap: 0.5rem;
@@ -957,7 +986,6 @@
         }
 
         .feedback-group {
-          display: flex;
           flex-direction: column;
           gap: 1rem;
 
@@ -972,7 +1000,6 @@
           ul {
             margin: 0;
             padding-left: 1.25rem;
-            display: flex;
             flex-direction: column;
             gap: 0.75rem;
 
@@ -993,146 +1020,14 @@
         }
       }
     }
+
+
+
   }
 
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 @keyframes slideInWorkspace { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 
-// Visual View & Card Styles (for Workspace & Integrated View)
-.visual-view {
-  width: 100%;
-  padding: 1rem;
-  animation: fadeIn 0.4s ease;
-}
 
-.sad-overview-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
-  gap: 1.5rem;
-  padding-bottom: 2rem;
-  
-  @media (max-width: 1100px) {
-    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-  }
-  
-  @media (max-width: 600px) {
-    grid-template-columns: 1fr;
-  }
-}
 
-.context-card {
-  background: rgba($surface-container, 0.35);
-  backdrop-filter: blur(30px);
-  border-radius: $radius-2xl;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
-  position: relative;
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-    z-index: 1;
-  }
-
-  &:hover {
-    transform: translateY(-6px);
-    border-color: rgba($primary, 0.25);
-    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.5);
-    background: rgba($surface-container, 0.45);
-    
-    .spec-card-top .file-name {
-      color: $primary;
-      opacity: 1;
-    }
-  }
-
-  &.single-card {
-    max-width: 1000px;
-    margin: 0 auto;
-  }
-
-  .spec-card-top {
-    padding: 0.75rem 1.5rem;
-    background: rgba(0, 0, 0, 0.4);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-
-    .group-label {
-      font-size: 0.65rem;
-      font-weight: 900;
-      color: rgba($on-surface, 0.4);
-      text-transform: uppercase;
-      letter-spacing: 0.15em;
-    }
-
-    .file-name {
-      font-family: $font-mono;
-      font-size: 0.65rem;
-      color: $on-surface-variant;
-      opacity: 0.6;
-      letter-spacing: 0.05em;
-      transition: all 0.3s ease;
-    }
-  }
-
-  .spec-card-inner {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
-
-    .card-header {
-      padding: 1.5rem 1.75rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 100%);
-
-      .title-group {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-
-        .icon {
-          color: $primary;
-          font-size: 1.75rem;
-          font-variation-settings: 'FILL' 1;
-          filter: drop-shadow(0 0 12px rgba($primary, 0.4));
-        }
-
-        .name {
-          font-size: 1.25rem;
-          font-weight: 900;
-          color: $on-surface;
-          letter-spacing: -0.02em;
-          background: linear-gradient(180deg, #fff 0%, rgba(255, 255, 255, 0.8) 100%);
-          -webkit-background-clip: text;
-          background-clip: text;
-          -webkit-text-fill-color: transparent;
-        }
-      }
-    }
-
-    .card-content-wrapper {
-      padding: 0 1.75rem 1.75rem;
-      flex: 1;
-      overflow-y: auto;
-      max-height: 600px;
-      @include custom-scrollbar(5px);
-      
-      & > div {
-        animation: slideUp 0.5s cubic-bezier(0.23, 1, 0.32, 1);
-      }
-    }
-  }
-}

@@ -3,15 +3,18 @@ import { useShallow } from 'zustand/react/shallow';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { ask } from '@tauri-apps/plugin-dialog';
+import { 
+  Play, Square, RotateCcw, CheckCircle, History, 
+  Sparkles, Layers, Terminal, ChevronRight, 
+  Trash2, Undo2, Check, Zap, RefreshCw, AlertCircle
+} from 'lucide-react';
 
-
-import Button from '../common/Button';
-import Spinner from '../common/Spinner';
-import BaseModal from '../common/BaseModal';
-import FeedbackRenderer from '../common/FeedbackRenderer';
+import { Button } from '../ui/Button';
+import { Dialog } from '../ui/Dialog';
+import { Alert } from '../ui/Alert';
 import { useProjectStore } from '../../store/projectStore';
 import { PrdBentoRenderer } from './GlobalRenderers';
-import './GenesisPrdView.scss';
+import styles from './GenesisPrdView.module.scss';
 
 interface GenesisPrdViewProps {
   isLocked?: boolean;
@@ -27,7 +30,7 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
     approveGenesisNode, approveGenesisPrd, confirmGenesisIteration, unconfirmIteration,
     deleteIteration, updateMaxIterations
   } = useProjectStore(useShallow(state => ({
-    allNodes: state.nodes, // 원본 배열을 가져옴 (참조 안정성 확보)
+    allNodes: state.nodes,
     currentProject: state.currentProject,
     runNode: state.runNode,
     stopNode: state.stopNode,
@@ -40,7 +43,6 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
     updateMaxIterations: state.updateMaxIterations
   })));
 
-  // 필터링 로직을 useMemo로 이동 (allNodes가 변경될 때만 재계산)
   const nodes = useMemo(() => 
     allNodes.filter(n => n.target_node_type.startsWith('GPRD_')),
     [allNodes]
@@ -115,28 +117,13 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
   const fetchBestIterationContent = async (nodeType: string) => {
     const targetNode = nodes.find(n => n.target_node_type === nodeType);
     if (!targetNode) return null;
-    
     try {
-      // 1. Try to get the latest/best iteration directly
       const it = await invoke<any | null>('get_latest_iteration', { nodeId: targetNode.node_id });
       if (it) {
         const raw = it.content_json || it.generated_draft_json;
-        if (raw) {
-          return normalizeKeys(typeof raw === 'string' ? JSON.parse(raw) : raw);
-        }
+        if (raw) return normalizeKeys(typeof raw === 'string' ? JSON.parse(raw) : raw);
       }
-      
-      // 2. Fallback to get_node_iterations if latest is not found or fails
-      const iters = await invoke<any[]>('get_node_iterations', { nodeId: targetNode.node_id });
-      if (iters && iters.length > 0) {
-        const sorted = [...iters].sort((a, b) => b.iteration_number - a.iteration_number);
-        const passIt = sorted.find(it => it.is_pass) || sorted[0];
-        const raw = passIt.content_json || passIt.generated_draft_json;
-        return normalizeKeys(typeof raw === 'string' ? JSON.parse(raw) : raw);
-      }
-    } catch (e) { 
-      console.error(`Error fetching content for ${nodeType}:`, e); 
-    }
+    } catch (e) { console.error(e); }
     return null;
   };
 
@@ -149,28 +136,19 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
              fetchBestIterationContent('GPRD_Capability_Actor'),
              fetchBestIterationContent('GPRD_Architecture_Schema')
            ]);
-           
-           // 스테이지 정보를 포함하여 데이터 구성
            const data = [
              { stage: 1, content: s1 },
              { stage: 2, content: s2 },
              { stage: 3, content: s3 }
            ].filter(item => item.content !== null && Object.keys(item.content).length > 0);
-           
            setIntegratedData(data);
-         } catch(e) { 
-           console.error('Failed to fetch all stages for integrated view:', e); 
-         }
+         } catch(e) { console.error(e); }
        };
        fetchAllStages();
-    } 
-    
-    if (viewMode === 'STEP' || viewMode === 'RAW') {
+    } else {
       loadContent();
     }
   }, [viewMode, activeStage, nodes, node?.node_id]);
-
-
 
   // Handlers
   const handleRun = async () => {
@@ -199,11 +177,8 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
     const it = iterations[idx];
     if (!it) return;
     setLoading(true);
-    if (it.is_pass) {
-      await unconfirmIteration(it.iteration_id);
-    } else {
-      await confirmGenesisIteration(it.iteration_id);
-    }
+    if (it.is_pass) await unconfirmIteration(it.iteration_id);
+    else await confirmGenesisIteration(it.iteration_id);
     await loadContent(true);
     setLoading(false);
   };
@@ -211,14 +186,8 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
   const handleDeleteIteration = async (idx: number) => {
     const it = iterations[idx];
     if (!it) return;
-    
-    const confirmed = await ask('이 이터레이션을 삭제하시겠습니까?', { 
-      title: 'Magic Planner',
-      kind: 'warning',
-    });
-    
+    const confirmed = await ask('이 이터레이션을 삭제하시겠습니까?', { title: 'Delete Draft', kind: 'warning' });
     if (!confirmed) return;
-    
     setLoading(true);
     await deleteIteration(it.iteration_id);
     await loadContent(true);
@@ -244,208 +213,192 @@ const GenesisPrdView: React.FC<GenesisPrdViewProps> = ({
   );
 
   return (
-    <div className="genesis-prd-view">
-      <div className="genesis-prd-view__header-row">
-        <div className="header-info">
+    <div className={styles.container}>
+      {/* 1. Header & Stepper */}
+      <div className={styles.headerRow}>
+        <div className={styles.headerInfo}>
           <h1>Genesis PRD</h1>
-          <p className="description">프로젝트의 근간이 되는 비즈니스 목표와 설계 구조를 정의합니다.</p>
-          <div className="header-controls">
-            <div className="iteration-field">
-              <span className="label">ITERATION</span>
-              <div className="iteration-control-group">
-                <span className="current-count">{node?.current_iteration || 0}</span>
-                <span className="separator">/</span>
-                <input type="number" value={tempMax} onChange={(e) => setTempMax(parseInt(e.target.value) || 1)} onBlur={() => node && !isCurrentStageLocked && updateMaxIterations(node.node_id, tempMax)} disabled={loading || isCurrentStageLocked || node?.node_state === 'COMPLETED'} />
+          <p className={styles.description}>Define the business goals and architectural foundation of your project.</p>
+          
+          <div className={styles.controls}>
+            <div className={styles.iterationBox}>
+              <span className={styles.label}>Iteration Budget</span>
+              <div className={styles.controlGroup}>
+                <span className={styles.current}>{node?.current_iteration || 0}</span>
+                <span className={styles.sep}>/</span>
+                <input 
+                  type="number" 
+                  value={tempMax} 
+                  onChange={(e) => setTempMax(parseInt(e.target.value) || 1)} 
+                  onBlur={() => node && !isCurrentStageLocked && updateMaxIterations(node.node_id, tempMax)}
+                  disabled={loading || isCurrentStageLocked || node?.node_state === 'COMPLETED'}
+                />
               </div>
             </div>
-            <div className="button-group">
+
+            <div className={styles.buttonGroup}>
               {node?.node_state === 'IN_PROGRESS' ? (
-                <Button onClick={() => stopNode(node.node_id)} variant="danger" leftIcon={<span className="material-symbols-outlined">stop</span>}>중단</Button>
+                <Button onClick={() => stopNode(node.node_id)} variant="danger" leftIcon={<Square size={14} />}>Stop</Button>
               ) : (
-                <Button onClick={handleRun} disabled={loading || isCurrentStageLocked} variant={node?.node_state === 'COMPLETED' ? "secondary" : "primary"} isLoading={loading} leftIcon={<span className="material-symbols-outlined">auto_fix</span>}>{node?.node_state === 'COMPLETED' ? 'Regenerate' : '생성 시작'}</Button>
+                <Button 
+                  onClick={handleRun} 
+                  disabled={loading || isCurrentStageLocked} 
+                  variant={node?.node_state === 'COMPLETED' ? "secondary" : "primary"} 
+                  isLoading={loading} 
+                  leftIcon={node?.node_state === 'COMPLETED' ? <RotateCcw size={14} /> : <Zap size={14} />}
+                >
+                  {node?.node_state === 'COMPLETED' ? 'Regenerate' : 'Generate'}
+                </Button>
               )}
+              
               {node?.node_state === 'PAUSED_STOPPED' && (
-                <Button onClick={() => resumeNode(node.node_id)} variant="primary" leftIcon={<span className="material-symbols-outlined">restore</span>}>재개</Button>
+                <Button onClick={() => resumeNode(node.node_id)} variant="primary" leftIcon={<Play size={14} />}>Resume</Button>
               )}
+
               {iterations.some(it => it.is_pass) && node?.node_state !== 'COMPLETED' && !isCurrentStageLocked && (
-                <Button onClick={handleApproveStage} variant="primary" className="proceed-btn" leftIcon={<span className="material-symbols-outlined">send</span>}>다음 스텝</Button>
+                <Button onClick={handleApproveStage} variant="primary" leftIcon={<CheckCircle size={14} />}>Approve & Next</Button>
               )}
+
               {activeStage === 'GPRD_Architecture_Schema' && node?.node_state === 'COMPLETED' && (
-                <Button onClick={handleProceedToSad} variant="primary" className="proceed-btn" rightIcon={<span className="material-symbols-outlined">arrow_forward</span>}>Proceed to SAD</Button>
+                <Button onClick={handleProceedToSad} variant="primary" rightIcon={<ChevronRight size={14} />}>Proceed to SAD</Button>
               )}
             </div>
           </div>
         </div>
-        <div className="header-right">
-          <div className="stage-stepper">
-            {['GPRD_Context_Goal', 'GPRD_Capability_Actor', 'GPRD_Architecture_Schema'].map((type, i) => {
-              const sNode = nodes.find(n => n.target_node_type === type);
-              return (
-                <button key={type} className={`stage-step ${activeStage === type ? 'active' : ''} ${sNode?.node_state === 'COMPLETED' ? 'completed' : ''}`} onClick={() => setActiveStage(type as any)}>
-                  <div className="step-num">{sNode?.node_state === 'COMPLETED' ? <span className="material-symbols-outlined">check</span> : i + 1}</div>
-                  <div className="step-label">Stage {i+1}: {type.replace('GPRD_', '').replace('_', ' & ')}</div>
-                  {sNode && <span className={`state-badge state-${sNode.node_state.toLowerCase()}`}>{sNode.node_state}</span>}
-                </button>
-              );
-            })}
-          </div>
+
+        <div className={styles.stepper}>
+          {['GPRD_Context_Goal', 'GPRD_Capability_Actor', 'GPRD_Architecture_Schema'].map((type, i) => {
+            const sNode = nodes.find(n => n.target_node_type === type);
+            return (
+              <button 
+                key={type} 
+                className={`${styles.step} ${activeStage === type ? styles.active : ''} ${sNode?.node_state === 'COMPLETED' ? styles.completed : ''}`} 
+                onClick={() => setActiveStage(type as any)}
+              >
+                <div className={styles.stepNum}>{sNode?.node_state === 'COMPLETED' ? <Check size={10} /> : i + 1}</div>
+                <div className={styles.stepLabel}>Stage {i+1}</div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {statusMsg && (
-        <div className="genesis-prd-view__status-msg">
-          <Spinner size="sm" />
+        <div className={styles.statusBanner}>
+          <RefreshCw className="spin" size={14} />
           <span>{statusMsg}</span>
         </div>
       )}
 
+      {/* 2. Revision Timeline */}
       {iterations.length > 0 && (
-        <div className="revisions-horizontal">
-          <div className="revisions-header">
-            <div className="left"><span className="material-symbols-outlined">history</span><span>Revisions</span></div>
-            <div className="right">
-              <button 
-                className="ai-guidance-trigger" 
-                onClick={() => setIsAiGuidanceOpen(true)}
-                title="AI Intelligence Feedback"
-              >
-                <span className="material-symbols-outlined">auto_awesome</span>
-              </button>
-              <div className="view-mode-selector">
-                <button 
-                  className={`mode-btn ${viewMode === 'STEP' ? 'active' : ''}`}
-                  onClick={() => setViewMode('STEP')}
-                >
-                  단계별 보기
-                </button>
-                <button 
-                  className={`mode-btn integrated-btn ${viewMode === 'INTEGRATED' ? 'active' : ''}`}
-                  onClick={() => setViewMode('INTEGRATED')}
-                >
-                  <span className="material-symbols-outlined">layers</span>
-                </button>
-                <button 
-                  className={`mode-btn ${viewMode === 'RAW' ? 'active' : ''}`}
-                  onClick={() => setViewMode('RAW')}
-                >
-                  RAW SPEC
-                </button>
+        <div className={styles.timeline}>
+          <div className={styles.timelineHeader}>
+            <h3><History size={14} /> Revision History</h3>
+            <div className={styles.viewActions}>
+              <button className="btn btn--secondary btn--sm" onClick={() => setIsAiGuidanceOpen(true)}><Sparkles size={14} /> AI Insight</button>
+              <div className="btn-group ml-4">
+                <button className={`btn btn--secondary btn--sm ${viewMode === 'STEP' ? 'active' : ''}`} onClick={() => setViewMode('STEP')}><Layers size={14} /></button>
+                <button className={`btn btn--secondary btn--sm ${viewMode === 'RAW' ? 'active' : ''}`} onClick={() => setViewMode('RAW')}><Terminal size={14} /></button>
+                <button className={`btn btn--secondary btn--sm ${viewMode === 'INTEGRATED' ? 'active' : ''}`} onClick={() => setViewMode('INTEGRATED')}><Zap size={14} /></button>
               </div>
             </div>
           </div>
-          <div className="revisions-list custom-scrollbar">
+          
+          <div className={styles.revisionList}>
             {iterations.map((it, idx) => (
-              <div key={it.iteration_id} className={`revision-btn ${selectedIdx === idx ? 'active' : ''} ${it.is_pass ? 'confirmed' : ''}`} onClick={() => viewMode === 'STEP' && setSelectedIdx(idx)}>
-                <span className="iter-num">Draft #{it.iteration_number}</span>
-                {it.is_pass && <span className="material-symbols-outlined selected-icon">check_circle</span>}
-                <span className="iter-meta">{it.calculated_score}</span>
+              <div 
+                key={it.iteration_id} 
+                className={`${styles.revisionCard} ${selectedIdx === idx ? styles.active : ''} ${it.is_pass ? styles.confirmed : ''}`} 
+                onClick={() => viewMode === 'STEP' && setSelectedIdx(idx)}
+              >
+                <span className={styles.iterNum}>Draft #{it.iteration_number}</span>
+                <span className={styles.score}>{it.calculated_score} <small>pts</small></span>
+                {it.is_pass && <CheckCircle size={12} className="text-secondary" />}
               </div>
             ))}
           </div>
+
           {viewMode === 'STEP' && iterations[selectedIdx] && !isCurrentStageLocked && (
-            <div className="revisions-action">
+            <div className="flex gap-2 mt-2">
               <Button 
                 onClick={() => handleConfirmIteration(selectedIdx)} 
                 variant={iterations[selectedIdx].is_pass ? "ghost" : "secondary"} 
-                leftIcon={<span className="material-symbols-outlined">{iterations[selectedIdx].is_pass ? 'undo' : 'check_circle'}</span>}
+                size="sm"
+                leftIcon={iterations[selectedIdx].is_pass ? <Undo2 size={14} /> : <Check size={14} />}
               >
-                {iterations[selectedIdx].is_pass ? '확정 취소' : 'Draft 확정'}
+                {iterations[selectedIdx].is_pass ? 'Unconfirm' : 'Confirm Selection'}
               </Button>
               <Button 
-                onClick={(e) => { e.stopPropagation(); handleDeleteIteration(selectedIdx); }} 
+                onClick={() => handleDeleteIteration(selectedIdx)} 
                 variant="ghost" 
-                className="delete-btn"
-                leftIcon={<span className="material-symbols-outlined">delete</span>}
+                size="sm"
+                className="text-error"
+                leftIcon={<Trash2 size={14} />}
               >
-                삭제
+                Delete
               </Button>
             </div>
           )}
         </div>
       )}
 
-      {((viewMode !== 'INTEGRATED' && content) || (viewMode === 'INTEGRATED' && integratedData.length > 0)) && (
-        <div className="bento-render-container">
+      {/* 3. Main Viewport */}
+      <div className={styles.viewport}>
+        <div className={styles.scrollArea}>
           {viewMode === 'RAW' ? (
-            <pre className="raw-json-view custom-scrollbar">
-              {JSON.stringify(content, null, 2)}
-            </pre>
-          ) : (
-            <div className="visual-view-wrapper custom-scrollbar">
-               {viewMode === 'INTEGRATED' ? (
-                 <div className="integrated-stack">
-                   <div className="integrated-view-header">
-                     <div className="header-badge">UNIFIED PRD</div>
-                     <h2>Full Project Specification</h2>
-                     <p>Stage 1부터 3까지의 모든 설계 내용이 통합된 문서입니다.</p>
-                   </div>
-                   {integratedData.map((item, idx) => (
-                     <div key={idx} className="integrated-stage-row">
-                       <PrdBentoRenderer 
-                         content={item.content} 
-                         isIntegrated={true} 
-                         stage={item.stage} 
-                       />
-                     </div>
-                   ))}
-                 </div>
-               ) : (
-                 <PrdBentoRenderer content={content} isIntegrated={false} />
-               )}
+            <pre className={styles.rawView}>{JSON.stringify(content, null, 2)}</pre>
+          ) : viewMode === 'INTEGRATED' ? (
+            <div className={styles.integratedStack}>
+               {integratedData.map((item, idx) => (
+                 <PrdBentoRenderer key={idx} content={item.content} isIntegrated={true} stage={item.stage} />
+               ))}
             </div>
+          ) : (
+            <PrdBentoRenderer content={content} isIntegrated={false} />
           )}
         </div>
-      )}
+      </div>
 
-      <BaseModal 
+      {/* AI Guidance Modal */}
+      <Dialog 
         isOpen={isAiGuidanceOpen} 
         onClose={() => setIsAiGuidanceOpen(false)} 
         title="AI Intelligence Feedback"
-        subtitle={iterations[selectedIdx] ? `Draft #${iterations[selectedIdx].iteration_number} - Score: ${iterations[selectedIdx].calculated_score}` : ""}
         size="md"
       >
-        <div className="intelligence-feedback">
+        <div className="p-4 flex flex-col gap-4">
           {iterations[selectedIdx]?.critical_errors_array && (
-            <div className="feedback-card error">
-              <div className="card-header">
-                <span className="material-symbols-outlined">error</span>
-                <h4>Critical Issues</h4>
-              </div>
-              <div className="card-content">
-                <FeedbackRenderer 
-                  feedback={iterations[selectedIdx].critical_errors_array} 
-                  type="error" 
+            <div className="space-y-2">
+              <h4 className="flex items-center gap-2 text-rose-500 font-bold mb-2 text-xs uppercase tracking-widest">
+                <AlertCircle size={14} /> Critical Issues Found
+              </h4>
+              {(Array.isArray(iterations[selectedIdx].critical_errors_array) 
+                ? iterations[selectedIdx].critical_errors_array 
+                : [iterations[selectedIdx].critical_errors_array]
+              ).map((err: any, i: number) => (
+                <Alert 
+                  key={i}
+                  variant="error"
+                  title={err.code || "Violation"}
+                  description={err.description || String(err)}
                 />
-              </div>
+              ))}
             </div>
           )}
           {iterations[selectedIdx]?.actionable_feedback_text && (
-            <div className="feedback-card info">
-              <div className="card-header">
-                <span className="material-symbols-outlined">tips_and_updates</span>
-                <h4>Optimization Guidance</h4>
-              </div>
-              <div className="card-content">
-                <FeedbackRenderer 
-                  feedback={iterations[selectedIdx].actionable_feedback_text} 
-                  type="info" 
-                />
-              </div>
-            </div>
-          )}
-          {!iterations[selectedIdx]?.critical_errors_array && !iterations[selectedIdx]?.actionable_feedback_text && (
-            <div className="feedback-card success">
-              <div className="card-header">
-                <span className="material-symbols-outlined">check_circle</span>
-                <h4>All Good</h4>
-              </div>
-              <div className="card-content">
-                <p>이 리비전에 특별한 결함이나 개선 제안이 없습니다.</p>
-              </div>
+            <div className="space-y-2">
+              <h4 className="flex items-center gap-2 text-emerald-500 font-bold mb-2 text-xs uppercase tracking-widest">
+                <Sparkles size={14} /> Optimization Guidance
+              </h4>
+              <Alert 
+                variant="info"
+                description={iterations[selectedIdx].actionable_feedback_text}
+              />
             </div>
           )}
         </div>
-      </BaseModal>
+      </Dialog>
     </div>
   );
 };

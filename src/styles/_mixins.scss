@@ -1,87 +1,126 @@
-@import "variables";
+@use 'variables' as v;
 
-// 1. Glassmorphism
-@mixin glass-panel($opacity: 0.8, $blur: 20px) {
-  background: rgba($surface-container, $opacity);
-  backdrop-filter: blur($blur);
-  border: 1px solid rgba($outline-variant, 0.15);
+// 1. IDE Panel Styles
+@mixin ide-panel {
+  background-color: v.$background-sidebar;
+  border: 1px solid v.$border;
 }
 
-// 2. Gradients & Shadows
+@mixin editor-pane {
+  background-color: v.$background-editor;
+  border: 1px solid v.$border;
+}
+
+// 2. Interactive
+@mixin hover-bg {
+  transition: background-color 0.15s ease;
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+}
+
+@mixin active-highlight {
+  position: relative;
+  &::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background-color: v.$primary;
+  }
+}
+
+// 3. Typography Helpers
+@mixin font-mono {
+  font-family: v.$font-mono;
+}
+
+@mixin text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// 4. Custom Scrollbar (Compact IDE style)
+@mixin compact-scrollbar {
+  &::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(121, 121, 121, 0.2);
+    &:hover {
+      background: rgba(121, 121, 121, 0.4);
+    }
+  }
+}
+
+@mixin custom-scrollbar($width: 8px) {
+  @include compact-scrollbar;
+  &::-webkit-scrollbar {
+    width: $width;
+    height: $width;
+  }
+}
+
+@mixin hide-scrollbar {
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+// 5. Layout Mixins
+@mixin flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@mixin flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+// 6. Legacy & Utility Support
 @mixin primary-gradient {
-  background: $primary-gradient;
+  background: linear-gradient(135deg, v.$primary 0%, darken(v.$primary, 10%) 100%);
 }
 
-@mixin neon-shadow($color: $primary, $opacity: 0.3) {
-  box-shadow: 0 0 20px rgba($color, $opacity);
+@mixin neon-shadow($color, $opacity: 0.3) {
+  box-shadow: 0 0 15px rgba($color, $opacity);
 }
 
-// 3. Typography Styles
-@mixin headline-large {
-  font-family: $font-headline;
-  font-size: 2.5rem; // 40px
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-}
-
-@mixin headline-medium {
-  font-family: $font-headline;
-  font-size: 1.5rem; // 24px
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  line-height: 1.3;
-}
-
-@mixin headline-small {
-  font-family: $font-headline;
-  font-size: 1.125rem; // 18px
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  line-height: 1.4;
-}
-
-@mixin body-medium {
-  font-family: $font-body;
-  font-size: 0.875rem; // 14px
-  font-weight: 400;
-  line-height: 1.5;
-}
-
+// Typography Mixins (Legacy)
 @mixin label-medium {
-  font-family: $font-label;
-  font-size: 0.75rem; // 12px
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  line-height: 1.4;
+  font-size: v.$text-sm;
+  font-weight: v.$font-weight-medium;
+  color: v.$text-muted;
 }
 
 @mixin label-uppercase {
-  font-family: $font-label;
-  font-size: 0.625rem; // 10px
-  font-weight: 800;
+  font-size: v.$text-xs;
+  font-weight: v.$font-weight-bold;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.05em;
+  color: v.$text-muted;
 }
 
-// 4. Custom Scrollbar
-@mixin custom-scrollbar($width: 4px) {
-  &::-webkit-scrollbar {
-    width: $width;
-  }
-  &::-webkit-scrollbar-track {
-    background: $surface-container-lowest;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: $surface-container-highest;
-    border-radius: 10px;
-  }
+@mixin headline-small {
+  font-size: v.$text-base;
+  font-weight: v.$font-weight-bold;
+  color: v.$foreground;
 }
 
-// 5. Interactive
-@mixin active-scale($scale: 0.95) {
-  transition: transform 0.15s ease;
-  &:active {
-    transform: scale($scale);
-  }
+@mixin headline-medium {
+  font-size: v.$text-lg;
+  font-weight: v.$font-weight-bold;
+  color: v.$foreground;
 }

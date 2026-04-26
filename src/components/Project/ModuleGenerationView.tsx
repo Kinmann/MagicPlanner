@@ -5,7 +5,6 @@ import ModuleTree from './ModuleTree';
 import PipelineBoard from './PipelineBoard';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
-import { useEngineStore } from '../../store/engineStore';
 
 const ModuleGenerationView: React.FC = () => {
   const { nodes, modules } = useProjectStore(
@@ -23,7 +22,7 @@ const ModuleGenerationView: React.FC = () => {
     }))
   );
 
-  const isProcessing = useEngineStore((state) => state.isProcessing);
+  // const isProcessing = useEngineStore((state) => state.isProcessing);
 
   if (viewMode !== 'BOARD') return null;
 
@@ -50,7 +49,6 @@ const ModuleGenerationView: React.FC = () => {
           <PipelineBoard 
             nodes={moduleNodes} 
             modules={modules}
-            disabled={isProcessing}
           />
 
           {selectedModuleId && (() => {

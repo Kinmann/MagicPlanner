@@ -1,0 +1,145 @@
+@use '../../styles/variables' as v;
+
+.editorPanel {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: v.$background;
+  overflow: hidden;
+}
+
+.tabs {
+  height: 36px;
+  display: flex;
+  background-color: v.$background;
+  border-bottom: 1px solid v.$border;
+  overflow-x: auto;
+  flex-shrink: 0;
+
+  &::-webkit-scrollbar {
+    height: 2px;
+  }
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  padding: 0 12px 0 16px;
+  height: 100%;
+  border-right: 1px solid v.$border;
+  font-size: 12px;
+  color: v.$text-muted;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  position: relative;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: v.$foreground;
+    .closeTabBtn {
+      opacity: 1;
+    }
+  }
+
+  &.active {
+    background-color: v.$surface-sidebar;
+    color: v.$primary;
+    &::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background-color: v.$primary;
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+    }
+    .closeTabBtn {
+      opacity: 1;
+    }
+  }
+}
+
+.tabTitle {
+  margin-right: 8px;
+}
+
+.closeTabBtn {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  opacity: 0;
+  transition: all 0.2s ease;
+  color: v.$text-muted;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: v.$foreground;
+  }
+}
+
+.toolbar {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  padding: 0 v.$space-4;
+  border-bottom: 1px solid v.$border;
+  background-color: v.$background;
+  flex-shrink: 0;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  color: v.$text-muted;
+}
+
+.breadcrumbItem {
+  display: flex;
+  align-items: center;
+  
+  &.active {
+    color: v.$foreground;
+  }
+}
+
+.breadcrumbSep {
+  margin: 0 4px;
+  opacity: 0.3;
+}
+
+.content {
+  flex: 1;
+  overflow: auto;
+  background-color: v.$background;
+}
+
+.emptyState {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: v.$text-muted;
+  opacity: 0.3;
+  text-align: center;
+  
+  p {
+    margin-top: 12px;
+    font-size: 14px;
+  }
+}
+
+.logoWatermark {
+  font-size: 48px;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  color: v.$foreground;
+  pointer-events: none;
+}

@@ -1,13 +1,17 @@
 import React from 'react';
-import BaseModal from '../common/BaseModal';
-import './CriticalErrorModal.scss';
+import { AlertCircle, RefreshCw, Settings } from 'lucide-react';
+import { Dialog } from '../ui/Dialog';
+import { Button } from '../ui/Button';
+import { Alert } from '../ui/Alert';
+import { RagErrorInfo } from '../../store/engineStore';
+import styles from './CriticalErrorModal.module.scss';
 
 interface CriticalErrorModalProps {
   isOpen: boolean;
   onClose: () => void;
   onRetry: () => void;
   onSettings: () => void;
-  errorMessage?: string;
+  errorInfo?: RagErrorInfo | null;
 }
 
 const CriticalErrorModal: React.FC<CriticalErrorModalProps> = ({
@@ -15,75 +19,73 @@ const CriticalErrorModal: React.FC<CriticalErrorModalProps> = ({
   onClose,
   onRetry,
   onSettings,
-  errorMessage
+  errorInfo
 }) => {
   return (
-    <BaseModal
-      isOpen={isOpen}
+    <Dialog 
+      isOpen={isOpen} 
       onClose={onClose}
+      title="Critical API Failure"
       size="md"
-      className="modal--error"
     >
-      {/* 1. Custom Error Header Bar */}
-      <div className="error-header-bar">
-        <div className="error-icon-box">
-          <span className="material-symbols-outlined">report_problem</span>
+      <div className="space-y-4 pt-4">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 bg-red-500/10 rounded-lg">
+            <AlertCircle size={24} className="text-red-500" />
+          </div>
+          <p className="text-sm text-gray-400">The AI Orchestration engine encountered a lethal error.</p>
         </div>
-        <div className="error-title-group">
-          <h2 className="error-title">Critical API Failure</h2>
-          <p className="error-subtitle">The AI Orchestration engine encountered a lethal error.</p>
-        </div>
-      </div>
+        
+        <Alert 
+          variant="error"
+          title="Diagnostic Log"
+          description={errorInfo?.error_message || 'Unknown system override exception'}
+        />
 
-      {/* 2. Modal Body */}
-      <div className="modal-body">
-        {/* Error Context Log Section */}
-        <div className="error-log-section">
-          <label className="log-label">Error Diagnostic Log</label>
-          <div className="log-container">
-            <div className="log-list">
-              {/* 1. Status */}
-              <div className="log-item">
-                <span className="dot">●</span>
-                <span className="content">
-                  <span className="highlight">STATUS:</span> 403 Forbidden (Gemini API)
-                </span>
-              </div>
-              {/* 2. Trace */}
-              <div className="log-item log-item--dim">
-                <span className="dot">●</span>
-                <span className="content">Trace: agent.orchestration.loop {'->'} api_deadlock</span>
-              </div>
-              {/* 3. Fail (ErrorMessage) */}
-              <div className="log-item">
-                <span className="dot">●</span>
-                <span className="content">
-                  <span className="highlight">FAIL:</span> {errorMessage || 'Unknown system override exception'}
-                </span>
-              </div>
+        <div className={styles.logContainer}>
+          <div className={styles.logList}>
+            <div className={styles.logItem}>
+              <span className={styles.dot}>●</span>
+              <span className={styles.content}>
+                <span className={styles.highlight}>PROJECT:</span> {errorInfo?.project_id || 'N/A'}
+              </span>
+            </div>
+            <div className={`${styles.logItem} ${styles.dim}`}>
+              <span className={styles.dot}>●</span>
+              <span className={styles.content}>
+                <span className={styles.highlight}>NODE:</span> {errorInfo?.node_type || 'ORCHESTRATOR'}
+              </span>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* 3. Custom Action Area */}
-      <div className="custom-action-area">
-        <div className="button-row">
-          <button className="btn-secondary btn-small" onClick={onRetry} title="Attempt Recovery">
-            <span className="material-symbols-outlined">refresh</span>
-          </button>
-          <button className="btn-primary" onClick={onSettings}>
-            <span className="material-symbols-outlined">settings</span>
-            Configure API
-          </button>
-        </div>
-        <div className="dismiss-row">
-          <button className="btn-dismiss" onClick={onClose}>
-            Dismiss
+        <div className="flex flex-col gap-3 mt-6">
+          <div className="flex gap-2 w-full">
+            <Button 
+              variant="secondary" 
+              size="md" 
+              className="flex-1"
+              onClick={onRetry} 
+              leftIcon={<RefreshCw size={14} />}
+            >
+              Retry
+            </Button>
+            <Button 
+              variant="primary" 
+              size="md"
+              className="flex-1"
+              onClick={onSettings}
+              leftIcon={<Settings size={14} />}
+            >
+              Configure API
+            </Button>
+          </div>
+          <button className={styles.dismissBtn} onClick={onClose}>
+            Dismiss and continue
           </button>
         </div>
       </div>
-    </BaseModal>
+    </Dialog>
   );
 };
 

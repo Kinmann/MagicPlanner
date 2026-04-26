@@ -1,6 +1,8 @@
 import React from 'react';
-import BaseModal from '../common/BaseModal';
-import './HitlWarningModal.scss';
+import { ShieldCheck, AlertTriangle, RefreshCw, CheckCircle } from 'lucide-react';
+import { Dialog } from '../ui/Dialog';
+import { Button } from '../ui/Button';
+import { Alert } from '../ui/Alert';
 
 interface HitlWarningModalProps {
   isOpen: boolean;
@@ -24,84 +26,66 @@ const HitlWarningModal: React.FC<HitlWarningModalProps> = ({
   const isThresholdMet = currentScore >= threshold;
 
   return (
-    <BaseModal
-      isOpen={isOpen}
-      onClose={onClose}
+    <Dialog 
+      isOpen={isOpen} 
+      onClose={onClose} 
+      title={isThresholdMet ? 'Checkpoint Reached' : 'Quality Threshold Alert'}
       size="md"
-      className={`modal--hitl ${isThresholdMet ? 'modal--hitl-success' : ''}`}
     >
-      {/* 1. Custom Warning Header Bar */}
-      <div className={`warning-header-bar ${isThresholdMet ? 'is-success' : ''}`}>
-        <div className="warning-icon-box">
-          <span className="material-symbols-outlined">{isThresholdMet ? 'verified' : 'warning'}</span>
-        </div>
-        <div className="warning-title-group">
-          <h2 className="warning-title">{isThresholdMet ? 'Checkpoint Reached' : 'Quality Threshold Alert'}</h2>
-          <p className="warning-subtitle">{isThresholdMet ? 'Human-in-the-Loop Approval Required' : 'Human-in-the-Loop Intervention Required'}</p>
-        </div>
-      </div>
-
-      {/* 2. Modal Body */}
-      <div className="modal-body">
-        {/* Detail Section */}
-        <div className="hitl-detail-section">
-          <label className="detail-label">HITL Intervention Details</label>
-          <div className="detail-container">
-            <div className="detail-list">
-              <div className="detail-item">
-                <span className="dot">●</span>
-                <span className="content">
-                  <span className="highlight">NODE TYPE:</span> {nodeType}
-                </span>
-              </div>
-              <div className="detail-item">
-                <span className="dot">●</span>
-                <span className="content">
-                  <span className="highlight">SCORE:</span> {currentScore}% ({isThresholdMet ? 'Threshold Met' : 'Below Threshold'})
-                </span>
-              </div>
-              <div className="detail-item">
-                <span className="dot">●</span>
-                <span className="content">
-                  <span className="highlight">STATUS:</span> {isThresholdMet ? 'Quality check passed by LLM judge.' : 'Quality check failed by LLM judge.'}
-                </span>
-              </div>
-              <div className="detail-item">
-                <span className="dot">●</span>
-                <span className="content">
-                  <span className="highlight">ACTION REQUIRED:</span> {isThresholdMet ? 'Review and approve to proceed.' : 'Manual override or pipeline retry.'}
-                </span>
-              </div>
-            </div>
+      <div className="space-y-6 pt-4">
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-lg ${isThresholdMet ? 'bg-emerald-500/20 text-emerald-500' : 'bg-amber-500/20 text-amber-500'}`}>
+            {isThresholdMet ? <ShieldCheck size={24} /> : <AlertTriangle size={24} />}
+          </div>
+          <div>
+            <p className="text-xs opacity-50">
+              {isThresholdMet ? 'Human-in-the-Loop Approval Required' : 'Human-in-the-Loop Intervention Required'}
+            </p>
           </div>
         </div>
-      </div>
 
-      {/* 3. Custom Action Area */}
-      <div className="custom-action-area">
-        <div className="button-row">
-          {/* Left: Secondary Icon Button (Approve) */}
+        <Alert 
+          variant={isThresholdMet ? "info" : "warning"}
+          title="HITL Intervention Details"
+          description={`Node: ${nodeType} | Score: ${currentScore}% (${isThresholdMet ? 'Met' : 'Below'} ${threshold}%)`}
+        />
+        
+        <p className="text-sm text-gray-400">
+          {isThresholdMet 
+            ? "The generated content meets the minimum quality requirements. You can approve this iteration to proceed or retry for a better result."
+            : "The generated content did not meet the desired score. Please review the output and decide whether to retry or force approve."}
+        </p>
+
+        <div className="flex flex-col gap-3 mt-6">
+          <div className="flex gap-2 w-full">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="flex-1"
+              onClick={onApprove} 
+              leftIcon={<CheckCircle size={14} />}
+            >
+              Force Approve
+            </Button>
+            
+            <Button 
+              variant="primary" 
+              className="flex-1"
+              onClick={onRetry}
+              leftIcon={<RefreshCw size={14} />}
+            >
+              Retry Pipeline
+            </Button>
+          </div>
           <button 
-            className="btn-secondary btn-small" 
-            onClick={onApprove} 
-            title="Force Approve"
+            className="text-[10px] text-gray-500 hover:text-white transition-colors uppercase font-bold tracking-widest text-center w-full"
+            onClick={onClose}
           >
-            <span className="material-symbols-outlined">verified</span>
-          </button>
-          
-          {/* Right: Primary Emphasis Button (Retry) */}
-          <button className="btn-primary" onClick={onRetry}>
-            <span className="material-symbols-outlined">refresh</span>
-            Retry Pipeline
-          </button>
-        </div>
-        <div className="dismiss-row">
-          <button className="btn-dismiss" onClick={onClose}>
-            Dismiss
+            Dismiss and stay paused
           </button>
         </div>
       </div>
-    </BaseModal>
+    </Dialog>
   );
 };
 

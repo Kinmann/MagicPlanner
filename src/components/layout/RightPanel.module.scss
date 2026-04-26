@@ -1,0 +1,110 @@
+@use '../../styles/variables' as v;
+
+.rightPanel {
+  width: 100%;
+  height: 100%;
+  background-color: #18181b;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  user-select: none;
+}
+
+.header {
+  height: 40px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-bottom: 1px solid v.$border;
+  flex-shrink: 0;
+}
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.emptyState {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #4b5563;
+  text-align: center;
+  padding: 32px;
+
+  p {
+    font-size: 13px;
+    font-weight: 500;
+  }
+}
+
+.propertyItem {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 8px 0;
+  font-size: 13px;
+
+  &:not(:last-child) {
+    border-bottom: 1px solid rgba(v.$border, 0.3);
+  }
+}
+
+.propLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #9ca3af;
+  
+  svg { color: #6b7280; }
+}
+
+.propValue {
+  color: #e5e7eb;
+  font-weight: 500;
+  text-align: right;
+  max-width: 60%;
+  word-break: break-all;
+}
+
+.scoreSection {
+  padding: 12px 0;
+}
+
+.scoreHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.scoreLabel {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.scoreValue {
+  font-size: 18px;
+  font-weight: 700;
+  color: v.$primary;
+}
+
+.chartArea {
+  height: 80px;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 4px;
+}

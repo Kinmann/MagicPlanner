@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
+import { safeInvoke, safeListen } from '../utils/tauri';
 import { save } from '@tauri-apps/plugin-dialog';
 import { Project, DocumentNode, LocalModule } from '../types/project';
 import { useEngineStore } from './engineStore';
@@ -66,7 +65,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   fetchProjects: async () => {
     set({ isLoadingProjects: true, error: null });
     try {
-      const list = await invoke<Project[]>('list_projects');
+      const list = await safeInvoke<Project[]>('list_projects');
       set({ projects: list, isLoadingProjects: false });
     } catch (err: any) {
       set({ error: err.toString(), isLoadingProjects: false });
@@ -75,7 +74,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   fetchProject: async (projectId: string) => {
     try {
-      const proj = await invoke<Project>('get_project', { projectId });
+      const proj = await safeInvoke<Project>('get_project', { projectId });
       set({ currentProject: proj });
     } catch (err: any) {
       console.error("Failed to fetch project:", err);
@@ -85,7 +84,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   fetchNodes: async (projectId: string) => {
     set({ isLoadingNodes: true });
     try {
-      const result = await invoke<DocumentNode[]>('get_project_nodes', { projectId });
+      const result = await safeInvoke<DocumentNode[]>('get_project_nodes', { projectId });
       set({ nodes: result, isLoadingNodes: false });
     } catch (err: any) {
       set({ error: err.toString(), isLoadingNodes: false });
@@ -95,7 +94,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   fetchModules: async (projectId: string) => {
     set({ isLoadingModules: true });
     try {
-      const mods = await invoke<LocalModule[]>('get_project_modules', { projectId });
+      const mods = await safeInvoke<LocalModule[]>('get_project_modules', { projectId });
       set({ modules: mods, isLoadingModules: false });
     } catch (err: any) {
       set({ error: err.toString(), isLoadingModules: false });
@@ -114,7 +113,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const node = nodes.find(n => n.node_id === nodeIdOrType || n.target_node_type === nodeIdOrType);
     if (node?.node_state === 'STALE') {
       try {
-        await invoke('generate_and_apply_patch', { 
+        await safeInvoke('generate_and_apply_patch', { 
           projectId: currentProject.project_id, 
           nodeId: node.node_id, 
           apiKey 
@@ -132,7 +131,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }));
 
     try {
-      await invoke('run_pipeline', { projectId: currentProject.project_id, nodeType: nodeIdOrType, apiKey });
+      await safeInvoke('run_pipeline', { projectId: currentProject.project_id, nodeType: nodeIdOrType, apiKey });
       engine.setProcessing(false);
       return { status: 'SUCCESS' };
     } catch (err: any) {
@@ -149,7 +148,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const engine = useEngineStore.getState();
     engine.setProcessing(true);
     try {
-      await invoke('stop_node_pipeline', { nodeId });
+      await safeInvoke('stop_node_pipeline', { nodeId });
     } catch (err: any) {
       set({ error: err.toString() });
     } finally {
@@ -163,7 +162,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const engine = useEngineStore.getState();
     engine.setProcessing(true);
     try {
-      await invoke('resume_node_pipeline', { nodeId });
+      await safeInvoke('resume_node_pipeline', { nodeId });
     } catch (err: any) {
       set({ error: err.toString() });
     } finally {
@@ -178,7 +177,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const engine = useEngineStore.getState();
     engine.setProcessing(true);
     try {
-      await invoke('handle_hitl_action', { projectId: currentProject.project_id, nodeId, action, apiKey });
+      await safeInvoke('handle_hitl_action', { projectId: currentProject.project_id, nodeId, action, apiKey });
     } catch (err: any) {
       set({ error: err.toString() });
     } finally {
@@ -193,7 +192,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const engine = useEngineStore.getState();
     engine.setProcessing(true);
     try {
-      await invoke('retry_patch_loop', { projectId: currentProject.project_id, nodeId, apiKey, retryCount });
+      await safeInvoke('retry_patch_loop', { projectId: currentProject.project_id, nodeId, apiKey, retryCount });
     } catch (err: any) {
       set({ error: err.toString() });
     } finally {
@@ -205,7 +204,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const { currentProject, fetchNodes } = get();
     if (!currentProject) return;
     try {
-      await invoke('update_node_max_iterations', { projectId: currentProject.project_id, nodeId, maxIterations });
+      await safeInvoke('update_node_max_iterations', { projectId: currentProject.project_id, nodeId, maxIterations });
       await fetchNodes(currentProject.project_id);
     } catch (err: any) {
       set({ error: err.toString() });
@@ -216,7 +215,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const { currentProject, fetchNodes } = get();
     if (!currentProject) return;
     try {
-      await invoke('delete_generation_iteration', { iterationId });
+      await safeInvoke('delete_generation_iteration', { iterationId });
       await fetchNodes(currentProject.project_id);
     } catch (err: any) {
       set({ error: err.toString() });
@@ -227,7 +226,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   approveGenesisNode: async (nodeId) => {
     const apiKey = useSettingsStore.getState().apiKey;
     try {
-      await invoke('approve_genesis_prd_node', { nodeId, apiKey });
+      await safeInvoke('approve_genesis_prd_node', { nodeId, apiKey });
     } catch (err: any) { set({ error: err.toString() }); }
   },
 
@@ -236,7 +235,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (!currentProject) return;
     const apiKey = useSettingsStore.getState().apiKey;
     try {
-      await invoke('approve_genesis_prd', { projectId: currentProject.project_id, apiKey });
+      await safeInvoke('approve_genesis_prd', { projectId: currentProject.project_id, apiKey });
     } catch (err: any) { set({ error: err.toString() }); }
   },
 
@@ -244,7 +243,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const { currentProject } = get();
     if (!currentProject) return;
     try {
-      await invoke('confirm_genesis_prd_iteration', { projectId: currentProject.project_id, iterationId });
+      await safeInvoke('confirm_genesis_prd_iteration', { projectId: currentProject.project_id, iterationId });
     } catch (err: any) { set({ error: err.toString() }); }
   },
 
@@ -252,7 +251,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const { currentProject } = get();
     if (!currentProject) return;
     try {
-      await invoke('unconfirm_iteration', { projectId: currentProject.project_id, iterationId });
+      await safeInvoke('unconfirm_iteration', { projectId: currentProject.project_id, iterationId });
     } catch (err: any) { set({ error: err.toString() }); }
   },
 
@@ -263,7 +262,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const apiKey = useSettingsStore.getState().apiKey;
     const cmd = stage === 'GLOBAL' ? 'run_sad_global_pipeline' : 'run_sad_module_pipeline';
     try {
-      await invoke(cmd, { projectId: currentProject.project_id, apiKey, targetModuleCount: targetCount });
+      await safeInvoke(cmd, { projectId: currentProject.project_id, apiKey, targetModuleCount: targetCount });
     } catch (err: any) { set({ error: err.toString() }); }
   },
 
@@ -271,7 +270,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const { currentProject } = get();
     if (!currentProject) return;
     try {
-      await invoke('confirm_sad_iteration', { projectId: currentProject.project_id, iterationId });
+      await safeInvoke('confirm_sad_iteration', { projectId: currentProject.project_id, iterationId });
     } catch (err: any) { set({ error: err.toString() }); }
   },
 
@@ -280,7 +279,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (!currentProject) return;
     const apiKey = useSettingsStore.getState().apiKey;
     try {
-      await invoke('approve_sad_node', { projectId: currentProject.project_id, nodeId, apiKey });
+      await safeInvoke('approve_sad_node', { projectId: currentProject.project_id, nodeId, apiKey });
     } catch (err: any) { set({ error: err.toString() }); }
   },
 
@@ -288,7 +287,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const { currentProject } = get();
     if (!currentProject) return;
     try {
-      await invoke('create_local_modules', { projectId: currentProject.project_id, modulesJson });
+      await safeInvoke('create_local_modules', { projectId: currentProject.project_id, modulesJson });
     } catch (err: any) { set({ error: err.toString() }); }
   },
 
@@ -307,7 +306,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       });
 
       if (filePath) {
-        await invoke('save_file', { path: filePath, content: markdown });
+        await safeInvoke('save_file', { path: filePath, content: markdown });
       }
     } catch (err: any) {
       set({ error: err.toString() });
@@ -324,7 +323,7 @@ let isEventListenerRegistered = false;
 export const initProjectEventListeners = () => {
   if (isEventListenerRegistered) return;
   
-  listen('nodes-updated', () => {
+  safeListen('nodes-updated', () => {
     const { currentProject, fetchNodes, fetchProject, fetchModules } = useProjectStore.getState();
     if (currentProject) {
       const pid = currentProject.project_id;

@@ -1,35 +1,32 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import { invoke } from '@tauri-apps/api/core';
-import { useShallow } from 'zustand/react/shallow';
-import SimpleMde from 'react-simplemde-editor';
-import Header from '../components/layout/Header';
+import React, { useState } from 'react';
+import { FolderKanban, Plus, Type, FileText, LayoutTemplate, Send, ChevronRight, X, Sparkles, MousePointerClick, Bolt } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '../store/uiStore';
-import 'easymde/dist/easymde.min.css';
+import { invoke } from '@tauri-apps/api/core';
+import { Spinner } from '../components/ui/Spinner';
 import './CreateProject.scss';
 
-interface CreateProjectProps {
-}
-
-const CreateProject: React.FC<CreateProjectProps> = () => {
-  const { navigateTo, openProject } = useUIStore(useShallow(state => ({
-    navigateTo: state.navigateTo,
-    openProject: state.openProject
-  })));
-  const onBack = () => navigateTo('DASHBOARD');
-  const [name, setName] = useState('');
-  const [mode, setMode] = useState<'AUTO' | 'MANUAL'>('AUTO');
-  const [concept, setConcept] = useState('');
+export function CreateProject() {
+  const { navigateTo, openProject } = useUIStore();
+  const [step, setStep] = useState(1);
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    mode: 'AUTO' as 'AUTO' | 'MANUAL',
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleNext = () => setStep(step + 1);
+  const handleBack = () => setStep(step - 1);
+  
   const handleCreate = async () => {
-    if (!name.trim()) {
-      setError('프로젝트 제목을 입력해주세요.');
-      return;
-    }
-    if (concept.length < 50) {
-      setError('기획 컨셉은 최소 50자 이상 입력해야 합니다.');
+    if (!formData.name.trim()) {
+      setError('Please enter a project name.');
       return;
     }
 
@@ -38,9 +35,9 @@ const CreateProject: React.FC<CreateProjectProps> = () => {
 
     try {
       const projectId = await invoke<string>('create_project', {
-        name,
-        mode,
-        inputText: concept,
+        name: formData.name,
+        mode: formData.mode,
+        inputText: formData.description || ' ', // Backend requires input_text
       });
       openProject(projectId);
     } catch (err: any) {
@@ -50,213 +47,176 @@ const CreateProject: React.FC<CreateProjectProps> = () => {
     }
   };
 
-  const handleEditorChange = useCallback((value: string) => {
-    setConcept(value);
-  }, []);
-
-  const editorOptions = useMemo(() => ({
-    autofocus: true,
-    spellChecker: false,
-    minHeight: '400px',
-    placeholder: 'Describe your software project and who it\'s for. Provide context on the core problem it solves...',
-    status: ['lines', 'words', 'cursor'],
-    toolbar: [
-      'bold', 'italic', 'heading', '|', 
-      'quote', 'unordered-list', 'ordered-list', '|', 
-      'link', 'image', 'code', 'table', '|', 
-      'preview', 'side-by-side', 'fullscreen', '|', 
-      'guide'
-    ] as any,
-    // This makes the editor show the styles inline (syntax highlighting)
-    renderingConfig: {
-      singleLineBreaks: false,
-      codeSyntaxHighlighting: true,
-    },
-    shortcuts: {
-        drawTable: "Cmd-Alt-T"
-    },
-    // Customize preview theme to match our dark mode
-    previewClass: 'markdown-body',
-  }), []);
+  const isStep1Valid = formData.name.trim().length > 0;
 
   return (
     <div className="create-project-layout">
-      {/* Background Glows for visual depth */}
-      <div className="background-glow background-glow--1" />
-      <div className="background-glow background-glow--2" />
-
-      {/* 1. Left Sidebar Navigation (Matching Dashboard) */}
-      <aside className="create-project-sidebar">
-        <div className="sidebar-inner">
-          <div className="logo-container" onClick={onBack}>
-            <span className="material-symbols-outlined">auto_awesome</span>
-          </div>
-          <nav className="nav-items">
-            <button className="sidebar-nav-button" title="Dashboard" onClick={onBack}>
-              <span className="material-symbols-outlined">grid_view</span>
-            </button>
-            <button className="sidebar-nav-button active" title="Monitoring">
-              <span className="material-symbols-outlined">analytics</span>
-            </button>
-          </nav>
-          <div className="sidebar-footer">
-             <button className="sidebar-nav-button" title="Settings">
-                <span className="material-symbols-outlined">settings</span>
-             </button>
-          </div>
-        </div>
-      </aside>
-
-      {/* 2. Main (Header + Content) */}
-      <main className="create-project-main">
-        <Header 
-          title="New Project Initialization"
-          subtitle={
-            <nav className="breadcrumb">
-              <button className="breadcrumb-link" onClick={onBack}>Dashboard</button>
-              <span className="breadcrumb-sep">/</span>
-              <span className="breadcrumb-current">Create New Project</span>
-            </nav>
-          }
-        />
-
-        {/* Content Area */}
-        <div className="create-project-content custom-scrollbar">
-          <div className="content-inner">
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="content-header"
-            >
-              <h2>Initialization Phase</h2>
-              <p>Architect your software vision with orchestrated intelligence and precise planning pipelines.</p>
-            </motion.div>
-
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="editor-container"
-            >
-              <SimpleMde 
-                value={concept} 
-                onChange={handleEditorChange} 
-                options={editorOptions} 
-              />
-            </motion.div>
-
-            <div className="editor-footer-info">
-              <div className="counter-badge">
-                <div className={`dot dot--${concept.length < 50 ? 'warning' : 'success'}`}></div>
-                <span className="text">{concept.length}/50 min characters</span>
-              </div>
-              <div className="tip-msg text-xs italic">
-                 Markdown syntax highlighting is applied live as you type.
-              </div>
+      <div className="wizard-card">
+        {/* Header */}
+        <div className="wizard-header">
+          <h1 className="wizard-title">
+            <div className="icon-wrapper">
+              <FolderKanban className="icon" size={20} />
             </div>
-          </div>
-        </div>
-      </main>
-
-      {/* 3. Right Info Sidebar */}
-      <aside className="create-project-info-sidebar">
-        <header className="sidebar-header">
-          <h3 className="title">Project Overview</h3>
-          <p className="subtitle">Configure core project parameters</p>
-        </header>
-
-        <div className="sidebar-content custom-scrollbar">
-          <div className="info-group">
-            {/* Project Title Input */}
-            <div className="input-section">
-              <label htmlFor="project-title">Project Name</label>
-              <input 
-                id="project-title"
-                type="text" 
-                placeholder="e.g., AI Healthcare App" 
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                autoFocus
-              />
-            </div>
-
-            {/* Execution Mode Selection */}
-            <div className="mode-section">
-              <span className="label">Pipeline Execution Mode</span>
-              <div className="mode-grid">
-                <label className="mode-option">
-                  <input 
-                    type="radio" 
-                    name="execution-mode" 
-                    checked={mode === 'AUTO'} 
-                    onChange={() => setMode('AUTO')}
-                  />
-                  <div className="mode-card">
-                    <div className="card-top">
-                      <div className="mode-icon">
-                        <span className="material-symbols-outlined">bolt</span>
-                      </div>
-                      <div className="radio-circle">
-                        <div className="radio-inner"></div>
-                      </div>
-                    </div>
-                    <div className="mode-info">
-                      <span className="name">AUTO</span>
-                      <span className="desc">Continuous Logic flow. AI manages transitions autonomously based on results.</span>
-                    </div>
-                  </div>
-                </label>
-                <label className="mode-option">
-                  <input 
-                    type="radio" 
-                    name="execution-mode" 
-                    checked={mode === 'MANUAL'} 
-                    onChange={() => setMode('MANUAL')}
-                  />
-                  <div className="mode-card">
-                    <div className="card-top">
-                      <div className="mode-icon">
-                        <span className="material-symbols-outlined">touch_app</span>
-                      </div>
-                      <div className="radio-circle">
-                        <div className="radio-inner"></div>
-                      </div>
-                    </div>
-                    <div className="mode-info">
-                      <span className="name">MANUAL</span>
-                      <span className="desc">Step-by-step review. Manual intervention required at each stage.</span>
-                    </div>
-                  </div>
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="sidebar-footer">
-          <button 
-            className="create-button" 
-            onClick={handleCreate}
-            disabled={isLoading || concept.length < 50 || !name.trim()}
-          >
-            {isLoading ? <div className="spinner" /> : (
-              <>
-                <span className="material-symbols-outlined">rocket_launch</span>
-                CREATE PROJECT
-              </>
-            )}
+            Create New Workspace
+          </h1>
+          <button onClick={() => navigateTo('DASHBOARD')} className="close-button">
+            <X size={20} />
           </button>
-          
-          {error && (
-            <div className="error-msg">
-              <span className="material-symbols-outlined">warning</span>
-              {error}
-            </div>
-          )}
         </div>
-      </aside>
+
+        {/* Progress Bar */}
+        <div className="progress-track">
+          <div 
+            className="progress-fill" 
+            style={{ width: `${(step / 2) * 100}%` }}
+          />
+        </div>
+
+        {/* Form Body */}
+        <div className="wizard-body">
+          <AnimatePresence mode="wait">
+            {step === 1 && (
+              <motion.div 
+                key="step1"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.2 }}
+                className="step-content"
+              >
+                <div className="step-header">
+                  <h2>Project Details</h2>
+                  <p>Give your new workspace a name and description.</p>
+                </div>
+
+                <div className="form-group-container">
+                  <div className="form-group">
+                    <label>
+                      <Type size={14} className="label-icon" /> Project Name
+                    </label>
+                    <input 
+                      type="text" 
+                      name="name"
+                      value={formData.name}
+                      onChange={handleChange}
+                      placeholder="e.g., Q3 Marketing Campaign"
+                      className="form-input"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>
+                      <FileText size={14} className="label-icon" /> Description (Optional)
+                    </label>
+                    <div className="textarea-wrapper">
+                      <textarea 
+                        name="description"
+                        value={formData.description}
+                        onChange={handleChange}
+                        placeholder="Briefly describe what this project is about..."
+                        rows={4}
+                        className="form-textarea"
+                      />
+                      <span className="char-counter">
+                        {formData.description.length} chars
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {step === 2 && (
+              <motion.div 
+                key="step2"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.2 }}
+                className="step-content"
+              >
+                <div className="step-header">
+                  <h2>Select Execution Mode</h2>
+                  <p>Choose how the AI pipeline should generate your project.</p>
+                </div>
+
+                <div className="mode-grid">
+                  <ModeCard 
+                    title="AUTO Mode" 
+                    desc="Continuous logic flow. AI manages transitions autonomously." 
+                    icon={<Bolt />} 
+                    selected={formData.mode === 'AUTO'}
+                    onClick={() => setFormData({...formData, mode: 'AUTO'})}
+                  />
+                  <ModeCard 
+                    title="MANUAL Mode" 
+                    desc="Step-by-step review. Manual intervention required at each stage." 
+                    icon={<MousePointerClick />} 
+                    selected={formData.mode === 'MANUAL'}
+                    onClick={() => setFormData({...formData, mode: 'MANUAL'})}
+                  />
+                </div>
+
+                {error && (
+                  <div className="error-message">
+                    {error}
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Footer Actions */}
+          <div className="wizard-footer">
+            {step > 1 ? (
+              <button onClick={handleBack} className="btn-back">
+                Back
+              </button>
+            ) : (
+              <div /> // spacer
+            )}
+            
+            {step < 2 ? (
+              <button 
+                onClick={handleNext}
+                disabled={!isStep1Valid}
+                className="btn-next"
+              >
+                Continue <ChevronRight size={18} />
+              </button>
+            ) : (
+              <button 
+                onClick={handleCreate}
+                disabled={isLoading}
+                className="btn-create"
+              >
+                {isLoading ? <Spinner size={16} /> : <Send size={16} />}
+                {isLoading ? 'Creating...' : 'Create Workspace'}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
-};
+}
+
+function ModeCard({ title, desc, icon, selected, onClick }: any) {
+  return (
+    <div 
+      onClick={onClick}
+      className={`mode-card ${selected ? 'selected' : ''}`}
+    >
+      <div className="mode-icon-wrapper">
+        {React.cloneElement(icon, { size: 20 })}
+      </div>
+      <div className="mode-text">
+        <h3>{title}</h3>
+        <p>{desc}</p>
+      </div>
+    </div>
+  );
+}
 
 export default CreateProject;

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { PipelinePhase } from '../types/project';
 
 export type AppView = 'SETUP' | 'DASHBOARD' | 'WORKSPACE' | 'PROMPT_VIEW' | 'CREATE_PROJECT';
@@ -20,6 +21,15 @@ interface UIState {
   viewingPromptProjectId: string | null;
   isCreatingProject: boolean;
   activePhase: PipelinePhase | null;
+  dirtyNodes: string[];
+  isRawMode: boolean;
+  selectedIterationId: string | null; // 추가: 현재 선택된 리비전 ID
+  openNodeIds: string[]; // 추가: 열려있는 탭들의 노드 ID
+  isSidebarOpen: boolean;
+  isRightPanelOpen: boolean;
+  sidebarWidth: number; 
+  metaPanelWidth: number;
+  logPanelHeight: number;
 
   // Persistence State
   boardViewState: BoardViewState;
@@ -35,75 +45,156 @@ interface UIState {
   toggleSettings: (open: boolean) => void;
   setViewingPromptProject: (projectId: string | null) => void;
   setActivePhase: (phase: PipelinePhase | null) => void;
+  setNodeDirty: (nodeId: string, isDirty: boolean) => void;
+  toggleRawMode: () => void;
+  setSelectedIteration: (iterationId: string | null) => void; // 추가
+  
+  // Tab Actions
+  openTab: (nodeId: string) => void; // 추가
+  closeTab: (nodeId: string) => void; // 추가
+
+  // Layout Actions
+  toggleSidebar: () => void;
+  toggleRightPanel: () => void;
+  setSidebarWidth: (width: number) => void;
+  setMetaPanelWidth: (width: number) => void;
+  setLogPanelHeight: (height: number) => void;
   
   // Persistence Actions
   setBoardViewState: (state: Partial<BoardViewState>) => void;
   setScrollPosition: (key: string, position: number) => void;
 }
 
-export const useUIStore = create<UIState>((set) => ({
-  currentView: 'DASHBOARD',
-  currentProjectId: null,
-  selectedNodeId: null,
-  selectedModuleId: null,
-  workspaceViewMode: 'BOARD',
-  isSettingsOpen: false,
-  viewingPromptProjectId: null,
-  isCreatingProject: false,
-  activePhase: null,
+export const useUIStore = create<UIState>()(
+  persist(
+    (set) => ({
+      currentView: 'DASHBOARD',
+      currentProjectId: null,
+      selectedNodeId: null,
+      selectedModuleId: null,
+      workspaceViewMode: 'BOARD',
+      isSettingsOpen: false,
+      viewingPromptProjectId: null,
+      isCreatingProject: false,
+      activePhase: null,
+      dirtyNodes: [],
+      isRawMode: false,
+      selectedIterationId: null,
+      openNodeIds: [],
+      isSidebarOpen: true,
+      isRightPanelOpen: true,
+      sidebarWidth: 20,
+      metaPanelWidth: 20,
+      logPanelHeight: 30,
 
-  boardViewState: { zoom: 1, panX: 0, panY: 0 },
-  scrollPositions: {},
+      boardViewState: { zoom: 1, panX: 0, panY: 0 },
+      scrollPositions: {},
 
-  navigateTo: (view) => set({ 
-    currentView: view,
-    isCreatingProject: view === 'CREATE_PROJECT'
-  }),
+      navigateTo: (view: AppView) => set({ 
+        currentView: view,
+        isCreatingProject: view === 'CREATE_PROJECT'
+      }),
 
-  openProject: (projectId) => set({
-    currentProjectId: projectId,
-    currentView: 'WORKSPACE',
-    selectedNodeId: null,
-    selectedModuleId: null,
-    workspaceViewMode: 'BOARD',
-    boardViewState: { zoom: 1, panX: 0, panY: 0 } // 프로젝트 오픈 시 보드 초기화
-  }),
+      openProject: (projectId: string) => set({
+        currentProjectId: projectId,
+        currentView: 'WORKSPACE',
+        selectedNodeId: null,
+        selectedModuleId: null,
+        workspaceViewMode: 'BOARD',
+        boardViewState: { zoom: 1, panX: 0, panY: 0 },
+        dirtyNodes: [],
+        isRawMode: false,
+        selectedIterationId: null,
+        openNodeIds: []
+      }),
 
-  closeProject: () => set({
-    currentProjectId: null,
-    currentView: 'DASHBOARD',
-    selectedNodeId: null,
-    selectedModuleId: null,
-    scrollPositions: {}
-  }),
+      closeProject: () => set({
+        currentProjectId: null,
+        currentView: 'DASHBOARD',
+        selectedNodeId: null,
+        selectedModuleId: null,
+        scrollPositions: {},
+        dirtyNodes: [],
+        isRawMode: false,
+        openNodeIds: []
+      }),
 
-  setWorkspaceViewMode: (mode) => set({ workspaceViewMode: mode }),
+      setWorkspaceViewMode: (mode: WorkspaceViewMode) => set({ workspaceViewMode: mode }),
 
-  setSelectedNode: (nodeId) => set((state) => ({
-    selectedNodeId: nodeId,
-    workspaceViewMode: nodeId ? 'CONTENT' : state.workspaceViewMode
-  })),
+      setSelectedNode: (nodeId: string | null) => set((state) => ({
+        selectedNodeId: nodeId,
+        workspaceViewMode: nodeId ? 'CONTENT' : state.workspaceViewMode,
+        selectedIterationId: null,
+        openNodeIds: nodeId && !state.openNodeIds.includes(nodeId) 
+          ? [...state.openNodeIds, nodeId] 
+          : state.openNodeIds
+      })),
 
-  setSelectedModule: (moduleId) => set({
-    selectedModuleId: moduleId,
-    workspaceViewMode: 'BOARD',
-    selectedNodeId: null
-  }),
+      setSelectedModule: (moduleId: string | null) => set({
+        selectedModuleId: moduleId,
+        workspaceViewMode: 'BOARD',
+        selectedNodeId: null
+      }),
 
-  toggleSettings: (open) => set({ isSettingsOpen: open }),
+      toggleSettings: (open: boolean) => set({ isSettingsOpen: open }),
 
-  setViewingPromptProject: (projectId) => set({
-    viewingPromptProjectId: projectId,
-    currentView: projectId ? 'PROMPT_VIEW' : 'WORKSPACE'
-  }),
+      setViewingPromptProject: (projectId: string | null) => set({
+        viewingPromptProjectId: projectId,
+        currentView: projectId ? 'PROMPT_VIEW' : 'WORKSPACE'
+      }),
 
-  setActivePhase: (phase) => set({ activePhase: phase }),
+      setActivePhase: (phase: PipelinePhase | null) => set({ activePhase: phase }),
 
-  setBoardViewState: (viewState) => set((state) => ({
-    boardViewState: { ...state.boardViewState, ...viewState }
-  })),
+      setNodeDirty: (nodeId: string, isDirty: boolean) => set((state) => ({
+        dirtyNodes: isDirty 
+          ? state.dirtyNodes.includes(nodeId) ? state.dirtyNodes : [...state.dirtyNodes, nodeId]
+          : state.dirtyNodes.filter(id => id !== nodeId)
+      })),
 
-  setScrollPosition: (key, position) => set((state) => ({
-    scrollPositions: { ...state.scrollPositions, [key]: position }
-  })),
-}));
+      toggleRawMode: () => set((state) => ({ isRawMode: !state.isRawMode })),
+
+      setSelectedIteration: (iterationId: string | null) => set({ selectedIterationId: iterationId }),
+
+      openTab: (nodeId: string) => set((state) => ({
+        openNodeIds: state.openNodeIds.includes(nodeId) 
+          ? state.openNodeIds 
+          : [...state.openNodeIds, nodeId],
+        selectedNodeId: nodeId,
+        workspaceViewMode: 'CONTENT'
+      })),
+
+      closeTab: (nodeId: string) => set((state) => {
+        const nextTabs = state.openNodeIds.filter(id => id !== nodeId);
+        let nextSelected = state.selectedNodeId;
+        
+        if (state.selectedNodeId === nodeId) {
+          nextSelected = nextTabs.length > 0 ? nextTabs[nextTabs.length - 1] : null;
+        }
+        
+        return {
+          openNodeIds: nextTabs,
+          selectedNodeId: nextSelected,
+          workspaceViewMode: nextSelected ? 'CONTENT' : 'BOARD'
+        };
+      }),
+
+      toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
+      toggleRightPanel: () => set((state) => ({ isRightPanelOpen: !state.isRightPanelOpen })),
+      setSidebarWidth: (width: number) => set({ sidebarWidth: width }),
+      setMetaPanelWidth: (width: number) => set({ metaPanelWidth: width }),
+      setLogPanelHeight: (height: number) => set({ logPanelHeight: height }),
+
+      setBoardViewState: (viewState: Partial<BoardViewState>) => set((state) => ({
+        boardViewState: { ...state.boardViewState, ...viewState }
+      })),
+
+      setScrollPosition: (key: string, position: number) => set((state) => ({
+        scrollPositions: { ...state.scrollPositions, [key]: position }
+      })),
+    }),
+    {
+      name: 'magic-planner-ui-storage',
+      storage: createJSONStorage(() => localStorage),
+    }
+  )
+);

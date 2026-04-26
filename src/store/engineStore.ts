@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import { listen } from '@tauri-apps/api/event';
-import { invoke } from '@tauri-apps/api/core';
+import { safeInvoke, safeListen } from '../utils/tauri';
 import { useProjectStore } from './projectStore';
 
 export interface RunningNode {
@@ -51,16 +50,20 @@ export const useEngineStore = create<EngineState>((set, get) => ({
 
   syncRunningNodes: async () => {
     try {
-      const activeNodes = await invoke<any[]>('get_all_active_nodes').catch(() => []);
-      const mappedNodes: RunningNode[] = activeNodes.map(n => ({
-        nodeId: n.node_id,
-        projectId: n.project_id,
-        projectName: n.project_name,
-        nodeType: n.target_node_type,
-        lastAction: n.last_action
-      }));
+      const activeNodes = await safeInvoke<any[]>('get_all_active_nodes').catch(() => []);
       
-      set({ runningNodes: mappedNodes });
+      if (Array.isArray(activeNodes)) {
+        const mappedNodes: RunningNode[] = activeNodes.map(n => ({
+          nodeId: n.node_id,
+          projectId: n.project_id,
+          projectName: n.project_name,
+          nodeType: n.target_node_type,
+          lastAction: n.last_action
+        }));
+        set({ runningNodes: mappedNodes });
+      } else {
+        set({ runningNodes: [] });
+      }
     } catch (err) {
       console.error('Failed to sync running nodes:', err);
     }
@@ -81,12 +84,12 @@ export const useEngineStore = create<EngineState>((set, get) => ({
     }
 
     // 1. 노드 상태 변경 감지
-    const unlistenNodes = await listen('nodes-updated', () => {
+    const unlistenNodes = await safeListen('nodes-updated', () => {
       get().syncRunningNodes();
     });
 
     // 2. 파이프라인 상세 상태 메시지 처리 (문자열 또는 객체 지원)
-    const unlistenStatus = await listen<any>('pipeline-status', (event) => {
+    const unlistenStatus = await safeListen<any>('pipeline-status', (event) => {
       const payload = event.payload;
       
       if (typeof payload === 'string') {
@@ -118,7 +121,7 @@ export const useEngineStore = create<EngineState>((set, get) => ({
       }
     });
 
-    const unlistenError = await listen<RagErrorInfo>('rag-error', (event) => {
+    const unlistenError = await safeListen<RagErrorInfo>('rag-error', (event) => {
       get().setLastError(event.payload);
     });
 

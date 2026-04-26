@@ -1,0 +1,39 @@
+@use '../../styles/variables' as v;
+
+.handle {
+  width: 4px;
+  background-color: transparent;
+  transition: background-color 0.2s ease;
+  position: relative;
+  z-index: v.$z-overlay;
+
+  &:hover, &:active {
+    .line {
+      background-color: v.$primary;
+    }
+  }
+
+  &.vertical {
+    width: 100%;
+    height: 4px;
+    cursor: row-resize;
+    .line {
+      width: 100%;
+      height: 2px;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+  }
+}
+
+.line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background-color: transparent;
+  transition: background-color 0.2s ease;
+}

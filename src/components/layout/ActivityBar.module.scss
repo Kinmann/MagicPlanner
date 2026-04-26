@@ -1,0 +1,93 @@
+@use '../../styles/variables' as v;
+
+.activityBar {
+  width: v.$activitybar-width;
+  height: 100%;
+  background-color: #18181b;
+  border-right: 1px solid v.$border;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: v.$space-3 0;
+  user-select: none;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.topSection {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-3;
+  width: 100%;
+}
+
+.navItem {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 48px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #6b7280;
+
+  &:hover {
+    color: #d1d5db;
+  }
+
+  &.active {
+    color: v.$primary;
+  }
+}
+
+.activeIndicator {
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background-color: v.$primary;
+  border-top-right-radius: 2px;
+  border-bottom-right-radius: 2px;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+}
+
+.divider {
+  width: 32px;
+  height: 1px;
+  background-color: #27272a;
+  margin: 0 auto 8px auto;
+  opacity: 0.5;
+}
+
+.plusBtn {
+  color: #4b5563;
+  margin-top: 8px;
+
+  &:hover {
+    color: #9ca3af;
+    .plusIconInner {
+      border-color: #9ca3af;
+    }
+  }
+
+  .plusIconInner {
+    padding: 6px;
+    border-radius: 6px;
+    border: 1px dashed #4b5563;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.2s ease;
+  }
+}
+
+.bottomSection {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-2;
+  width: 100%;
+  padding-bottom: 8px;
+}

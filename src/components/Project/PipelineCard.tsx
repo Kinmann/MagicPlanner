@@ -1,15 +1,27 @@
 import React, { useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { 
+  FileText, Settings, Layout, GitBranch, 
+  Database, Grid, Zap, CheckCircle, 
+  Play, Square, RotateCcw, Eye, Edit3,
+  RefreshCw
+} from 'lucide-react';
+
 import { DocumentNode, LocalModule } from '../../types/project';
 import { formatNodeTitle } from '../../utils/formatters';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
-import './PipelineCard.scss';
+import { Button } from '../ui/Button';
+import { Card } from '../ui/Card';
+import { Progress } from '../ui/Progress';
+import { Badge } from '../ui/Badge';
+import { Input } from '../ui/Input';
+import styles from './PipelineCard.module.scss';
 
 interface PipelineCardProps {
   node: DocumentNode;
   modules: LocalModule[];
-  onDimensionsChange?: (nodeType: string, dimensions: { width: number, height: number }) => void;
+  onDimensionsChange?: (type: string, dims: { width: number, height: number }) => void;
   isLocked?: boolean;
   disabled?: boolean;
 }
@@ -52,111 +64,131 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
     setIsEditingMax(false);
   };
 
-  const getNodeConfig = (type: string) => {
-    const configs: Record<string, { icon: string, agent: string }> = {
-      'PRD': { icon: 'description', agent: 'SpecWriter-v4' },
-      'FSD': { icon: 'settings_suggest', agent: 'System-Architect-v2' },
-      'IA': { icon: 'schema', agent: 'Architect-Prime' },
-      'User Flow': { icon: 'account_tree', agent: 'FlowDesigner-AI' },
-      'ERD': { icon: 'database', agent: 'DB-Architect' },
-      'Wireframe': { icon: 'grid_view', agent: 'UI-Gen-Pro' },
-      'API_Spec': { icon: 'api', agent: 'Backend-Pilot' },
-      'TC': { icon: 'task_alt', agent: 'QA-Validator' }
+  const getNodeIcon = (type: string) => {
+    const icons: Record<string, any> = {
+      'PRD': FileText,
+      'FSD': Settings,
+      'IA': Layout,
+      'User Flow': GitBranch,
+      'ERD': Database,
+      'Wireframe': Grid,
+      'API_Spec': Zap,
+      'TC': CheckCircle
     };
-    return configs[type] || { icon: 'help_outline', agent: 'AI-Agent' };
+    return icons[type] || FileText;
   };
 
   const statusConfig = (() => {
     switch (node.node_state) {
-      case 'PENDING': return { variant: 'is-pending', label: 'PENDING', active: false };
-      case 'PAUSED_STOPPED': return { variant: 'is-paused', label: 'Stopped', active: false };
-      case 'READY': return { variant: 'is-ready', label: 'READY', active: false };
-      case 'IN_PROGRESS': return { variant: 'node-active', label: 'IN PROGRESS', active: true };
-      case 'COMPLETED': return { variant: 'is-completed', label: 'COMPLETED', active: false };
-      case 'PAUSED_HITL': return { variant: 'is-warning', label: 'WAITING', active: false };
-      case 'PAUSED_API_ERROR': return { variant: 'is-error', label: 'ERROR', active: false };
-      case 'STALE': return { variant: 'is-stale', label: 'STALE', active: false };
-      case 'REFINING': return { variant: 'is-refining', label: 'REFINING', active: true };
-      default: return { variant: 'is-pending', label: 'PENDING', active: false };
+      case 'PENDING': return { variant: 'outline', label: 'PENDING', active: false };
+      case 'PAUSED_STOPPED': return { variant: 'outline', label: 'Stopped', active: false };
+      case 'READY': return { variant: 'outline', label: 'READY', active: false };
+      case 'IN_PROGRESS': return { variant: 'primary', label: 'RUNNING', active: true };
+      case 'COMPLETED': return { variant: 'success', label: 'COMPLETED', active: false };
+      case 'PAUSED_HITL': return { variant: 'secondary', label: 'WAITING', active: false };
+      case 'PAUSED_API_ERROR': return { variant: 'danger', label: 'ERROR', active: false };
+      case 'STALE': return { variant: 'outline', label: 'STALE', active: false };
+      case 'REFINING': return { variant: 'primary', label: 'REFINING', active: true };
+      default: return { variant: 'outline', label: 'PENDING', active: false };
     }
   })();
 
-  const nodeConfig = getNodeConfig(node.target_node_type);
+  const IconComp = getNodeIcon(node.target_node_type);
 
   return (
-    <div 
-      className={`pipeline-node ${statusConfig.variant}`}
+    <Card 
+      className={`${styles.card} ${node.node_state === 'COMPLETED' ? styles.completed : ''}`}
       onClick={() => setSelectedNode(node.node_id)}
-      style={{ cursor: 'pointer' }}
       ref={containerRef}
     >
-      <div className="port port-in"></div>
-      <div className="port port-out"></div>
+      <div className={styles.ports}>
+        <div className={`${styles.port} ${styles.in}`}></div>
+        <div className={`${styles.port} ${styles.out}`}></div>
+      </div>
       
-      <div className="pipeline-node__header">
-        <div className="header-label-group">
-          <div className="node-icon"><span className="material-symbols-outlined">{nodeConfig.icon}</span></div>
-          <span className="node-label">{formatNodeTitle(node, modules)}</span>
+      <div className={styles.header}>
+        <div className={styles.labelGroup}>
+          <IconComp size={16} className={styles.icon} />
+          <span className={styles.name}>{formatNodeTitle(node, modules)}</span>
         </div>
-        <div className="status-indicator">
-          {statusConfig.active && <span className="pulse-dot"></span>}
-          <span className="status-text">{statusConfig.label}</span>
-        </div>
+        <Badge variant={statusConfig.variant as any} className="gap-1.5">
+          {statusConfig.active && <span className={styles.pulseDot}></span>}
+          {statusConfig.label}
+        </Badge>
       </div>
 
-      <div className="pipeline-node__body">
-        <div className="node-main-row">
-          <div className="node-iteration-info">
-            <div className="agent-info"><span className="label">AGENT:</span><span className="value">{nodeConfig.agent}</span></div>
-            <div className="iteration-header">
-              <span className="label">ITERATION PROGRESS</span>
-              <div className="counter-container">
+      <div className={styles.body}>
+        <div className={styles.infoRow}>
+          <div className={styles.iterationBox}>
+            <div className="flex justify-between items-center mb-1.5">
+              <span className={styles.label}>Progress</span>
+              <div className="flex items-center gap-1.5">
                 {isEditingMax ? (
-                  <input type="number" className="max-input inline" value={tempMax} onChange={(e) => setTempMax(parseInt(e.target.value) || 1)} onBlur={handleUpdateMax} onKeyDown={(e) => e.key === 'Enter' && handleUpdateMax()} onClick={(e) => e.stopPropagation()} autoFocus />
+                  <Input 
+                    type="number" 
+                    className="w-16 h-6 py-0 px-1 text-[10px]"
+                    value={tempMax} 
+                    onChange={(e) => setTempMax(parseInt(e.target.value) || 1)} 
+                    onBlur={handleUpdateMax} 
+                    onKeyDown={(e) => e.key === 'Enter' && handleUpdateMax()} 
+                    onClick={(e) => e.stopPropagation()} 
+                    autoFocus 
+                  />
                 ) : (
                   <>
-                    <span className="value">{node.current_iteration} / {node.max_iterations}</span>
-                    {!isLocked && <button className="edit-btn" onClick={(e) => { e.stopPropagation(); setIsEditingMax(true); }}><span className="material-symbols-outlined">edit</span></button>}
+                    <span className="text-[10px] font-mono font-bold opacity-80">{node.current_iteration} / {node.max_iterations}</span>
+                    {!isLocked && <Edit3 size={10} className="opacity-40 hover:opacity-100 cursor-pointer" onClick={(e) => { e.stopPropagation(); setIsEditingMax(true); }} />}
                   </>
                 )}
               </div>
             </div>
-            <div className="progress-track"><div className="progress-fill" style={{ width: `${(node.current_iteration / node.max_iterations) * 100}%` }}></div></div>
+            <Progress value={Math.min(100, (node.current_iteration / node.max_iterations) * 100)} size="sm" />
           </div>
-          <div className="score-panel"><span className="label">SCORE</span><span className="value">{node.current_best_score}</span></div>
+          <div className={styles.scorePanel}>
+            <span className={styles.label}>Score</span>
+            <span className={styles.value}>{node.current_best_score.toFixed(1)}</span>
+          </div>
         </div>
       </div>
 
-      <div className="pipeline-node__actions">
+      <div className={styles.actions}>
         {node.node_state === 'READY' && (
-          <button className="btn btn-primary" disabled={isLocked || disabled} onClick={(e) => { e.stopPropagation(); runNode(node.node_id); }}>
-            <span className="material-symbols-outlined">play_arrow</span> Execute Node
-          </button>
+          <Button variant="primary" size="sm" className="w-full" disabled={isLocked || disabled} onClick={(e) => { e.stopPropagation(); runNode(node.node_id); }} leftIcon={<Play size={12} />}>
+            Execute
+          </Button>
         )}
         {node.node_state === 'STALE' && (
-          <button className="btn btn-warning" onClick={(e) => { e.stopPropagation(); runNode(node.node_id); }}>
-            <span className="material-symbols-outlined">update</span> Refine Node
-          </button>
+          <Button variant="secondary" size="sm" className="w-full" onClick={(e) => { e.stopPropagation(); runNode(node.node_id); }} leftIcon={<RotateCcw size={12} />}>
+            Refine
+          </Button>
         )}
         {node.node_state === 'PAUSED_STOPPED' && (
-          <button className="btn btn-primary" disabled={isLocked || disabled} onClick={(e) => { e.stopPropagation(); resumeNode(node.node_id); }}>
-            <span className="material-symbols-outlined">settings_backup_restore</span> Resume Node
-          </button>
+          <Button variant="primary" size="sm" className="w-full" disabled={isLocked || disabled} onClick={(e) => { e.stopPropagation(); resumeNode(node.node_id); }} leftIcon={<RefreshCw size={12} />}>
+            Resume
+          </Button>
         )}
         {node.node_state === 'PAUSED_HITL' && (
-          <div className="hitl-actions">
-            <button className="btn btn-ghost is-pass" disabled={isLocked || disabled} onClick={(e) => { e.stopPropagation(); handleHITLAction(node.node_id, 'APPROVE'); }}><span className="material-symbols-outlined">check</span> Pass</button>
-            <button className="btn btn-primary is-retry" disabled={isLocked || disabled} onClick={(e) => { e.stopPropagation(); handleHITLAction(node.node_id, 'RETRY'); }}><span className="material-symbols-outlined">refresh</span> Retry</button>
+          <div className="flex gap-1 w-full">
+            <Button variant="outline" size="sm" className="flex-1 border-secondary/30 text-secondary" disabled={isLocked || disabled} onClick={(e) => { e.stopPropagation(); handleHITLAction(node.node_id, 'APPROVE'); }} leftIcon={<CheckCircle size={12} />}>
+              Pass
+            </Button>
+            <Button variant="primary" size="sm" className="flex-1" disabled={isLocked || disabled} onClick={(e) => { e.stopPropagation(); handleHITLAction(node.node_id, 'RETRY'); }} leftIcon={<RotateCcw size={12} />}>
+              Retry
+            </Button>
           </div>
         )}
         {node.node_state === 'IN_PROGRESS' && (
-          <button className="btn btn-ghost is-stop" onClick={(e) => { e.stopPropagation(); stopNode(node.node_id); }}><span className="material-symbols-outlined">stop_circle</span> Stop</button>
+          <Button variant="ghost" size="sm" className="w-full text-danger hover:bg-danger/10" onClick={(e) => { e.stopPropagation(); stopNode(node.node_id); }} leftIcon={<Square size={12} />}>
+            Stop
+          </Button>
         )}
         {node.node_state === 'COMPLETED' && (
-          <button className="btn btn-ghost" onClick={(e) => { e.stopPropagation(); setSelectedNode(node.node_id); }}><span className="material-symbols-outlined">visibility</span> Inspect Output</button>
+          <Button variant="ghost" size="sm" className="w-full" onClick={(e) => { e.stopPropagation(); setSelectedNode(node.node_id); }} leftIcon={<Eye size={12} />}>
+            Inspect
+          </Button>
         )}
       </div>
-    </div>
+    </Card>
   );
 };
 

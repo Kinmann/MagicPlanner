@@ -1,0 +1,139 @@
+@use '../../styles/variables' as v;
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-8;
+}
+
+.dashboard {
+  display: flex;
+  align-items: center;
+  gap: v.$space-8;
+  padding: v.$space-8;
+  background: v.$background-container-high;
+  border: 1px solid v.$border;
+  border-radius: v.$radius-xl;
+  
+  &.pass { border-color: rgba(v.$accent, 0.3); background: rgba(v.$accent, 0.05); .scoreBadge { color: v.$accent; border-color: v.$accent; } }
+  &.fail { border-color: rgba(v.$error, 0.3); background: rgba(v.$error, 0.05); .scoreBadge { color: v.$error; border-color: v.$error; } }
+}
+
+.scoreBadge {
+  width: 80px;
+  height: 80px;
+  border: 4px solid v.$border;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  
+  .scoreValue { font-size: 28px; font-weight: 900; line-height: 1; }
+  .scoreLabel { font-size: 10px; font-weight: 800; opacity: 0.6; }
+}
+
+.statusInfo {
+  h3 { font-size: 20px; font-weight: 900; margin-bottom: 4px; }
+  p { font-size: 14px; color: v.$text-muted; }
+}
+
+.autoBanner {
+  display: flex;
+  align-items: center;
+  gap: v.$space-4;
+  padding: v.$space-4 v.$space-6;
+  background: rgba(v.$primary, 0.05);
+  border: 1px solid rgba(v.$primary, 0.2);
+  border-radius: v.$radius-lg;
+  
+  .bannerIcon { color: v.$primary; }
+  h4 { font-size: 14px; font-weight: 800; color: v.$primary; }
+  p { font-size: 12px; color: v.$text-muted; line-height: 1.5; }
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-4;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: v.$space-2;
+  h4 { font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: v.$foreground; }
+  .icon { color: v.$primary; opacity: 0.6; }
+}
+
+.hunkList {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-4;
+}
+
+.hunkCard {
+  background: v.$background-container-low;
+  border: 1px solid v.$border;
+  border-radius: v.$radius-lg;
+  padding: v.$space-4;
+  
+  &.add { border-left: 4px solid v.$accent; }
+  &.modify { border-left: 4px solid v.$primary; }
+  &.delete { border-left: 4px solid v.$error; }
+}
+
+.hunkMeta {
+  display: flex;
+  align-items: center;
+  gap: v.$space-3;
+  margin-bottom: v.$space-4;
+  .actionBadge { font-size: 10px; font-weight: 900; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; }
+  .pathLabel { font-family: v.$font-mono; font-size: 12px; color: v.$text-muted; }
+}
+
+.comparison {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-2;
+}
+
+.side {
+  background: #000;
+  border-radius: v.$radius-md;
+  padding: v.$space-3;
+  position: relative;
+  
+  .sideTag { position: absolute; top: 4px; right: 8px; font-size: 9px; font-weight: 900; opacity: 0.3; }
+  pre { margin: 0; font-family: v.$font-mono; font-size: 12px; color: v.$foreground; white-space: pre-wrap; word-break: break-all; }
+  
+  &.asIs { opacity: 0.6; border: 1px solid rgba(255, 255, 255, 0.05); }
+  &.toBe { border: 1px solid rgba(v.$primary, 0.2); }
+}
+
+.arrowIcon {
+  display: flex;
+  justify-content: center;
+  color: v.$primary;
+  opacity: 0.3;
+}
+
+.feedbackList {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-2;
+  background: #000;
+  padding: v.$space-4;
+  border-radius: v.$radius-lg;
+  border: 1px solid v.$border;
+}
+
+.feedbackItem {
+  display: flex;
+  align-items: center;
+  gap: v.$space-3;
+  font-size: 12px;
+  .badge { background: rgba(255, 255, 255, 0.1); padding: 1px 6px; border-radius: 3px; font-weight: 800; font-size: 10px; }
+  .content { color: v.$foreground; flex: 1; }
+  .location { font-size: 10px; opacity: 0.4; }
+}

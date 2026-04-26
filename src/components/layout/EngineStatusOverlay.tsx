@@ -1,21 +1,17 @@
 import React from "react";
+import { Activity, Layers } from "lucide-react";
 import { useEngineStore } from "../../store/engineStore";
-import "./EngineStatusOverlay.scss";
+import styles from "./EngineStatusOverlay.module.scss";
 
 const NODE_TYPE_LABELS: Record<string, string> = {
-  // Genesis PRD Stages
-  GPRD_Context_Goal: "Stage 1: Context & Goal",
-  GPRD_Capability_Actor: "Stage 2: Capability & Actor",
-  GPRD_Architecture_Schema: "Stage 3: Arch & Schema",
+  GPRD_Context_Goal: "Discovery Stage 1",
+  GPRD_Capability_Actor: "Discovery Stage 2",
+  GPRD_Architecture_Schema: "Discovery Stage 3",
   genesis_prd: "Genesis PRD",
-  
-  // SAD Stages
-  SAD_Global: "SAD-Global Context",
-  SAD_Module: "SAD-Module Split",
-  sad_global: "SAD-Global Context",
-  sad_module: "SAD-Module Split",
-  
-  // Module Nodes
+  SAD_Global: "SAD Global",
+  SAD_Module: "SAD Module",
+  sad_global: "SAD Global",
+  sad_module: "SAD Module",
   prd_module: "PRD",
   PRD: "PRD",
   FSD: "FSD",
@@ -33,23 +29,29 @@ const EngineStatusOverlay: React.FC = () => {
   if (runningNodes.length === 0) return null;
 
   return (
-    <div className="engine-status-overlay">
-      <div className="status-row">
-        <div className="status-badge-inline animate-pulse">LIVE</div>
-        <div className="title-group">
-          <span className="title">Engine Orchestrating...</span>
+    <div className={styles.overlay}>
+      <div className={styles.header}>
+        <div className={styles.liveBadge}>
+          <div className={styles.dot} />
+          <span>LIVE ENGINE</span>
         </div>
+        <span className={styles.title}>Orchestrating...</span>
+        <Activity size={14} className="text-primary opacity-40" />
       </div>
-      <div className="status-description custom-scrollbar">
+      
+      <div className={styles.list}>
         {runningNodes.map((node) => (
-          <div key={node.nodeId} className="status-item">
-            <span className="project-tag">
-              {node.projectName}
-            </span>
-            <span className="node-name">
-              [{NODE_TYPE_LABELS[node.nodeType] || node.nodeType}]
-            </span>
-            <span className="node-last-action">{node.lastAction || "Initializing..."}</span>
+          <div key={node.nodeId} className={styles.item}>
+            <div className="flex items-center gap-2">
+              <span className={styles.projectTag}>{node.projectName}</span>
+              <Layers size={10} className="opacity-20" />
+            </div>
+            <div className={styles.nodeInfo}>
+              <span className={styles.nodeName}>
+                {NODE_TYPE_LABELS[node.nodeType] || node.nodeType}
+              </span>
+              <span className={styles.action}>{node.lastAction || "Initializing..."}</span>
+            </div>
           </div>
         ))}
       </div>

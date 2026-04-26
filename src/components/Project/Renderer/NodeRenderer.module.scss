@@ -1,0 +1,116 @@
+@use '../../../styles/variables' as v;
+
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: v.$text-muted;
+  padding: v.$space-12;
+  text-align: center;
+
+  .iconWrapper {
+    background-color: rgba(v.$primary, 0.1);
+    padding: v.$space-4;
+    border-radius: v.$radius-full;
+    margin-bottom: v.$space-4;
+  }
+
+  .spinner {
+    width: 48px;
+    height: 48px;
+    border: 2px border-style(dashed) v.$primary;
+    border-style: dashed;
+    border-radius: v.$radius-full;
+    animation: spin 2s linear infinite;
+  }
+
+  h2 {
+    font-size: v.$text-xl;
+    font-weight: v.$font-weight-semibold;
+    margin-bottom: v.$space-2;
+  }
+}
+
+.rawMode {
+  padding: v.$space-8;
+  max-width: 1000px;
+  margin: 0 auto;
+  animation: fadeIn 0.3s ease forwards;
+
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: v.$space-4;
+
+    h2 {
+      font-size: v.$text-lg;
+      font-family: v.$font-mono;
+      color: v.$text-muted;
+    }
+  }
+
+  .codeBlock {
+    background-color: #121216;
+    border: 1px solid v.$border;
+    border-radius: v.$radius-lg;
+    padding: v.$space-6;
+    overflow: auto;
+    max-height: 70vh;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+
+    pre {
+      font-size: v.$text-sm;
+      font-family: v.$font-mono;
+      color: rgba(v.$primary, 0.8);
+      line-height: 1.6;
+    }
+  }
+}
+
+.fallback {
+  padding: v.$space-12;
+  max-width: 800px;
+  margin: 0 auto;
+  text-align: center;
+
+  h1 {
+    font-size: v.$text-2xl;
+    font-weight: v.$font-weight-bold;
+    margin-bottom: v.$space-4;
+    color: v.$primary;
+    opacity: 0.5;
+  }
+
+  p {
+    color: v.$text-muted;
+    margin-bottom: v.$space-8;
+    font-size: v.$text-lg;
+  }
+
+  .migrationNotice {
+    background-color: rgba(v.$text-muted, 0.1);
+    padding: v.$space-6;
+    border-radius: v.$radius-xl;
+    border: 1px solid rgba(v.$border, 0.5);
+    text-align: left;
+
+    p {
+      font-size: v.$text-sm;
+      font-style: italic;
+      margin-bottom: 0;
+    }
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}

@@ -1,625 +1,323 @@
-@import "../styles/variables";
-@import "../styles/mixins";
-
-$glow-primary: rgba(210, 187, 255, 0.08);
-$glow-secondary: rgba(124, 58, 237, 0.12);
-
-@mixin glass-panel {
-  background: rgba(23, 31, 51, 0.7);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba($outline-variant, 0.1);
-}
-
-@keyframes float {
-  0%, 100% { transform: translate(0, 0); }
-  50% { transform: translate(-20px, 20px); }
-}
+@use '../styles/variables' as v;
 
 .create-project-layout {
-  display: flex;
-  height: 100vh;
-  width: 100vw;
-  background-color: $surface;
-  color: $on-surface;
-  overflow: hidden;
-  position: relative;
-  font-family: 'Inter', sans-serif;
-
-  // Background Glows
-  .background-glow {
-    position: absolute;
-    border-radius: 50%;
-    filter: blur(120px);
-    pointer-events: none;
-    z-index: 0;
-    
-    &--1 {
-      top: 15%;
-      left: 10%;
-      width: 500px;
-      height: 500px;
-      background: $glow-primary;
-      animation: float 15s ease-in-out infinite;
-    }
-    
-    &--2 {
-      bottom: 10%;
-      right: 15%;
-      width: 450px;
-      height: 450px;
-      background: $glow-secondary;
-      animation: float 12s ease-in-out infinite reverse;
-    }
-  }
-}
-
-.create-project-sidebar {
-  width: 5rem;
-  background-color: $surface-container-lowest;
-  border-right: 1px solid rgba($outline-variant, 0.1);
-  z-index: 10;
-  flex-shrink: 0;
-
-  .sidebar-inner {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 1.5rem 1rem;
-    gap: 2rem;
-  }
-
-  .logo-container {
-    width: 2.5rem;
-    height: 2.5rem;
-    background: linear-gradient(135deg, $primary-container, $primary);
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 1.5rem;
-    cursor: pointer;
-    box-shadow: 0 8px 16px rgba($primary, 0.2);
-    transition: transform 0.2s;
-
-    &:hover {
-      transform: scale(1.05);
-    }
-
-    .material-symbols-outlined {
-      color: $on-primary;
-      font-size: 1.5rem;
-      font-variation-settings: 'FILL' 1;
-    }
-  }
-
-  .nav-items {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-    width: 100%;
-    align-items: center;
-  }
-
-  .sidebar-nav-button {
-    width: 3rem;
-    height: 3rem;
-    border-radius: 12px;
-    border: none;
-    background: none;
-    color: $on-surface-variant;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-    position: relative;
-
-    &:hover {
-      background-color: $surface-container-highest;
-      color: $on-surface;
-    }
-
-    &.active {
-      background: rgba($primary-container, 0.2);
-      color: $primary;
-    }
-
-    .material-symbols-outlined {
-      font-size: 1.5rem;
-    }
-  }
-
-  .sidebar-footer {
-    margin-top: auto;
-    width: 100%;
-    display: flex;
-    justify-content: center;
-  }
-}
-
-.create-project-main {
   flex: 1;
+  background-color: v.$background;
   display: flex;
-  flex-direction: column;
-  position: relative;
-  z-index: 1;
-  overflow: hidden;
-}
-
-.create-project-main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  z-index: 1;
-  overflow: hidden;
-}
-
-.create-project-content {
-  flex: 1;
-  padding: 40px 0;
-  display: flex;
-  flex-direction: column;
   align-items: center;
+  justify-content: center;
+  padding: v.$space-8;
   overflow-y: auto;
+  height: 100vh;
+}
 
-  .content-inner {
-    width: 100%;
-    max-width: 800px;
-    padding: 0 24px;
-  }
+.wizard-card {
+  background-color: v.$surface-sidebar;
+  border: 1px solid v.$border;
+  border-radius: v.$radius-xl;
+  width: 100%;
+  max-width: 42rem; // max-w-2xl
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 560px;
+}
 
-  .content-header {
-    text-align: center;
-    margin-bottom: 40px;
+.wizard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: v.$space-6;
+  border-bottom: 1px solid v.$border;
+  background-color: v.$accent; // bg-[#1e1e24] equivalent
+}
 
-    h2 {
-      font-size: 32px;
-      font-weight: 800;
-      letter-spacing: -0.03em;
-      margin-bottom: 8px;
-      color: $on-surface;
-    }
+.wizard-title {
+  font-size: v.$text-xl;
+  font-weight: v.$font-weight-bold;
+  color: v.$foreground;
+  display: flex;
+  align-items: center;
+  gap: v.$space-3;
 
-    p {
-      color: $primary;
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      opacity: 0.8;
-    }
-  }
-
-  .editor-container {
-    @include glass-panel;
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
-    transition: border-color 0.3s, box-shadow 0.3s;
-
-    &:focus-within {
-      border-color: rgba($primary, 0.5);
-      box-shadow: 0 10px 40px rgba($primary, 0.1);
-    }
-  }
-
-  .editor-footer-info {
-    margin-top: 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0 4px;
-  }
-
-  .counter-badge {
+  .icon-wrapper {
+    padding: v.$space-2;
+    background-color: v.$primary-muted;
+    border-radius: v.$radius-lg;
     display: flex;
     align-items: center;
-    gap: 8px;
-    background-color: $surface-container-low;
-    padding: 4px 10px;
-    border-radius: 6px;
-    border: 1px solid $outline-variant;
+    justify-content: center;
 
-    .dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      
-      &--warning {
-        background-color: #ffb4ab;
-        box-shadow: 0 0 8px #ffb4ab;
-      }
-      &--success {
-        background-color: #10b981;
-        box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
-      }
+    .icon {
+      color: v.$primary;
     }
-
-    .text {
-      font-size: 11px;
-      font-weight: 700;
-      color: $on-surface-variant;
-    }
-  }
-
-  .tip-msg {
-    color: rgba($on-surface-variant, 0.5);
   }
 }
 
-.create-project-info-sidebar {
-  width: 320px;
-  background-color: $surface-container-low;
-  border-left: 1px solid $outline-variant;
+.close-button {
+  color: v.$text-muted;
+  transition: color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    color: v.$foreground;
+  }
+}
+
+.progress-track {
+  width: 100%;
+  background-color: v.$border;
+  height: 4px;
+}
+
+.progress-fill {
+  background-color: v.$primary;
+  height: 100%;
+  transition: width 0.3s ease-out;
+}
+
+.wizard-body {
+  padding: v.$space-8;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  z-index: 10;
-  @include glass-panel;
-  border-right: none;
-  border-top: none;
-  border-bottom: none;
+}
 
-  .sidebar-header {
-    padding: 24px;
-    border-bottom: 1px solid $outline-variant;
+.step-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: v.$space-6;
+}
 
-    .title {
-      font-size: 18px;
-      font-weight: 800;
-      margin-bottom: 4px;
-      color: $on-surface;
-    }
+.step-header {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-2;
 
-    .subtitle {
-      font-size: 12px;
-      color: $on-surface-variant;
-    }
+  h2 {
+    font-size: v.$text-lg;
+    font-weight: v.$font-weight-semibold;
+    color: v.$foreground; // text-gray-200
   }
 
-  .sidebar-content {
-    flex: 1;
-    padding: 24px;
-    overflow-y: auto;
+  p {
+    font-size: v.$text-sm;
+    color: v.$text-muted; // text-gray-400
   }
+}
 
-  .info-group {
+.form-group-container {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-4;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+
+  label {
     display: flex;
-    flex-direction: column;
-    gap: 32px;
+    align-items: center;
+    gap: v.$space-2;
+    font-size: v.$text-sm;
+    font-weight: v.$font-weight-medium;
+    color: #d1d5db; // text-gray-300
+    margin-bottom: v.$space-1_5;
+
+    .label-icon {
+      color: v.$text-muted;
+    }
   }
 
-  .input-section {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+  .form-input, .form-textarea {
+    width: 100%;
+    background-color: v.$background; // bg-[#121216]
+    border: 1px solid v.$border; // border-[#27272a]
+    border-radius: v.$radius-md;
+    padding: 0.625rem v.$space-4; // py-2.5 px-4
+    color: v.$foreground; // text-gray-200
+    font-size: v.$text-base;
+    transition: all 0.2s;
 
-    label {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: $on-surface-variant;
-      display: flex;
-      align-items: center;
-      gap: 6px;
+    &::placeholder {
+      color: v.$text-muted;
     }
 
-    input {
-      background-color: $surface-container-lowest;
-      border: 1px solid rgba($outline-variant, 0.4);
-      border-radius: 8px;
-      padding: 12px 16px;
-      color: $on-surface;
-      font-size: 14px;
+    &:focus {
+      outline: none;
+      border-color: v.$primary;
+      box-shadow: 0 0 0 1px v.$primary;
+    }
+  }
+
+  .textarea-wrapper {
+    position: relative;
+    width: 100%;
+
+    .form-textarea {
+      width: 100%;
+      background-color: v.$background;
+      border: 1px solid v.$border;
+      border-radius: v.$radius-md;
+      padding: 0.625rem v.$space-4;
+      padding-bottom: v.$space-8; // Extra padding for the counter
+      color: v.$foreground;
+      font-size: v.$text-base;
       transition: all 0.2s;
+      resize: none;
+
+      &::placeholder {
+        color: v.$text-muted;
+      }
 
       &:focus {
         outline: none;
-        border-color: rgba($primary, 0.5);
-        background-color: $surface-container-low;
-        box-shadow: 0 0 0 1px rgba($primary, 0.2);
-      }
-
-      &::placeholder {
-        color: rgba($on-surface-variant, 0.3);
+        border-color: v.$primary;
+        box-shadow: 0 0 0 1px v.$primary;
       }
     }
-  }
 
-  .mode-section {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-
-    .label {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: $on-surface-variant;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-  }
-
-  .mode-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .mode-option {
-    cursor: pointer;
-    position: relative;
-
-    input {
+    .char-counter {
       position: absolute;
-      opacity: 0;
-      cursor: pointer;
-      height: 0;
-      width: 0;
-
-      &:checked + .mode-card {
-        border-color: $primary;
-        background-color: rgba($surface-container-highest, 0.4);
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-
-        .radio-circle {
-          border-color: $primary;
-          .radio-inner {
-            background-color: $primary-container;
-            transform: scale(1);
-          }
-        }
-
-        .mode-icon {
-          background-color: rgba($primary, 0.2);
-          color: $primary;
-        }
-
-        &::after {
-          content: '';
-          position: absolute;
-          left: -1px;
-          top: 25%;
-          height: 50%;
-          width: 3px;
-          background-color: $primary;
-          border-radius: 0 4px 4px 0;
-        }
-      }
-    }
-
-    .mode-card {
-      padding: 16px;
-      border: 1px solid rgba($outline-variant, 0.4);
-      border-radius: 12px;
-      background-color: $surface-container-low;
-      transition: all 0.3s;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-
-      &:hover {
-        background-color: $surface-container-high;
-        border-color: rgba($primary, 0.3);
-      }
-
-      .card-top {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-      }
-
-      .mode-icon {
-        padding: 8px;
-        background-color: $surface-container-highest;
-        border-radius: 8px;
-        color: $on-surface-variant;
-        transition: all 0.2s;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        
-        .material-symbols-outlined {
-          font-size: 20px;
-          font-variation-settings: 'FILL' 1;
-        }
-      }
-
-      .radio-circle {
-        width: 18px;
-        height: 18px;
-        border: 2px solid $outline-variant;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.2s;
-
-        .radio-inner {
-          width: 10px;
-          height: 10px;
-          border-radius: 50%;
-          background-color: transparent;
-          transform: scale(0);
-          transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-      }
-
-      .mode-info {
-        .name {
-          display: block;
-          font-size: 15px;
-          font-weight: 800;
-          color: $on-surface;
-          margin-bottom: 2px;
-        }
-        .desc {
-          display: block;
-          font-size: 12px;
-          color: $on-surface-variant;
-          line-height: 1.4;
-          opacity: 0.8;
-        }
-      }
-    }
-  }
-
-  .sidebar-footer {
-    padding: 24px;
-    border-top: 1px solid $outline-variant;
-    background-color: rgba($surface-container-low, 0.5);
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-
-    .create-button {
-      width: 100%;
-      height: 48px;
-      background: linear-gradient(135deg, $primary-container, $primary);
-      border: none;
-      border-radius: 8px;
-      color: $on-primary-container;
-      font-weight: 900;
-      font-size: 14px;
-      letter-spacing: -0.01em;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      cursor: pointer;
-      box-shadow: 0 4px 15px rgba($primary-container, 0.4);
-      transition: all 0.3s;
-
-      &:hover:not(:disabled) {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba($primary-container, 0.6);
-      }
-
-      &:active:not(:disabled) {
-        transform: translateY(0);
-      }
-
-      &:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-        background: $surface-container-highest;
-        box-shadow: none;
-        color: $on-surface-variant;
-      }
-
-      .material-symbols-outlined {
-        font-size: 20px;
-        font-variation-settings: 'FILL' 1;
-      }
-    }
-
-    .error-msg {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px;
-      background-color: rgba(#ffb4ab, 0.1);
-      border-radius: 6px;
-      color: #ffb4ab;
-      font-size: 12px;
-      font-weight: 500;
-
-      .material-symbols-outlined {
-        font-size: 16px;
-      }
+      bottom: v.$space-2;
+      right: v.$space-3;
+      font-size: 11px;
+      color: v.$text-muted;
+      pointer-events: none;
     }
   }
 }
 
-// SimpleMDE Overrides for Dark Mode
-.editor-container {
-    .CodeMirror {
-      background: transparent !important;
-      color: $on-surface !important;
-      border: none !important;
-      font-family: 'JetBrains Mono', 'Fira Code', monospace;
-      font-size: 14px;
-      padding: 10px;
+.mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: v.$space-4;
+}
 
-      // Show all markdown formatting characters clearly
-      .cm-formatting {
-        opacity: 0.8;
-        display: inline-block !important;
-        color: $primary !important;
-      }
-      .CodeMirror-activeline .cm-formatting {
-        opacity: 1;
-      }
+.mode-card {
+  padding: v.$space-4;
+  border-radius: v.$radius-lg;
+  border: 1px solid v.$border;
+  background-color: v.$background;
+  color: v.$text-muted;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-3;
 
-      // 1. Keep List Markers visible and slightly emphasized
-      .cm-formatting-list {
-        display: inline-block !important;
-        opacity: 0.7 !important;
-        color: $primary !important;
-        font-weight: 700;
-      }
+  &:hover {
+    border-color: #71717a; // border-gray-500
+    background-color: v.$surface-sidebar; // bg-[#18181b]
+  }
 
-      // 2. Custom Caret (Cursor) Styling
-      .CodeMirror-cursor {
-        border-left: 2px solid $primary !important;
-        background: none !important;
-      }
+  &.selected {
+    background-color: v.$primary-muted; // bg-[#10b981]/10
+    border-color: v.$primary;
+    color: v.$primary;
 
-      // 3. Code Block & Inline Code Styling
-      .cm-comment {
-        font-family: inherit;
-        color: #d2bbff !important; // Vibrant primary-ish color
-        background: rgba(210, 187, 255, 0.08);
-        padding: 1px 4px;
-        border-radius: 4px;
-        opacity: 1 !important;
-        font-weight: 500;
-      }
-
-      // 4. Headline scaling in editor
-      .cm-header-1 { font-size: 1.5rem !important; }
-      .cm-header-2 { font-size: 1.3rem !important; }
-      .cm-header-3 { font-size: 1.1rem !important; }
+    .mode-icon-wrapper {
+      background-color: rgba(v.$primary, 0.2);
     }
 
-  .editor-toolbar {
-    background: rgba($surface-container-highest, 0.4) !important;
-    border: none !important;
-    border-bottom: 1px solid $outline-variant !important;
-    opacity: 1 !important;
-    padding: 6px 12px !important;
-
-    button {
-      color: $on-surface-variant !important;
-      border: 1px solid transparent !important;
-      border-radius: 4px !important;
-      margin-right: 4px !important;
-
-      &:hover, &.active {
-        background: rgba($primary, 0.1) !important;
-        color: $primary !important;
-        border-color: rgba($primary, 0.2) !important;
+    .mode-text {
+      h3 {
+        color: v.$foreground;
       }
-    }
-
-    .separator {
-      border-right: 1px solid $outline-variant !important;
-      border-left: none !important;
     }
   }
 
-  .editor-statusbar {
-    color: $on-surface-variant !important;
-    padding: 8px 12px !important;
-    font-size: 10px !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.05em !important;
-    text-transform: uppercase !important;
-    opacity: 0.6 !important;
+  .mode-icon-wrapper {
+    padding: v.$space-2;
+    width: fit-content;
+    border-radius: v.$radius-md;
+    background-color: v.$border; // bg-[#27272a]
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mode-text {
+    h3 {
+      font-weight: v.$font-weight-semibold;
+      font-size: v.$text-sm;
+      color: #d1d5db; // text-gray-300
+      margin-bottom: v.$space-1;
+      transition: color 0.2s ease;
+    }
+
+    p {
+      font-size: v.$text-xs;
+      color: v.$text-muted; // text-gray-500
+    }
+  }
+}
+
+.error-message {
+  margin-top: v.$space-4;
+  padding: v.$space-3 v.$space-4;
+  background-color: rgba(v.$error, 0.1);
+  border: 1px solid rgba(v.$error, 0.2);
+  color: v.$error;
+  border-radius: v.$radius-md;
+  font-size: v.$text-sm;
+}
+
+.wizard-footer {
+  margin-top: auto;
+  padding-top: v.$space-6;
+  border-top: 1px solid v.$border;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  .btn-back {
+    color: v.$text-muted; // text-gray-400
+    padding: v.$space-2 v.$space-4;
+    font-weight: v.$font-weight-medium;
+    transition: color 0.2s ease;
+    display: flex;
+    align-items: center;
+
+    &:hover {
+      color: v.$foreground;
+    }
+  }
+
+  .btn-next, .btn-create {
+    display: flex;
+    align-items: center;
+    gap: v.$space-2;
+    background-color: v.$primary;
+    color: v.$background; // text-[#121216]
+    font-weight: v.$font-weight-semibold;
+    padding: v.$space-2 v.$space-6;
+    border-radius: v.$radius-md;
+    transition: all 0.2s ease;
+    border: none;
+
+    &:hover:not(:disabled) {
+      background-color: v.$primary-dark; // hover:bg-[#059669]
+    }
+
+    &:disabled {
+      background-color: v.$border; // bg-[#27272a]
+      color: v.$text-muted; // text-gray-500
+      cursor: not-allowed;
+    }
+  }
+
+  .btn-create {
+    box-shadow: 0 0 15px rgba(v.$primary, 0.3);
+
+    &:hover:not(:disabled) {
+      box-shadow: 0 0 20px rgba(v.$primary, 0.4);
+    }
   }
 }

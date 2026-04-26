@@ -1,0 +1,89 @@
+@use '../../styles/variables' as v;
+
+.headerBar {
+  display: flex;
+  align-items: center;
+  gap: v.$space-5;
+  padding: v.$space-6;
+  background: rgba(v.$warning, 0.05);
+  border-bottom: 1px solid rgba(v.$warning, 0.1);
+  transition: all 0.3s ease;
+}
+
+.isSuccess {
+  background: rgba(v.$accent, 0.05) !important;
+  border-bottom-color: rgba(v.$accent, 0.1) !important;
+  .iconBox { color: v.$accent !important; border-color: rgba(v.$accent, 0.3) !important; background: rgba(v.$accent, 0.1) !important; box-shadow: 0 0 15px rgba(v.$accent, 0.2) !important; }
+  .titleGroup h2 { color: v.$accent !important; }
+}
+
+.iconBox {
+  width: 48px;
+  height: 48px;
+  background: rgba(v.$warning, 0.1);
+  border: 1px solid rgba(v.$warning, 0.3);
+  border-radius: v.$radius-lg;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: v.$warning;
+  box-shadow: 0 0 15px rgba(v.$warning, 0.2);
+}
+
+.titleGroup {
+  h2 { font-size: 18px; font-weight: 800; color: v.$warning; margin-bottom: 2px; }
+  p { font-size: 13px; color: v.$text-muted; }
+}
+
+.body { padding: v.$space-6; }
+
+.detailSection {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-2;
+  label { font-size: 11px; font-weight: 800; color: v.$text-muted; text-transform: uppercase; letter-spacing: 0.05em; }
+}
+
+.detailContainer {
+  background-color: v.$background-container-high;
+  border: 1px solid v.$border;
+  border-radius: v.$radius-md;
+  padding: v.$space-4;
+}
+
+.detailItem {
+  display: flex;
+  gap: v.$space-3;
+  margin-bottom: v.$space-2;
+  &:last-child { margin-bottom: 0; }
+  
+  .dot { color: v.$text-muted; opacity: 0.5; font-size: 8px; margin-top: 4px; }
+  .content { font-size: 13px; color: v.$foreground; }
+  .highlight { font-weight: 800; color: v.$text-muted; margin-right: 6px; font-size: 11px; }
+}
+
+.actionArea {
+  padding: v.$space-4 v.$space-6;
+  background-color: v.$background-container-high;
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-4;
+}
+
+.buttonRow {
+  display: flex;
+  justify-content: flex-end;
+  gap: v.$space-3;
+}
+
+.dismissRow {
+  display: flex;
+  justify-content: center;
+  padding-top: v.$space-2;
+  border-top: 1px solid v.$border;
+  
+  .dismissBtn {
+    background: transparent; border: none; color: v.$text-muted; font-size: 12px; font-weight: 600; text-decoration: underline; cursor: pointer;
+    &:hover { color: v.$foreground; }
+  }
+}

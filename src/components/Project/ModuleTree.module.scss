@@ -1,0 +1,84 @@
+@use '../../styles/variables' as v;
+
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: v.$space-2;
+  padding: v.$space-4 v.$space-6;
+  font-size: 11px;
+  font-weight: 900;
+  color: v.$primary;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  opacity: 0.6;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  padding: 0 v.$space-2;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: v.$space-3;
+  padding: v.$space-3 v.$space-4;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: v.$radius-md;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  width: 100%;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.05);
+  }
+}
+
+.selected {
+  background: rgba(v.$primary, 0.1) !important;
+  border-color: rgba(v.$primary, 0.2) !important;
+  .itemName { color: v.$primary; font-weight: 800; }
+}
+
+.itemIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  
+  &.completed { color: v.$accent; }
+  &.active { color: v.$primary; }
+  &.pending { color: v.$text-muted; opacity: 0.5; }
+}
+
+.itemInfo {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  
+  .itemName {
+    font-size: 13px;
+    color: v.$foreground;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  .itemOrder {
+    font-size: 10px;
+    font-family: v.$font-mono;
+    opacity: 0.4;
+  }
+}

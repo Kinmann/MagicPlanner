@@ -1,0 +1,47 @@
+@use '../../styles/variables' as v;
+
+.statusBar {
+  height: 24px;
+  background-color: #18181b;
+  border-top: 1px solid v.$border;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  font-size: 11px;
+  color: v.$primary;
+  user-select: none;
+}
+
+.leftSection, .rightSection {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+
+  span {
+    font-weight: 500;
+  }
+}
+
+.mutedItem {
+  color: #6b7280;
+}
+
+.rightSection {
+  color: #9ca3af;
+  .item:hover { color: #f3f4f6; }
+}

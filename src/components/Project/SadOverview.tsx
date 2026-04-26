@@ -2,22 +2,29 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { invoke } from '@tauri-apps/api/core';
 import { ask } from '@tauri-apps/plugin-dialog';
+import { 
+  Terminal, Database, ShieldCheck, 
+  Layers, Box, GitBranch, Map, History,
+  Square, RotateCcw, Check,
+  Rocket, Sparkles, FileText,
+  Zap, Trash2, Undo2
+} from 'lucide-react';
 
 import { GenerationIteration, GlobalContext, CONTEXT_TYPE_LABELS } from '../../types/project';
-import Button from '../common/Button';
+import { Button } from '../ui/Button';
 import SadSpecRenderer from './SadSpecRenderer';
 import { useProjectStore } from '../../store/projectStore';
-import './SadOverview.scss';
+import styles from './SadOverview.module.scss';
 
-const CONTEXT_ICONS: Record<string, string> = {
-  sad_non_tech: 'description',
-  sad_tech_stack: 'terminal',
-  sad_core_erd: 'database',
-  sad_auth_rbac: 'security',
-  sad_interface_error: 'api',
-  sad_module_list: 'view_module',
-  sad_epic_mapping: 'map',
-  sad_module_deps: 'account_tree',
+const CONTEXT_ICONS: Record<string, any> = {
+  sad_non_tech: FileText,
+  sad_tech_stack: Terminal,
+  sad_core_erd: Database,
+  sad_auth_rbac: ShieldCheck,
+  sad_interface_error: Zap,
+  sad_module_list: Box,
+  sad_epic_mapping: Map,
+  sad_module_deps: GitBranch,
 };
 
 interface SadOverviewProps {
@@ -27,7 +34,7 @@ interface SadOverviewProps {
 const SadOverview: React.FC<SadOverviewProps> = ({ isLocked = false }) => {
   const { 
     currentProject, nodes, 
-    runSadPipeline, stopNode, resumeNode,
+    runSadPipeline, stopNode,
     approveSadNode, confirmSadIteration, unconfirmIteration,
     deleteIteration, updateMaxIterations, createLocalModules
   } = useProjectStore(useShallow(state => ({
@@ -35,7 +42,6 @@ const SadOverview: React.FC<SadOverviewProps> = ({ isLocked = false }) => {
     nodes: state.nodes,
     runSadPipeline: state.runSadPipeline,
     stopNode: state.stopNode,
-    resumeNode: state.resumeNode,
     approveSadNode: state.approveSadNode,
     confirmSadIteration: state.confirmSadIteration,
     unconfirmIteration: state.unconfirmIteration,
@@ -54,11 +60,9 @@ const SadOverview: React.FC<SadOverviewProps> = ({ isLocked = false }) => {
   const [selectedGlobalIterId, setSelectedGlobalIterId] = useState<string | null>(null);
   const [selectedModuleIterId, setSelectedModuleIterId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [targetCount, setTargetCount] = useState(8);
   const [tempMax, setTempMax] = useState(10);
   const [viewMode, setViewMode] = useState<'STEP' | 'INTEGRATED' | 'RAW'>('STEP');
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [isAiGuidanceOpen, setIsAiGuidanceOpen] = useState(false);
 
   const currentNode = activeStage === 'GLOBAL' ? globalNode : moduleNode;
   const currentIters = activeStage === 'GLOBAL' ? globalIters : moduleIters;
@@ -72,17 +76,13 @@ const SadOverview: React.FC<SadOverviewProps> = ({ isLocked = false }) => {
     return contexts.filter(c => c.iteration_id === currentSelectedIterId);
   }, [contexts, currentSelectedIterId]);
 
-  // [FIX] 만약 filteredContexts가 비어있다면(백엔드 동기화 지연 등), iteration draft JSON에서 직접 추출
   const derivedContexts = useMemo(() => {
     if (filteredContexts.length > 0) return filteredContexts;
-    
     const currentDraft = currentIters[currentIterIdx]?.generated_draft_json;
     if (!currentDraft) return [];
-    
     try {
       const json = typeof currentDraft === 'string' ? JSON.parse(currentDraft) : currentDraft;
       const dataObj = json.contexts || json;
-      
       return Object.entries(dataObj)
         .filter(([type]) => CONTEXT_TYPE_LABELS[type] || type.startsWith('sad_'))
         .map(([type, data]) => ({
@@ -95,28 +95,21 @@ const SadOverview: React.FC<SadOverviewProps> = ({ isLocked = false }) => {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })) as GlobalContext[];
-    } catch (e) {
-      console.error("Failed to derive contexts from draft:", e);
-      return [];
-    }
+    } catch (e) { return []; }
   }, [filteredContexts, currentIters, currentIterIdx, currentProject, currentSelectedIterId]);
 
-  // 자동 카테고리 설정
   useEffect(() => {
-    // activeCategory가 없거나, 현재 derivedContexts에 없는 카테고리인 경우 첫 번째 항목으로 설정
     const currentTypes = derivedContexts.map(c => c.context_type);
     if (derivedContexts.length > 0 && (!activeCategory || !currentTypes.includes(activeCategory))) {
       setActiveCategory(derivedContexts[0].context_type);
     }
-  }, [filteredContexts, activeCategory, derivedContexts]);
+  }, [derivedContexts, activeCategory]);
 
-  // Data Sync
   const syncData = async (force = false) => {
     if (!currentProject) return;
     try {
       const ctxs = await invoke<GlobalContext[]>('get_global_contexts', { projectId: currentProject.project_id });
       setContexts(ctxs);
-      
       if (globalNode) {
         const giters = await invoke<GenerationIteration[]>('get_node_iterations', { nodeId: globalNode.node_id });
         const sortedG = [...giters].sort((a, b) => a.iteration_number - b.iteration_number);
@@ -126,7 +119,6 @@ const SadOverview: React.FC<SadOverviewProps> = ({ isLocked = false }) => {
           setSelectedGlobalIterId((passIt || sortedG[sortedG.length - 1]).iteration_id);
         }
       }
-      
       if (moduleNode) {
         const miters = await invoke<GenerationIteration[]>('get_node_iterations', { nodeId: moduleNode.node_id });
         const sortedM = [...miters].sort((a, b) => a.iteration_number - b.iteration_number);
@@ -145,9 +137,8 @@ const SadOverview: React.FC<SadOverviewProps> = ({ isLocked = false }) => {
     if (currentNode) setTempMax(currentNode.max_iterations);
   }, [currentNode?.node_id, currentNode?.max_iterations]);
 
-
-  // Handlers
   const handleRun = async () => {
+    const targetCount = 8;
     setLoading(true);
     if (currentNode && tempMax !== currentNode.max_iterations) {
       await updateMaxIterations(currentNode.node_id, tempMax);
@@ -168,22 +159,15 @@ const SadOverview: React.FC<SadOverviewProps> = ({ isLocked = false }) => {
     const it = currentIters.find(i => i.iteration_id === iterId);
     if (!it) return;
     setLoading(true);
-    if (it.is_pass) {
-      await unconfirmIteration(it.iteration_id);
-    } else {
-      await confirmSadIteration(it.iteration_id);
-    }
+    if (it.is_pass) await unconfirmIteration(it.iteration_id);
+    else await confirmSadIteration(it.iteration_id);
     await syncData(true);
     setLoading(false);
   };
 
   const handleDeleteIteration = async (iterId: string) => {
-    const confirmed = await ask('이 이터레이션을 삭제하시겠습니까?', { 
-      title: 'Magic Planner',
-      kind: 'warning',
-    });
+    const confirmed = await ask('이 이터레이션을 삭제하시겠습니까?', { title: 'Delete Draft', kind: 'warning' });
     if (!confirmed) return;
-    
     setLoading(true);
     await deleteIteration(iterId);
     await syncData(true);
@@ -210,261 +194,178 @@ const SadOverview: React.FC<SadOverviewProps> = ({ isLocked = false }) => {
   const isCurrentLocked = activeStage === 'GLOBAL' ? isStage1Locked : isLocked;
 
   return (
-    <div className="sad-overview">
-      <div className="sad-overview__header-row">
-        <div className="header-info">
-          <h1>Software Architecture</h1>
-          <p className="description">
+    <div className={styles.container}>
+      {/* 1. Architecture Header */}
+      <div className={styles.headerRow}>
+        <div className={styles.headerInfo}>
+          <h1>Software Architecture Design</h1>
+          <p className={styles.description}>
             {activeStage === 'GLOBAL' 
-              ? '시스템의 전반적인 Tech Stack, Auth & RBAC, DB Schema 등 글로벌 컨텍스트를 설계합니다.' 
-              : '시스템의 기능적 모듈 분할과 각 모듈의 핵심 책임 및 상호작용 구조를 설계합니다.'}
+              ? 'Design global contexts including Tech Stack, Auth & RBAC, and Database Schemas.' 
+              : 'Define functional module partitioning and core responsibilities for each component.'}
           </p>
-          <div className="header-controls">
-            <div className="iteration-field">
-              <span className="label">ITERATION</span>
-              <div className="iteration-control-group">
-                <span className="current-count">{currentNode?.current_iteration || 0}</span>
-                <span className="separator">/</span>
+          <div className={styles.controls}>
+            <div className={styles.iterationBox}>
+              <span className={styles.label}>Iteration Budget</span>
+              <div className={styles.controlGroup}>
+                <span className={styles.current}>{currentNode?.current_iteration || 0}</span>
+                <span className={styles.sep}>/</span>
                 <input 
                   type="number" 
                   value={tempMax} 
                   onChange={(e) => setTempMax(parseInt(e.target.value) || 1)} 
-                  onBlur={() => currentNode && !isCurrentLocked && updateMaxIterations(currentNode.node_id, tempMax)} 
-                  disabled={loading || isCurrentLocked || currentNode?.node_state === 'COMPLETED'} 
+                  onBlur={() => currentNode && !isCurrentLocked && updateMaxIterations(currentNode.node_id, tempMax)}
+                  disabled={loading || isCurrentLocked || currentNode?.node_state === 'COMPLETED'}
                 />
               </div>
             </div>
-            {activeStage === 'MODULE' && (
-              <div className="iteration-field">
-                <span className="label">TARGET MODULES</span>
-                <div className="iteration-control-group">
-                  <input type="number" value={targetCount} onChange={(e) => setTargetCount(parseInt(e.target.value))} disabled={isCurrentLocked} />
-                </div>
-              </div>
-            )}
-            <div className="button-group">
+
+            <div className={styles.buttonGroup}>
               {currentNode?.node_state === 'IN_PROGRESS' ? (
-                <Button onClick={() => stopNode(currentNode.node_id)} variant="danger" leftIcon={<span className="material-symbols-outlined">stop</span>}>중단</Button>
+                <Button onClick={() => stopNode(currentNode.node_id)} variant="danger" leftIcon={<Square size={14} />}>Stop</Button>
               ) : (
-                <Button onClick={handleRun} disabled={loading || isCurrentLocked} variant={currentNode?.node_state === 'COMPLETED' ? "secondary" : "primary"} isLoading={loading} leftIcon={<span className="material-symbols-outlined">auto_fix</span>}>{currentNode?.node_state === 'COMPLETED' ? 'Regenerate' : '생성 시작'}</Button>
-              )}
-              {currentNode?.node_state === 'PAUSED_STOPPED' && (
-                <Button onClick={() => resumeNode(currentNode.node_id)} variant="primary" leftIcon={<span className="material-symbols-outlined">restore</span>}>재개</Button>
+                <Button 
+                  onClick={handleRun} 
+                  disabled={loading || isCurrentLocked} 
+                  variant={currentNode?.node_state === 'COMPLETED' ? "secondary" : "primary"} 
+                  isLoading={loading} 
+                  leftIcon={currentNode?.node_state === 'COMPLETED' ? <RotateCcw size={14} /> : <Zap size={14} />}
+                >
+                  {currentNode?.node_state === 'COMPLETED' ? 'Regenerate' : 'Generate'}
+                </Button>
               )}
               {currentIters.some(it => it.is_pass) && currentNode?.node_state !== 'COMPLETED' && !isCurrentLocked && (
-                <Button onClick={handleApproveStage} variant="primary" className="proceed-btn" leftIcon={<span className="material-symbols-outlined">send</span>}>다음 스텝</Button>
+                <Button onClick={handleApproveStage} variant="primary" leftIcon={<Check size={14} />}>Approve & Next</Button>
               )}
               {activeStage === 'MODULE' && (moduleNode?.node_state === 'COMPLETED') && !isCurrentLocked && (
-                <Button onClick={handleFinalize} variant="primary" className="proceed-btn" leftIcon={<span className="material-symbols-outlined">rocket_launch</span>}>설계 승인</Button>
+                <Button onClick={handleFinalize} variant="primary" leftIcon={<Rocket size={14} />}>Finalize Design</Button>
               )}
             </div>
           </div>
         </div>
-        <div className="header-right">
-          <div className="stage-stepper">
-            {[
-              { id: 'GLOBAL', label: 'Stage 1: Global', node: globalNode },
-              { id: 'MODULE', label: 'Stage 2: Module', node: moduleNode }
-            ].map((s, i) => (
-              <button 
-                key={s.id} 
-                className={`stage-step ${activeStage === s.id ? 'active' : ''} ${s.node?.node_state === 'COMPLETED' ? 'completed' : ''} ${(s.id === 'MODULE' && globalNode?.node_state !== 'COMPLETED') ? 'locked' : ''}`} 
-                onClick={() => (s.id === 'GLOBAL' || globalNode?.node_state === 'COMPLETED') && setActiveStage(s.id as any)}
-              >
-                <div className="step-num">{s.node?.node_state === 'COMPLETED' ? <span className="material-symbols-outlined">check</span> : i + 1}</div>
-                <div className="step-label">{s.label}</div>
-                {s.node && <span className={`state-badge state-${s.node.node_state.toLowerCase()}`}>{s.node.node_state}</span>}
-              </button>
-            ))}
-          </div>
+
+        <div className={styles.stepper}>
+          {[
+            { id: 'GLOBAL', label: 'Stage 1: Global', node: globalNode },
+            { id: 'MODULE', label: 'Stage 2: Module', node: moduleNode }
+          ].map((s, i) => (
+            <button 
+              key={s.id} 
+              className={`${styles.step} ${activeStage === s.id ? styles.active : ''} ${s.node?.node_state === 'COMPLETED' ? styles.completed : ''}`} 
+              onClick={() => (s.id === 'GLOBAL' || globalNode?.node_state === 'COMPLETED') && setActiveStage(s.id as any)}
+            >
+              <div className={styles.stepNum}>{s.node?.node_state === 'COMPLETED' ? <Check size={10} /> : i + 1}</div>
+              <div className={styles.stepLabel}>{s.label}</div>
+            </button>
+          ))}
         </div>
       </div>
 
-
+      {/* 2. Revision History */}
       {currentIters.length > 0 && (
-        <div className="revisions-horizontal">
-          <div className="revisions-header">
-            <div className="left"><span className="material-symbols-outlined">history</span><span>Revisions</span></div>
-            <div className="right">
-              <button 
-                className="ai-guidance-trigger" 
-                onClick={() => setIsAiGuidanceOpen(true)}
-                title="AI Intelligence Feedback"
-              >
-                <span className="material-symbols-outlined">auto_awesome</span>
-              </button>
-              <div className="view-mode-selector">
-                <button 
-                  className={`mode-btn ${viewMode === 'STEP' ? 'active' : ''}`}
-                  onClick={() => setViewMode('STEP')}
-                >
-                  카테고리별
-                </button>
-                <button 
-                  className={`mode-btn integrated-btn ${viewMode === 'INTEGRATED' ? 'active' : ''}`}
-                  onClick={() => setViewMode('INTEGRATED')}
-                >
-                  <span className="material-symbols-outlined">layers</span>
-                </button>
-                <button 
-                  className={`mode-btn ${viewMode === 'RAW' ? 'active' : ''}`}
-                  onClick={() => setViewMode('RAW')}
-                >
-                  RAW SPEC
-                </button>
-              </div>
+        <div className={styles.timeline}>
+          <div className={styles.timelineHeader}>
+            <h3><History size={14} /> Revision Timeline</h3>
+            <div className="flex gap-2">
+               <div className="btn-group">
+                 <button className={`btn btn--secondary btn--sm ${viewMode === 'STEP' ? 'active' : ''}`} onClick={() => setViewMode('STEP')}><Layers size={14} /></button>
+                 <button className={`btn btn--secondary btn--sm ${viewMode === 'INTEGRATED' ? 'active' : ''}`} onClick={() => setViewMode('INTEGRATED')}><Sparkles size={14} /></button>
+                 <button className={`btn btn--secondary btn--sm ${viewMode === 'RAW' ? 'active' : ''}`} onClick={() => setViewMode('RAW')}><Terminal size={14} /></button>
+               </div>
             </div>
           </div>
-          <div className="revisions-list custom-scrollbar">
+          <div className={styles.revisionList}>
             {currentIters.map((it) => (
-              <div key={it.iteration_id} className={`revision-btn ${currentSelectedIterId === it.iteration_id ? 'active' : ''} ${it.is_pass ? 'confirmed' : ''}`} onClick={() => (activeStage === 'GLOBAL' ? setSelectedGlobalIterId(it.iteration_id) : setSelectedModuleIterId(it.iteration_id))}>
-                <span className="iter-num">Draft #{it.iteration_number}</span>
-                {it.is_pass && <span className="material-symbols-outlined selected-icon">check_circle</span>}
-                <span className="iter-meta">{it.calculated_score}</span>
+              <div 
+                key={it.iteration_id} 
+                className={`${styles.revisionCard} ${currentSelectedIterId === it.iteration_id ? styles.active : ''} ${it.is_pass ? styles.confirmed : ''}`} 
+                onClick={() => (activeStage === 'GLOBAL' ? setSelectedGlobalIterId(it.iteration_id) : setSelectedModuleIterId(it.iteration_id))}
+              >
+                <span className={styles.iterNum}>Draft #{it.iteration_number}</span>
+                <span className={styles.score}>{it.calculated_score} <small>pts</small></span>
               </div>
             ))}
           </div>
           {currentIters[currentIterIdx] && !isCurrentLocked && (
-            <div className="revisions-action">
+            <div className="flex gap-2 mt-2">
               <Button 
                 onClick={() => currentSelectedIterId && handleConfirmIteration(currentSelectedIterId)} 
                 variant={currentIters[currentIterIdx].is_pass ? "ghost" : "secondary"} 
-                leftIcon={<span className="material-symbols-outlined">{currentIters[currentIterIdx].is_pass ? 'undo' : 'check_circle'}</span>}
+                size="sm"
+                leftIcon={currentIters[currentIterIdx].is_pass ? <Undo2 size={14} /> : <Check size={14} />}
               >
-                {currentIters[currentIterIdx].is_pass ? '확정 취소' : 'Draft 확정'}
+                {currentIters[currentIterIdx].is_pass ? 'Unconfirm' : 'Confirm Selection'}
               </Button>
               <Button 
-                onClick={(e) => { e.stopPropagation(); currentSelectedIterId && handleDeleteIteration(currentSelectedIterId); }} 
+                onClick={() => currentSelectedIterId && handleDeleteIteration(currentSelectedIterId)} 
                 variant="ghost" 
-                className="delete-btn"
-                leftIcon={<span className="material-symbols-outlined">delete</span>}
+                size="sm"
+                className="text-error"
+                leftIcon={<Trash2 size={14} />}
               >
-                삭제
+                Delete
               </Button>
             </div>
           )}
         </div>
       )}
 
-      <div className="sad-content-container">
-        {viewMode === 'RAW' ? (
-          <div className="sad-raw-spec custom-scrollbar">
-            <pre><code>{currentIters[currentIterIdx]?.generated_draft_json ? JSON.stringify(JSON.parse(currentIters[currentIterIdx].generated_draft_json), null, 2) : 'No data'}</code></pre>
-          </div>
-        ) : viewMode === 'INTEGRATED' ? (
-          <div className="sad-integrated-view custom-scrollbar">
-            <div className="integrated-view-header">
-              <div className="header-badge">ARCHITECTURAL SPEC</div>
-              <h2>Full System Specification</h2>
-              <p>전체 시스템 아키텍처 설계 내용을 통합된 문서 형태로 검토합니다.</p>
-            </div>
-            <div className="visual-view">
-              <div className="sad-overview-grid">
-                {derivedContexts.map(ctx => (
-                  <div key={ctx.context_id} className="context-card">
-                    <div className="spec-card-top">
-                      <span className="group-label">Architecture Definition</span>
-                      <span className="file-name">{ctx.context_type?.toUpperCase()}.JSON</span>
-                    </div>
-                    <div className="spec-card-inner">
-                      <div className="card-header">
-                        <div className="title-group">
-                          <span className="material-symbols-outlined icon">
-                            {CONTEXT_ICONS[ctx.context_type] || 'article'}
-                          </span>
-                          <span className="name">{CONTEXT_TYPE_LABELS[ctx.context_type] || ctx.context_type} Specification</span>
-                        </div>
-                      </div>
-                      <div className="card-content-wrapper custom-scrollbar">
-                        <SadSpecRenderer type={ctx.context_type} data={ctx.context_data_json} />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="sad-category-view">
-            <div className="category-sidebar custom-scrollbar">
-              {derivedContexts.map(ctx => (
+      {/* 3. Main Specification View */}
+      <div className={styles.mainLayout}>
+        {viewMode === 'STEP' && (
+          <aside className={styles.categorySidebar}>
+            {derivedContexts.map(ctx => {
+              const IconComp = CONTEXT_ICONS[ctx.context_type] || FileText;
+              return (
                 <button 
                   key={ctx.context_id} 
-                  className={`category-btn ${activeCategory === ctx.context_type ? 'active' : ''}`}
+                  className={`${styles.categoryBtn} ${activeCategory === ctx.context_type ? styles.active : ''}`}
                   onClick={() => setActiveCategory(ctx.context_type)}
                 >
-                  <span className="material-symbols-outlined icon">
-                    {CONTEXT_ICONS[ctx.context_type] || 'article'}
-                  </span>
-                  <span className="name">{CONTEXT_TYPE_LABELS[ctx.context_type] || ctx.context_type}</span>
+                  <IconComp className={styles.icon} size={14} />
+                  <span className={styles.name}>{CONTEXT_TYPE_LABELS[ctx.context_type] || ctx.context_type}</span>
                 </button>
+              );
+            })}
+          </aside>
+        )}
+
+        <main className={styles.contentArea}>
+          {viewMode === 'RAW' ? (
+            <pre className={styles.rawView}>
+              {currentIters[currentIterIdx]?.generated_draft_json ? JSON.stringify(JSON.parse(currentIters[currentIterIdx].generated_draft_json), null, 2) : 'No data'}
+            </pre>
+          ) : viewMode === 'INTEGRATED' ? (
+            <div className={styles.integratedGrid}>
+              {derivedContexts.map(ctx => (
+                <div key={ctx.context_id} className={styles.contextCard}>
+                  <div className={styles.cardTop}><span>Architecture</span><span>{ctx.context_type}</span></div>
+                  <div className={styles.cardInner}>
+                    <h4>{CONTEXT_TYPE_LABELS[ctx.context_type]}</h4>
+                    <SadSpecRenderer type={ctx.context_type} data={ctx.context_data_json} />
+                  </div>
+                </div>
               ))}
             </div>
-            <div className="category-main-content custom-scrollbar">
-              {activeCategory ? (
-                <div className="active-category-card">
-                  <div className="card-header">
-                    <h3>{CONTEXT_TYPE_LABELS[activeCategory] || activeCategory}</h3>
-                  </div>
-                  <div className="card-body">
-                    {derivedContexts.find(c => c.context_type === activeCategory) && (
-                      <SadSpecRenderer 
-                        type={activeCategory} 
-                        data={derivedContexts.find(c => c.context_type === activeCategory)?.context_data_json} 
-                      />
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="empty-category-notice">
-                  <span className="material-symbols-outlined">dashboard_customize</span>
-                  <p>좌측 사이드바에서 검토할 설계를 선택하세요.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {isAiGuidanceOpen && currentIters[currentIterIdx] && (
-        <div className="intelligence-feedback-overlay">
-          <div className="feedback-card">
-            <div className="feedback-header">
-              <h3>Intelligence Feedback</h3>
-              <button onClick={() => setIsAiGuidanceOpen(false)}><span className="material-symbols-outlined">close</span></button>
-            </div>
-            <div className="feedback-body">
-              <div className="score-section">
-                <span className="label">SCORE</span>
-                <span className="value">{currentIters[currentIterIdx].calculated_score}</span>
+          ) : (
+            <div className="flex flex-col h-full">
+              <header className={styles.specHeader}>
+                <h2>{CONTEXT_TYPE_LABELS[activeCategory || ''] || activeCategory} Specification</h2>
+              </header>
+              <div className={styles.specBody}>
+                {activeCategory && (
+                  <SadSpecRenderer 
+                    type={activeCategory} 
+                    data={derivedContexts.find(c => c.context_type === activeCategory)?.context_data_json} 
+                  />
+                )}
               </div>
-              {currentIters[currentIterIdx].critical_errors_array && (
-                <div className="feedback-group error">
-                  <h4>Critical Errors</h4>
-                  <ul>
-                    {JSON.parse(currentIters[currentIterIdx].critical_errors_array).map((e: any, i: number) => (
-                      <li key={i}>{e.description || e}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {currentIters[currentIterIdx].actionable_feedback_text && (
-                <div className="feedback-group info">
-                  <h4>Actionable Feedback</h4>
-                  <ul>
-                    {JSON.parse(currentIters[currentIterIdx].actionable_feedback_text).map((f: any, i: number) => (
-                      <li key={i}>{f.description || f}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
             </div>
-          </div>
-        </div>
-      )}
+          )}
+        </main>
+      </div>
     </div>
   );
 };
 
 export default SadOverview;
-

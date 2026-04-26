@@ -1,0 +1,80 @@
+@use '../../styles/variables' as v;
+
+.card {
+  background-color: v.$surface;
+  border: 1px solid v.$border;
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+}
+
+.cardHeader {
+  padding: 16px 20px;
+  border-bottom: 1px solid v.$border;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: v.$foreground;
+}
+
+.cardContent {
+  padding: 20px;
+}
+
+// Accordion
+.accordion {
+  border-bottom: 1px solid v.$border;
+}
+
+.accordionTrigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: v.$foreground;
+  transition: background-color 0.2s;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.03);
+  }
+}
+
+.accordionTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: v.$text-muted;
+}
+
+.open .accordionTitle {
+  color: v.$foreground;
+}
+
+.arrow {
+  transition: transform 0.2s ease;
+  color: v.$text-muted;
+}
+
+.open .arrow {
+  transform: rotate(180deg);
+  color: v.$primary;
+}
+
+.accordionContent {
+  overflow: hidden;
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.inner {
+  padding: 0 16px 16px 16px;
+}

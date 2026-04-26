@@ -1,9 +1,13 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import BaseModal from '../common/BaseModal';
-import Input from '../common/Input';
-import Button from '../common/Button';
-import './CreateProjectModal.scss';
+import { 
+  Sparkles 
+} from 'lucide-react';
+import { Dialog } from '../ui/Dialog';
+import { Input } from '../ui/Input';
+import { Button } from '../ui/Button';
+import { Textarea } from '../ui/Textarea';
+import { Alert } from '../ui/Alert';
 
 interface CreateProjectModalProps {
   isOpen: boolean;
@@ -21,7 +25,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (concept.length < 50) {
-       setError('기획 컨셉은 최소 50자 이상 입력해야 합니다.');
+       setError('Project concept must be at least 50 characters for effective AI analysis.');
        return;
     }
 
@@ -43,113 +47,88 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose
     }
   };
 
-  const footer = (
-    <>
-      <Button variant="ghost" onClick={onClose} type="button">
-        Cancel
-      </Button>
-      <Button 
-        variant="primary" 
-        type="submit" 
-        isLoading={isLoading}
-        form="create-project-form"
-      >
-        Create
-      </Button>
-    </>
-  );
-
   return (
-    <BaseModal
-      isOpen={isOpen}
-      onClose={onClose}
+    <Dialog 
+      isOpen={isOpen} 
+      onClose={onClose} 
       title="Create New Project"
-      subtitle="Initialization Phase"
-      footer={footer}
       size="md"
     >
-      <form id="create-project-form" onSubmit={handleSubmit} className="create-project-form">
-        {/* Project Name */}
-        <section className="form-section">
+      <div className="pt-4">
+        <form id="create-project-form" onSubmit={handleSubmit} className="space-y-6">
           <Input 
+            label="Project Identity"
             id="project-name"
-            label="Project Name"
-            placeholder="e.g., AI Healthcare App"
+            placeholder="e.g., Nexus AI Healthcare Platform"
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
             autoFocus
           />
-        </section>
 
-        {/* Execution Mode */}
-        <section className="form-section">
-          <span className="form-section__label">Pipeline Execution Mode</span>
-          <div className="mode-grid">
-            <label className="mode-option">
-              <input 
-                type="radio" 
-                name="execution-mode" 
-                value="AUTO" 
-                checked={mode === 'AUTO'} 
-                onChange={() => setMode('AUTO')}
-              />
-              <div className="mode-option__card">
-                <div className="radio-circle">
-                  <div className="radio-inner"></div>
-                </div>
-                <div className="mode-info">
-                  <span className="mode-name">AUTO</span>
-                  <span className="mode-desc">Continuous Logic flow</span>
-                </div>
-              </div>
-            </label>
-            <label className="mode-option">
-              <input 
-                type="radio" 
-                name="execution-mode" 
-                value="MANUAL" 
-                checked={mode === 'MANUAL'} 
-                onChange={() => setMode('MANUAL')}
-              />
-              <div className="mode-option__card">
-                <div className="radio-circle">
-                  <div className="radio-inner"></div>
-                </div>
-                <div className="mode-info">
-                  <span className="mode-name">MANUAL</span>
-                  <span className="mode-desc">Step-by-step review</span>
-                </div>
-              </div>
-            </label>
-          </div>
-        </section>
-
-        {/* Concept Description */}
-        <section className="form-section">
-          <span className="form-section__label">Initial Idea & Concept</span>
-          <div className="concept-textarea">
-            <textarea
-              placeholder="Describe your software project and who it's for. Provide context on the core problem it solves..."
-              value={concept}
-              onChange={(e) => setConcept(e.target.value)}
-              required
-            />
-            <div className="counter-badge">
-              <div className={`dot dot--${concept.length < 50 ? 'warning' : 'success'}`}></div>
-              <span className="text">{concept.length}/50 min</span>
+          <div className="space-y-2">
+            <label className="text-sm font-medium opacity-60">Pipeline Orchestration Mode</label>
+            <div className="flex gap-2 p-1 bg-black/20 rounded-lg border border-white/5">
+              {[
+                { value: 'AUTO', label: 'Autonomous', desc: 'AI flow' },
+                { value: 'MANUAL', label: 'Supervised', desc: 'Human review' }
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setMode(opt.value as any)}
+                  className={`flex-1 py-2 px-3 rounded-md text-xs transition-all ${
+                    mode === opt.value 
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                      : 'text-gray-500 hover:text-gray-300'
+                  }`}
+                >
+                  <div className="font-bold">{opt.label}</div>
+                  <div className="opacity-60 text-[10px]">{opt.desc}</div>
+                </button>
+              ))}
             </div>
           </div>
-        </section>
 
-        {error && (
-          <div className="error-banner">
-            <span className="material-symbols-outlined">warning</span>
-            {error}
+          <div className="space-y-2">
+            <Textarea 
+              label="Business Goal & Vision"
+              placeholder="Describe your software project, target audience, and the core problem it solves."
+              value={concept}
+              onChange={(e) => setConcept(e.target.value)}
+              rows={5}
+              required
+            />
+            <div className="flex justify-end">
+              <span className={`text-[10px] font-bold ${concept.length < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>
+                {concept.length} / 50 characters
+              </span>
+            </div>
           </div>
-        )}
-      </form>
-    </BaseModal>
+
+          {error && (
+            <Alert 
+              variant="error"
+              description={error}
+            />
+          )}
+
+          <div className="flex justify-end gap-3 mt-6">
+            <Button variant="ghost" onClick={onClose} type="button">
+              Cancel
+            </Button>
+            <Button 
+              variant="primary" 
+              type="submit" 
+              isLoading={isLoading}
+              leftIcon={<Sparkles size={16} />}
+            >
+              Initialize Project
+            </Button>
+          </div>
+        </form>
+      </div>
+    </Dialog>
   );
 };
 

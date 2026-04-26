@@ -1,0 +1,76 @@
+@use '../../styles/variables' as v;
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+// Variants
+.primary {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: v.$primary;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.secondary {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: v.$text-muted;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.success {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.warning {
+  background-color: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.2);
+}
+
+.error {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.outline {
+  background-color: transparent;
+  border: 1px solid v.$border;
+  color: v.$text-muted;
+}
+
+// Sizes
+.sm {
+  padding: 1px 6px;
+  font-size: 9px;
+}
+
+.md {
+  padding: 2px 8px;
+  font-size: 10px;
+}
+
+// Separator
+.separator {
+  background-color: v.$border;
+  opacity: 0.5;
+}
+
+.horizontal {
+  height: 1px;
+  width: 100%;
+}
+
+.vertical {
+  width: 1px;
+  height: 100%;
+}

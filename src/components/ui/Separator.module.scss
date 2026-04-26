@@ -1,0 +1,19 @@
+@use '../../styles/variables' as v;
+
+.separator {
+  background-color: v.$border;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.horizontal {
+  width: 100%;
+  height: 1px;
+  margin: v.$space-4 0;
+}
+
+.vertical {
+  width: 1px;
+  height: 100%;
+  margin: 0 v.$space-4;
+}

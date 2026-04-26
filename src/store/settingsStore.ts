@@ -16,23 +16,37 @@ export const useSettingsStore = create<SettingsState>((set) => ({
 
   loadSettings: async () => {
     try {
-      const store = await Store.load('settings.json');
-      const saved = await store.get<{ value: string }>('gemini_api_key');
-      set({ apiKey: saved?.value || "", isLoaded: true });
+      const isTauri = !!(window as any).__TAURI_INTERNALS__;
+      if (isTauri) {
+        const store = await Store.load('settings.json');
+        const saved = await store.get<{ value: string }>('gemini_api_key');
+        set({ apiKey: saved?.value || "", isLoaded: true });
+      } else {
+        const saved = localStorage.getItem('gemini_api_key');
+        set({ apiKey: saved || "", isLoaded: true });
+      }
     } catch (err) {
       console.error("Failed to load settings:", err);
-      set({ isLoaded: true });
+      // Fallback for any other error
+      const saved = localStorage.getItem('gemini_api_key');
+      set({ apiKey: saved || "", isLoaded: true });
     }
   },
 
   setApiKey: async (key: string) => {
     try {
-      const store = await Store.load('settings.json');
-      await store.set('gemini_api_key', { value: key });
-      await store.save();
+      const isTauri = !!(window as any).__TAURI_INTERNALS__;
+      if (isTauri) {
+        const store = await Store.load('settings.json');
+        await store.set('gemini_api_key', { value: key });
+        await store.save();
+      }
+      localStorage.setItem('gemini_api_key', key);
       set({ apiKey: key });
     } catch (err) {
       console.error("Failed to save API key:", err);
+      localStorage.setItem('gemini_api_key', key);
+      set({ apiKey: key });
     }
   }
 }));

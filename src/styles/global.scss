@@ -1,26 +1,30 @@
-@import './variables';
-@import './mixins';
+@use 'variables' as v;
+@use 'mixins' as m;
 
-// 0. Google Font & Icons Import
+// 0. Google Font Import
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@400;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
 
-// 1. Reset & Base Settings
+// 1. Reset & Base Settings (Tailwind-like Preflight)
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  border-width: 0;
+  border-style: solid;
+  border-color: v.$border;
 }
 
 html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background-color: $surface;
-  color: $on-surface;
-  font-family: $font-body;
+  background-color: v.$background;
+  color: v.$foreground;
+  font-family: v.$font-sans;
+  font-size: 16px; // Standard web font size (Reference Match)
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
@@ -34,10 +38,14 @@ button {
   background: none;
   cursor: pointer;
   outline: none;
-  @include active-scale;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+  transition: all 0.2s ease;
   
   &:disabled {
-    cursor:not-allowed;
+    cursor: not-allowed;
     opacity: 0.4;
   }
 }
@@ -48,6 +56,12 @@ input, textarea {
   background: transparent;
   color: inherit;
   font-family: inherit;
+  font-size: inherit;
+  
+  &::placeholder {
+    color: v.$text-muted;
+    opacity: 0.5;
+  }
 }
 
 a {
@@ -55,41 +69,78 @@ a {
   color: inherit;
 }
 
-// 3. Icon Setting (Material Symbols)
-.material-symbols-outlined {
-  display: inline-block;
-  line-height: 1;
-  text-transform: none;
-  letter-spacing: normal;
-  word-wrap: normal;
-  white-space: nowrap;
-  direction: ltr;
-  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+ul, ol {
+  list-style: none;
 }
 
-// 4. Utility Classes (Helpers)
-.glass-panel {
-  @include glass-panel;
+img, svg, video, canvas, audio, iframe, embed, object {
+  display: block;
+  vertical-align: middle;
 }
 
-.primary-gradient {
-  @include primary-gradient;
+img, video {
+  max-width: 100%;
+  height: auto;
 }
 
-.custom-scrollbar {
-  @include custom-scrollbar;
+// 3. VS Code Style Scrollbar
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
 }
 
-.text-label {
-  @include label-uppercase;
-  color: $on-surface-variant;
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.text-headline-medium {
-  @include headline-medium;
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.15);
+    background-clip: padding-box;
+  }
 }
 
-// 5. Animations
+// 4. Typography
+h1, h2, h3, h4, h5, h6 {
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+}
+
+p {
+  line-height: 1.6;
+}
+
+code {
+  font-family: v.$font-mono;
+  background-color: rgba(255, 255, 255, 0.05);
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+// 5. Utility Classes
+.text-primary { color: v.$primary !important; }
+.text-secondary { color: v.$accent !important; }
+.text-error { color: v.$error !important; }
+.text-warning { color: v.$warning !important; }
+.text-muted { color: v.$text-muted !important; }
+
+// 6. Animations
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease forwards;
+}
+
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
@@ -100,10 +151,11 @@ a {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 1; }
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.95); }
+  100% { opacity: 1; transform: scale(1); }
 }
 
 .animate-pulse {
-  animation: pulse 2s infinite ease-in-out;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }

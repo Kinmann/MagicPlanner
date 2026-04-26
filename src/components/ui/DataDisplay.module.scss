@@ -1,0 +1,62 @@
+@use '../../styles/variables' as v;
+
+.tableWrapper {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid v.$border;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 14px;
+}
+
+.tableHeader {
+  background-color: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid v.$border;
+}
+
+.tableHead {
+  padding: 12px 16px;
+  font-weight: 600;
+  color: v.$text-muted;
+}
+
+.tableRow {
+  border-bottom: 1px solid v.$border;
+  transition: background-color 0.2s;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.03);
+  }
+}
+
+.tableCell {
+  padding: 12px 16px;
+  color: v.$foreground;
+}
+
+// Skeleton
+.skeleton {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+  animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.circle {
+  border-radius: 50%;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}

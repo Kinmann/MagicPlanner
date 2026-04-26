@@ -1,116 +1,146 @@
-import React, { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { load, Store } from "@tauri-apps/plugin-store";
-import { motion } from "framer-motion";
-import Input from "./components/common/Input";
-import Button from "./components/common/Button";
-import "./SetupPage.scss";
+import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { Key, Sparkles, ArrowRight, ShieldCheck, Cpu, Info } from 'lucide-react';
+import { safeInvoke, isTauri } from './utils/tauri';
+import { useSettingsStore } from './store/settingsStore';
+import styles from './SetupPage.module.scss';
 
 interface SetupPageProps {
   onComplete: () => void;
   onBack?: () => void;
 }
 
-export default function SetupPage({ onComplete, onBack }: SetupPageProps) {
-  const [apiKey, setApiKey] = useState("");
-  const [isValidating, setIsValidating] = useState(false);
-  const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
-  const [errorMsg, setErrorMsg] = useState("");
-  const [store, setStore] = useState<Store | null>(null);
+export const SetupPage: React.FC<SetupPageProps> = ({ onComplete, onBack }) => {
+  const [key, setKey] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const setApiKeyInStore = useSettingsStore(state => state.setApiKey);
 
   useEffect(() => {
-    async function initStore() {
-      const s = await load("settings.json");
-      setStore(s);
-      const savedKey = await s.get<{ value: string }>("gemini_api_key");
-      if (savedKey) setApiKey(savedKey.value);
+    async function init() {
+      try {
+        if (isTauri()) {
+          const { load } = await import("@tauri-apps/plugin-store");
+          const store = await load("settings.json");
+          const savedKey = await store.get<{ value: string }>("gemini_api_key");
+          if (savedKey) setKey(savedKey.value);
+        } else {
+          const savedKey = localStorage.getItem('gemini_api_key');
+          if (savedKey) setKey(savedKey);
+        }
+      } catch (e) {
+        console.error("Failed to load settings", e);
+      }
     }
-    initStore();
+    init();
   }, []);
 
-  const handleValidate = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!apiKey) return;
-    setIsValidating(true);
-    setStatus("idle");
-    
-    try {
-      const isValid = await invoke<boolean>("validate_api_key", { apiKey });
-      if (isValid && store) {
-        await invoke("save_api_key", { apiKey });
-        await store.set("gemini_api_key", { value: apiKey });
-        await store.save();
-        
-        // settingsStore 상태 즉시 업데이트
-        const { useSettingsStore } = await import("./store/settingsStore");
-        useSettingsStore.getState().setApiKey(apiKey);
+    if (!key.trim()) return;
 
-        setStatus("success");
-        setTimeout(onComplete, 1200);
+    setIsSaving(true);
+    setErrorMsg(null);
+    try {
+      // 1. Backend Validation
+      if (isTauri()) {
+        const isValid = await safeInvoke<boolean>("validate_api_key", { apiKey: key.trim() });
+        if (!isValid) {
+          throw new Error("Invalid API key. Please check and try again.");
+        }
+
+        // 2. Persistent Storage (Tauri)
+        const { load } = await import("@tauri-apps/plugin-store");
+        const store = await load("settings.json");
+        await store.set("gemini_api_key", { value: key.trim() });
+        await store.save();
       }
-    } catch (e) {
-      setStatus("error");
-      setErrorMsg(String(e));
+
+      // Always save to localStorage for browser view support
+      localStorage.setItem('gemini_api_key', key.trim());
+      
+      // 3. Local State Update
+      setApiKeyInStore(key.trim());
+      
+      // 4. Navigation
+      onComplete();
+    } catch (err: any) {
+      setErrorMsg(err.message || String(err));
     } finally {
-      setIsValidating(false);
+      setIsSaving(false);
     }
   };
 
   return (
-    <div className="setup-container">
+    <div className={styles.setupPage}>
+      <div className={styles.backgroundEffects}>
+        <div className={styles.glow1} />
+        <div className={styles.glow2} />
+      </div>
+
       <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="setup-card"
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className={styles.setupCard}
       >
-        <div className="setup-header">
-          {onBack && (
-            <button onClick={onBack} className="back-btn material-symbols-outlined" title="Back">
-              arrow_back
-            </button>
-          )}
-          <div className="icon-wrapper">
-            <span className="material-symbols-outlined">key</span>
+        <div className={styles.header}>
+          <div className={styles.logoWrapper}>
+            <Sparkles className={styles.logoIcon} size={32} />
           </div>
+          <h1 className={styles.title}>Initialize Magic Planner</h1>
+          <p className={styles.subtitle}>
+            To power the AI orchestration pipelines, a valid Google Gemini API key is required.
+          </p>
         </div>
-        
-        <h1>{onBack ? "Gemini API Configuration" : "Initialize Engine"}</h1>
-        <p>{onBack ? "Upgrade or reconfigure your orchestration engine's credentials." : "To power the AI orchestration pipelines, a valid Google Gemini API key is required."}</p>
 
-        <form onSubmit={handleValidate} className="setup-form">
-          <Input 
-            type="password" 
-            placeholder="AIzaSy... (Gemini API Key)"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            disabled={isValidating}
-            icon="vpn_key"
-            error={status === "error" ? errorMsg : undefined}
-            helperText={status === "success" ? "Key validated successfully." : undefined}
-          />
+        <form className={styles.form} onSubmit={handleSubmit}>
+          <div className={styles.inputGroup}>
+            <label><Key size={14} /> Gemini API Key</label>
+            <div className={styles.inputWrapper}>
+              <input 
+                type="password" 
+                value={key}
+                onChange={(e) => setKey(e.target.value)}
+                placeholder="AIzaSy..."
+                required
+              />
+              <div className={styles.inputFocus} />
+            </div>
+            {errorMsg && <p className={styles.errorHint}>{errorMsg}</p>}
+            <p className={styles.hint}>Your key is stored securely on your local device.</p>
+          </div>
 
-          <Button 
+          <div className={styles.featureRow}>
+            <div className={styles.feature}><Cpu size={14} /> <span>Smart Node Gen</span></div>
+            <div className={styles.feature}><ShieldCheck size={14} /> <span>Local Isolation</span></div>
+          </div>
+
+          <button 
             type="submit" 
-            variant="primary" 
-            size="lg"
-            isLoading={isValidating}
-            disabled={!apiKey.trim()}
+            className={styles.submitBtn}
+            disabled={isSaving || !key.trim()}
           >
-            {status === "success" ? "Authorized" : "Save & Initialize Pipeline"}
-          </Button>
+            {isSaving ? 'Validating...' : (onBack ? 'Update Configuration' : 'Get Started')} 
+            {!isSaving && <ArrowRight size={18} />}
+          </button>
         </form>
 
-        <div className="info-box">
-          <h3>
-            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>info</span>
-            Quick Guide
-          </h3>
+        {onBack && (
+          <button className={styles.backLink} onClick={onBack}>
+            Cancel and return
+          </button>
+        )}
+
+        <div className={styles.guideBox}>
+          <h3><Info size={14} /> Quick Guide</h3>
           <ul>
-            <li>Acquire from Google AI Studio.</li>
-            <li>`gemini-1.5-flash` or higher required.</li>
+            <li>Acquire a key from Google AI Studio.</li>
+            <li>Gemini 1.5 Flash or Pro recommended.</li>
           </ul>
         </div>
       </motion.div>
     </div>
   );
-}
+};
+
+export default SetupPage;

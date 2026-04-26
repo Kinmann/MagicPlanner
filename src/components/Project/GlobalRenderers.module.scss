@@ -1,0 +1,115 @@
+@use '../../styles/variables' as v;
+
+.bentoGrid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: v.$space-6;
+  width: 100%;
+}
+
+.card {
+  background-color: v.$background-container-low;
+  border: 1px solid v.$border;
+  border-radius: v.$radius-xl;
+  padding: v.$space-6;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+    border-color: v.$primary;
+  }
+  
+  &.col12 { grid-column: span 12; }
+  &.col6 { grid-column: span 6; }
+  &.col4 { grid-column: span 4; }
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: v.$space-3;
+  margin-bottom: v.$space-6;
+  
+  h2 { font-size: 16px; font-weight: 800; color: v.$foreground; display: flex; align-items: center; gap: 8px; }
+  .icon { color: v.$primary; }
+}
+
+.stageBadge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: v.$primary;
+  color: v.$on-primary;
+  font-size: 10px;
+  font-weight: 900;
+  padding: 4px 12px;
+  border-bottom-left-radius: v.$radius-md;
+  letter-spacing: 0.05em;
+}
+
+.intentStrip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  &.primary { background: v.$primary; }
+  &.secondary { background: v.$accent; }
+  &.warning { background: v.$warning; }
+}
+
+.infoGroup {
+  margin-bottom: v.$space-4;
+  h3 { font-size: 11px; font-weight: 800; color: v.$text-muted; text-transform: uppercase; margin-bottom: 4px; }
+  p { font-size: 14px; color: v.$foreground; line-height: 1.5; }
+  .projectName { font-size: 20px; font-weight: 900; color: v.$primary; }
+}
+
+.metricsList {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-2;
+  li {
+    display: flex;
+    align-items: center;
+    gap: v.$space-2;
+    font-size: 13px;
+    color: v.$foreground;
+    background: rgba(255, 255, 255, 0.03);
+    padding: v.$space-2 v.$space-3;
+    border-radius: v.$radius-md;
+  }
+}
+
+.personaGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: v.$space-3;
+}
+
+.personaChip {
+  background: v.$background-container-high;
+  border: 1px solid v.$border;
+  border-radius: v.$radius-lg;
+  padding: v.$space-3;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  
+  .personaHeader { display: flex; align-items: center; gap: 8px; }
+  .name { font-weight: 800; font-size: 14px; }
+  .roleId { font-size: 10px; font-family: v.$font-mono; opacity: 0.5; }
+}
+
+.jsonNode {
+  font-family: v.$font-mono;
+  font-size: 12px;
+  .prop { color: v.$accent; }
+  .str { color: v.$primary; }
+  .num { color: v.$warning; }
+  .bool { color: #569cd6; }
+  .bracket { color: v.$text-muted; }
+}

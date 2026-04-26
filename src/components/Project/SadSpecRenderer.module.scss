@@ -1,0 +1,149 @@
+@use '../../styles/variables' as v;
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-8;
+  color: v.$foreground;
+}
+
+.tableContainer {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid v.$border;
+  border-radius: v.$radius-lg;
+  background: v.$background-container-low;
+  
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    
+    th {
+      background: v.$background-container-high;
+      padding: v.$space-3 v.$space-4;
+      text-align: left;
+      font-weight: 800;
+      color: v.$primary;
+      border-bottom: 1px solid v.$border;
+      white-space: nowrap;
+    }
+    
+    td {
+      padding: v.$space-3 v.$space-4;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+      vertical-align: top;
+      line-height: 1.5;
+    }
+    
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255, 255, 255, 0.02); }
+  }
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: v.$space-2;
+  margin-bottom: v.$space-4;
+  h3 { font-size: 14px; font-weight: 800; color: v.$foreground; text-transform: uppercase; letter-spacing: 0.05em; }
+  .icon { color: v.$primary; opacity: 0.8; }
+}
+
+.attributeList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.attribute {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  .name { font-family: v.$font-mono; font-weight: 700; color: v.$accent; }
+  .type { font-size: 11px; opacity: 0.6; font-family: v.$font-mono; }
+  .badge { font-size: 9px; padding: 1px 4px; border-radius: 3px; background: v.$primary; color: v.$on-primary; font-weight: 800; }
+}
+
+.relationshipList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: v.$space-3;
+}
+
+.relCard {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid v.$border;
+  border-radius: v.$radius-md;
+  padding: v.$space-3;
+  .relInfo { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; }
+  .relType { font-size: 10px; color: v.$primary; background: rgba(v.$primary, 0.1); padding: 2px 6px; border-radius: 4px; }
+  .desc { font-size: 11px; color: v.$text-muted; margin-top: 4px; }
+}
+
+.techGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: v.$space-4;
+}
+
+.techCard {
+  background: v.$background-container-high;
+  border: 1px solid v.$border;
+  border-radius: v.$radius-lg;
+  padding: v.$space-4;
+  .category { font-size: 10px; font-weight: 800; color: v.$primary; margin-bottom: 4px; }
+  .name { font-size: 15px; font-weight: 800; color: v.$foreground; margin-bottom: 2px; }
+  .version { font-size: 11px; font-family: v.$font-mono; opacity: 0.5; }
+  .rationale { font-size: 12px; color: v.$text-muted; margin-top: v.$space-3; line-height: 1.5; }
+}
+
+.emptyState {
+  padding: v.$space-10;
+  text-align: center;
+  color: v.$text-muted;
+  font-style: italic;
+}
+
+// Helpers for Tailwind classes
+.textPrimary { color: v.$primary; }
+.textSecondary { color: v.$accent; }
+.fontBold { font-weight: v.$font-weight-bold; }
+.opacity80 { opacity: 0.8; }
+.opacity60 { opacity: 0.6; }
+.opacity40 { opacity: 0.4; }
+.textSm { font-size: v.$text-sm; }
+.textXs { font-size: v.$text-xs; }
+.textLg { font-size: v.$text-lg; }
+.flex { display: flex; }
+.flexCol { flex-direction: column; }
+.flexWrap { flex-wrap: wrap; }
+.itemsCenter { align-items: center; }
+.itemsStart { align-items: flex-start; }
+.justifyBetween { justify-content: space-between; }
+.gap1 { gap: v.$space-1; }
+.gap2 { gap: v.$space-2; }
+.mt2 { margin-top: v.$space-2; }
+.mb2 { margin-bottom: v.$space-2; }
+.px2 { padding-left: v.$space-2; padding-right: v.$space-2; }
+.py0_5 { padding-top: 2px; padding-bottom: 2px; }
+.rounded { border-radius: v.$radius-sm; }
+.roundedLg { border-radius: v.$radius-lg; }
+.border { border: 1px solid v.$border; }
+.borderBorder { border-color: v.$border; }
+.bgSurfaceContainerHigh { background-color: v.$background-container-high; }
+.leadingRelaxed { line-height: 1.6; }
+.badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: v.$background-container-high;
+  color: v.$foreground;
+  
+  &--secondary {
+    background: rgba(v.$accent, 0.1);
+    color: v.$accent;
+    border: 1px solid rgba(v.$accent, 0.2);
+  }
+}

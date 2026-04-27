@@ -15,7 +15,7 @@ import { useShallow } from 'zustand/react/shallow';
 import styles from './ActivityBar.module.scss';
 
 export const ActivityBar: React.FC = () => {
-  const { currentView, navigateTo, toggleSettings, currentProjectId, openProject } = useUIStore();
+  const { currentView, navigateTo, toggleSettings, currentProjectId, openProject, isSettingsOpen } = useUIStore();
   const { projects, fetchProjects } = useProjectStore(useShallow(state => ({
     projects: state.projects,
     fetchProjects: state.fetchProjects
@@ -35,19 +35,19 @@ export const ActivityBar: React.FC = () => {
     <div className={styles.activityBar}>
       <div className={styles.topSection}>
         <div 
-          className={`${styles.navItem} ${currentView === 'DASHBOARD' ? styles.active : ''}`}
+          className={`${styles.navItem} ${currentView === 'DASHBOARD' && !isSettingsOpen ? styles.active : ''}`}
           onClick={() => navigateTo('DASHBOARD')}
           title="Dashboard"
         >
-          {currentView === 'DASHBOARD' && <div className={styles.activeIndicator} />}
-          <LayoutDashboard size={24} strokeWidth={currentView === 'DASHBOARD' ? 2 : 1.5} />
+          {(currentView === 'DASHBOARD' && !isSettingsOpen) && <div className={styles.activeIndicator} />}
+          <LayoutDashboard size={24} strokeWidth={(currentView === 'DASHBOARD' && !isSettingsOpen) ? 2 : 1.5} />
         </div>
 
         <div className={styles.divider} />
 
         {projects.map((proj, idx) => {
           const Icon = getProjectIcon(idx);
-          const isActive = currentView === 'WORKSPACE' && currentProjectId === proj.project_id;
+          const isActive = currentView === 'WORKSPACE' && currentProjectId === proj.project_id && !isSettingsOpen;
           return (
             <div 
               key={proj.project_id}
@@ -75,11 +75,12 @@ export const ActivityBar: React.FC = () => {
           <UserCircle size={24} strokeWidth={1.5} />
         </div>
         <div 
-          className={styles.navItem} 
+          className={`${styles.navItem} ${isSettingsOpen ? styles.active : ''}`} 
           title="Settings"
           onClick={() => toggleSettings(true)}
         >
-          <Settings size={24} strokeWidth={1.5} />
+          {isSettingsOpen && <div className={styles.activeIndicator} />}
+          <Settings size={24} strokeWidth={isSettingsOpen ? 2 : 1.5} />
         </div>
       </div>
     </div>

@@ -29,6 +29,7 @@ export interface DocumentNode {
   updated_at: string;
   last_action?: string;
   is_active?: boolean;
+  is_locked?: boolean;
   iterations?: GenerationIteration[];
 }
 

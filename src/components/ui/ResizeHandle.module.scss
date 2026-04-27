@@ -1,11 +1,22 @@
 @use '../../styles/variables' as v;
 
 .handle {
-  width: 4px;
-  background-color: transparent;
+  width: 1px;
+  background-color: v.$border;
   transition: background-color 0.2s ease;
   position: relative;
-  z-index: v.$z-overlay;
+  z-index: 10;
+  cursor: col-resize;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -4px;
+    right: -4px;
+    background-color: transparent;
+  }
 
   &:hover, &:active {
     .line {
@@ -15,8 +26,16 @@
 
   &.vertical {
     width: 100%;
-    height: 4px;
+    height: 1px;
     cursor: row-resize;
+
+    &::after {
+      left: 0;
+      right: 0;
+      top: -4px;
+      bottom: -4px;
+    }
+
     .line {
       width: 100%;
       height: 2px;
@@ -32,7 +51,7 @@
   top: 0;
   bottom: 0;
   left: 50%;
-  width: 2px;
+  width: 100%;
   transform: translateX(-50%);
   background-color: transparent;
   transition: background-color 0.2s ease;

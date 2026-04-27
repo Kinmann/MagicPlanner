@@ -60,7 +60,17 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  .name { font-family: v.$font-mono; font-weight: 700; color: v.$accent; }
+  padding: 2px 8px;
+  margin-left: -8px;
+  border-radius: v.$radius-sm;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: rgba(v.$primary, 0.05);
+    .name { color: v.$primary; }
+  }
+
+  .name { font-family: v.$font-mono; font-weight: 700; color: v.$accent; transition: color 0.2s; }
   .type { font-size: 11px; opacity: 0.6; font-family: v.$font-mono; }
   .badge { font-size: 9px; padding: 1px 4px; border-radius: 3px; background: v.$primary; color: v.$on-primary; font-weight: 800; }
 }
@@ -76,6 +86,14 @@
   border: 1px solid v.$border;
   border-radius: v.$radius-md;
   padding: v.$space-3;
+  transition: all 0.3s ease;
+
+  &:hover {
+    background: rgba(v.$primary, 0.05);
+    border-color: v.$primary;
+    transform: translateX(4px);
+  }
+
   .relInfo { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; }
   .relType { font-size: 10px; color: v.$primary; background: rgba(v.$primary, 0.1); padding: 2px 6px; border-radius: 4px; }
   .desc { font-size: 11px; color: v.$text-muted; margin-top: 4px; }
@@ -92,6 +110,15 @@
   border: 1px solid v.$border;
   border-radius: v.$radius-lg;
   padding: v.$space-4;
+  transition: all 0.3s ease;
+
+  &:hover {
+    border-color: v.$primary;
+    background: v.$background-container-low;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  }
+
   .category { font-size: 10px; font-weight: 800; color: v.$primary; margin-bottom: 4px; }
   .name { font-size: 15px; font-weight: 800; color: v.$foreground; margin-bottom: 2px; }
   .version { font-size: 11px; font-family: v.$font-mono; opacity: 0.5; }
@@ -133,6 +160,38 @@
 .borderBorder { border-color: v.$border; }
 .bgSurfaceContainerHigh { background-color: v.$background-container-high; }
 .leadingRelaxed { line-height: 1.6; }
+
+.kvRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 12px;
+  margin-left: -12px;
+  border-radius: v.$radius-md;
+  transition: all 0.2s ease;
+  cursor: default;
+
+  &:hover {
+    background-color: rgba(v.$primary, 0.03);
+  }
+}
+
+.valueWrapper {
+  display: inline-block;
+  padding: 2px 6px;
+  margin: -2px -4px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  cursor: text;
+
+  &:hover {
+    background-color: rgba(v.$primary, 0.1);
+    border-color: rgba(v.$primary, 0.2);
+    box-shadow: 0 0 8px rgba(v.$primary, 0.1);
+  }
+}
+
 .badge {
   display: inline-block;
   padding: 2px 6px;

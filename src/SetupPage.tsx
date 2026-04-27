@@ -1,20 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Key, Sparkles, ArrowRight, ShieldCheck, Cpu, Info } from 'lucide-react';
+import { 
+  Settings2, 
+  Save, 
+  Bell, 
+  Shield, 
+  Key, 
+  Cpu, 
+  Sparkles, 
+  Info,
+  ChevronRight,
+  ArrowLeft,
+  ShieldCheck,
+  AlertCircle,
+  RefreshCw,
+  CheckCircle2
+} from 'lucide-react';
 import { safeInvoke, isTauri } from './utils/tauri';
 import { useSettingsStore } from './store/settingsStore';
 import styles from './SetupPage.module.scss';
 
 interface SetupPageProps {
   onComplete: () => void;
-  onBack?: () => void;
 }
 
-export const SetupPage: React.FC<SetupPageProps> = ({ onComplete, onBack }) => {
+export const SetupPage: React.FC<SetupPageProps> = ({ onComplete }) => {
   const [key, setKey] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const setApiKeyInStore = useSettingsStore(state => state.setApiKey);
+
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [testMessage, setTestMessage] = useState<string | null>(null);
 
   useEffect(() => {
     async function init() {
@@ -35,6 +52,33 @@ export const SetupPage: React.FC<SetupPageProps> = ({ onComplete, onBack }) => {
     init();
   }, []);
 
+  const handleTest = async () => {
+    if (!key.trim()) return;
+    setTestStatus('testing');
+    setTestMessage(null);
+    try {
+      if (isTauri()) {
+        const isValid = await safeInvoke<boolean>("validate_api_key", { apiKey: key.trim() });
+        if (isValid) {
+          setTestStatus('success');
+          setTestMessage('API Key is valid. Connection successful.');
+        } else {
+          setTestStatus('error');
+          setTestMessage('Invalid API Key. Please check and try again.');
+        }
+      } else {
+        // Mock success for non-tauri (browser preview)
+        setTimeout(() => {
+          setTestStatus('success');
+          setTestMessage('Browser mode: Connection simulation successful.');
+        }, 800);
+      }
+    } catch (err: any) {
+      setTestStatus('error');
+      setTestMessage(err.message || String(err));
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!key.trim()) return;
@@ -42,27 +86,20 @@ export const SetupPage: React.FC<SetupPageProps> = ({ onComplete, onBack }) => {
     setIsSaving(true);
     setErrorMsg(null);
     try {
-      // 1. Backend Validation
       if (isTauri()) {
         const isValid = await safeInvoke<boolean>("validate_api_key", { apiKey: key.trim() });
         if (!isValid) {
           throw new Error("Invalid API key. Please check and try again.");
         }
 
-        // 2. Persistent Storage (Tauri)
         const { load } = await import("@tauri-apps/plugin-store");
         const store = await load("settings.json");
         await store.set("gemini_api_key", { value: key.trim() });
         await store.save();
       }
 
-      // Always save to localStorage for browser view support
       localStorage.setItem('gemini_api_key', key.trim());
-      
-      // 3. Local State Update
       setApiKeyInStore(key.trim());
-      
-      // 4. Navigation
       onComplete();
     } catch (err: any) {
       setErrorMsg(err.message || String(err));
@@ -73,74 +110,160 @@ export const SetupPage: React.FC<SetupPageProps> = ({ onComplete, onBack }) => {
 
   return (
     <div className={styles.setupPage}>
-      <div className={styles.backgroundEffects}>
-        <div className={styles.glow1} />
-        <div className={styles.glow2} />
-      </div>
-
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className={styles.setupCard}
-      >
-        <div className={styles.header}>
-          <div className={styles.logoWrapper}>
-            <Sparkles className={styles.logoIcon} size={32} />
-          </div>
-          <h1 className={styles.title}>Initialize Magic Planner</h1>
-          <p className={styles.subtitle}>
-            To power the AI orchestration pipelines, a valid Google Gemini API key is required.
-          </p>
-        </div>
-
-        <form className={styles.form} onSubmit={handleSubmit}>
-          <div className={styles.inputGroup}>
-            <label><Key size={14} /> Gemini API Key</label>
-            <div className={styles.inputWrapper}>
-              <input 
-                type="password" 
-                value={key}
-                onChange={(e) => setKey(e.target.value)}
-                placeholder="AIzaSy..."
-                required
-              />
-              <div className={styles.inputFocus} />
+      <div className={styles.container}>
+        {/* Header */}
+        <header className={styles.header}>
+          <div className={styles.titleSection}>
+            <div className={styles.iconWrapper}>
+              <Settings2 className={styles.primaryIcon} size={32} />
             </div>
-            {errorMsg && <p className={styles.errorHint}>{errorMsg}</p>}
-            <p className={styles.hint}>Your key is stored securely on your local device.</p>
+            <div>
+              <h1 className={styles.title}>Settings</h1>
+              <p className={styles.subtitle}>Configure your Magic Planner environment and AI orchestration preferences.</p>
+            </div>
           </div>
+        </header>
 
-          <div className={styles.featureRow}>
-            <div className={styles.feature}><Cpu size={14} /> <span>Smart Node Gen</span></div>
-            <div className={styles.feature}><ShieldCheck size={14} /> <span>Local Isolation</span></div>
+        <div className={styles.content}>
+          {/* AI Configuration Section */}
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>
+              <Cpu size={20} className={styles.sectionIcon} />
+              AI Core Configuration
+            </h2>
+            <div className={styles.sectionBody}>
+              <div className={styles.inputGroup}>
+                <div className={styles.labelRow}>
+                  <label><Key size={14} /> Gemini API Key</label>
+                  <span className={styles.requiredBadge}>Required</span>
+                </div>
+                <div className={styles.inputWrapper}>
+                  <input 
+                    type="password" 
+                    value={key}
+                    onChange={(e) => {
+                      setKey(e.target.value);
+                      if (testStatus !== 'idle') setTestStatus('idle');
+                    }}
+                    placeholder="AIzaSy..."
+                    required
+                  />
+                  <button 
+                    type="button"
+                    className={styles.testBtn}
+                    onClick={handleTest}
+                    disabled={testStatus === 'testing' || !key.trim()}
+                  >
+                    {testStatus === 'testing' ? (
+                      <RefreshCw size={14} className={styles.spinning} />
+                    ) : (
+                      'Test'
+                    )}
+                  </button>
+                  <div className={styles.inputFocus} />
+                </div>
+                {errorMsg && <p className={styles.errorMsg}>{errorMsg}</p>}
+                <p className={styles.hint}>
+                  Acquire your API key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">Google AI Studio</a>.
+                </p>
+              </div>
+
+              <div className={`${styles.testResultBox} ${styles[testStatus]}`}>
+                {testStatus === 'idle' && (
+                  <>
+                    <Info size={16} />
+                    <p>Enter your API key and click 'Test' to verify connection.</p>
+                  </>
+                )}
+                {testStatus === 'testing' && (
+                  <>
+                    <RefreshCw size={16} className={styles.spinning} />
+                    <p>Validating API key connection...</p>
+                  </>
+                )}
+                {testStatus === 'success' && (
+                  <>
+                    <CheckCircle2 size={16} />
+                    <p>{testMessage}</p>
+                  </>
+                )}
+                {testStatus === 'error' && (
+                  <>
+                    <AlertCircle size={16} />
+                    <p>{testMessage}</p>
+                  </>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* Notifications Section (UI Placeholder) */}
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>
+              <Bell size={20} className={styles.sectionIcon} />
+              Notifications
+            </h2>
+            <div className={styles.sectionBody}>
+              <div className={styles.settingRow}>
+                <div className={styles.settingInfo}>
+                  <p className={styles.settingLabel}>AI Node Generation Alerts</p>
+                  <p className={styles.settingDesc}>Notify when the engine finishes generating complex SAD/PRD nodes.</p>
+                </div>
+                <div className={`${styles.toggle} ${styles.active}`}>
+                  <div className={styles.toggleCircle} />
+                </div>
+              </div>
+              <div className={styles.settingRow}>
+                <div className={styles.settingInfo}>
+                  <p className={styles.settingLabel}>System Health Updates</p>
+                  <p className={styles.settingDesc}>Receive alerts regarding pipeline execution errors or stalls.</p>
+                </div>
+                <div className={styles.toggle}>
+                  <div className={styles.toggleCircle} />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Security & Privacy Section (UI Placeholder) */}
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>
+              <Shield size={20} className={styles.sectionIcon} />
+              Privacy & Security
+            </h2>
+            <div className={styles.sectionBody}>
+              <div className={styles.actionRow}>
+                <button className={styles.secondaryBtn} type="button">
+                  <Shield size={16} />
+                  <span>Manage Data Isolation</span>
+                </button>
+                <p className={styles.settingDesc}>All project data and API keys are stored exclusively on your local device.</p>
+              </div>
+            </div>
+          </section>
+
+          {/* Save Action */}
+          <div className={styles.footer}>
+            <button 
+              className={styles.saveBtn} 
+              onClick={handleSubmit}
+              disabled={isSaving || !key.trim() || testStatus !== 'success'}
+            >
+              {isSaving ? (
+                <>Saving...</>
+              ) : (
+                <>
+                  <Save size={18} />
+                  <span>Save Preferences</span>
+                </>
+              )}
+            </button>
           </div>
-
-          <button 
-            type="submit" 
-            className={styles.submitBtn}
-            disabled={isSaving || !key.trim()}
-          >
-            {isSaving ? 'Validating...' : (onBack ? 'Update Configuration' : 'Get Started')} 
-            {!isSaving && <ArrowRight size={18} />}
-          </button>
-        </form>
-
-        {onBack && (
-          <button className={styles.backLink} onClick={onBack}>
-            Cancel and return
-          </button>
-        )}
-
-        <div className={styles.guideBox}>
-          <h3><Info size={14} /> Quick Guide</h3>
-          <ul>
-            <li>Acquire a key from Google AI Studio.</li>
-            <li>Gemini 1.5 Flash or Pro recommended.</li>
-          </ul>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 };
 
 export default SetupPage;
+

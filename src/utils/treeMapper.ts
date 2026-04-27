@@ -17,6 +17,7 @@ const calculateFolderStatus = (items: TreeItem[]): 'Pending' | 'Active' | 'Compl
       : item.children ? [calculateFolderStatus(item.children)] : []
   );
 
+  if (nodeStates.length === 0) return 'Pending';
   if (nodeStates.every(s => s === 'COMPLETED' || s === 'Completed')) return 'Completed';
   if (nodeStates.some(s => s === 'IN_PROGRESS' || s === 'Active')) return 'Active';
   return 'Pending';
@@ -27,17 +28,17 @@ const sortNodes = (nodes: DocumentNode[]) => {
 };
 
 const NODE_LABELS: Record<string, string> = {
-  '1-A': 'Node 1: Context & Goal',
-  '1-B': 'Node 2: Epics & Actors',
-  '1-C': 'Node 3: Architecture & Schema',
-  '1-D': 'Node 1: Non tech',
-  '1-E': 'Node 2: Tech stack',
-  '1-F': 'Node 3: Core ERD',
-  '1-G': 'Node 4: Auth & RBAC',
-  '1-H': 'Node 5: Interface & Errors',
-  '2-A': 'Node 1: Module list',
-  '2-B': 'Node 2: Epic Mapping',
-  '2-C': 'Node 3: Module dependencies',
+  'GPRD_Context_Goal': 'Node 1: Context & Goal',
+  'GPRD_Capability_Actor': 'Node 2: Epics & Actors',
+  'GPRD_Architecture_Schema': 'Node 3: Architecture & Schema',
+  'SAD_Non_Tech': 'Node 1: Non tech',
+  'SAD_Tech_Stack': 'Node 2: Tech stack',
+  'SAD_Core_ERD': 'Node 3: Core ERD',
+  'SAD_Auth_RBAC': 'Node 4: Auth & RBAC',
+  'SAD_Interface_Error': 'Node 5: Interface & Errors',
+  'SAD_Module_List': 'Node 1: Module list',
+  'SAD_Epic_Mapping': 'Node 2: Epic Mapping',
+  'SAD_Module_Deps': 'Node 3: Module dependencies',
   '3-A': 'Node 1: PRD',
   '3-B': 'Node 2: FSD',
   '3-C': 'Node 3: ERD',
@@ -67,7 +68,7 @@ export const mapNodesToTree = (
   };
 
   // 1. GPRD Phase
-  const gprdChildren = buildChildren(['1-A', '1-B', '1-C']);
+  const gprdChildren = buildChildren(['GPRD_Context_Goal', 'GPRD_Capability_Actor', 'GPRD_Architecture_Schema']);
   tree.push({
     id: 'phase-gprd',
     label: 'Phase 1: Genesis PRD',
@@ -77,8 +78,8 @@ export const mapNodesToTree = (
   });
 
   // 2. SAD Phase
-  const sadGlobalChildren = buildChildren(['1-D', '1-E', '1-F', '1-G', '1-H']);
-  const sadSplitChildren = buildChildren(['2-A', '2-B', '2-C']);
+  const sadGlobalChildren = buildChildren(['SAD_Non_Tech', 'SAD_Tech_Stack', 'SAD_Core_ERD', 'SAD_Auth_RBAC', 'SAD_Interface_Error']);
+  const sadSplitChildren = buildChildren(['SAD_Module_List', 'SAD_Epic_Mapping', 'SAD_Module_Deps']);
   
   const sadChildren: TreeItem[] = [
     {

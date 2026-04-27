@@ -17,6 +17,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { mapNodesToTree, TreeItem } from '../../utils/treeMapper';
 import { useShallow } from 'zustand/react/shallow';
+import { useLogStore } from '../../store/logStore';
 import styles from './SidebarTree.module.scss';
 
 export const SidebarTree: React.FC = () => {
@@ -64,7 +65,17 @@ const TreeItemComponent: React.FC<TreeItemProps> = ({ item, level, selectedId, o
   };
 
   const handleSelect = () => {
+    const { addLog } = useLogStore.getState();
     if (!isFolder) {
+      addLog('INFO', `Selected node`, item.label);
+      onSelect(item.id);
+    } else if (
+      item.id.startsWith('phase-') || 
+      item.id.startsWith('group-') || 
+      item.id.startsWith('stage-') || 
+      item.id.startsWith('module-')
+    ) {
+      addLog('INFO', `Viewing integrated view`, item.label);
       onSelect(item.id);
     }
   };

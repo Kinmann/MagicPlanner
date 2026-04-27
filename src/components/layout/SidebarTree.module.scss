@@ -71,6 +71,10 @@
     color: #d1d5db;
     background-color: #3f3f46;
   }
+
+  svg {
+    display: block;
+  }
 }
 
 .typeIcon {
@@ -78,12 +82,18 @@
   color: #9ca3af;
   display: flex;
   align-items: center;
+  justify-content: center;
+  
+  svg {
+    display: block;
+  }
 }
 
 .nodeTitle {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1;
 }
 
 .statusIndicator {

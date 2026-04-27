@@ -11,7 +11,9 @@ import RootLayout from "./components/layout/RootLayout";
 import EngineStatusOverlay from "./components/layout/EngineStatusOverlay";
 import CriticalErrorModal from "./components/Project/CriticalErrorModal";
 import { Spinner } from "./components/ui/Spinner";
+import { ProjectInfoModal } from "./components/Project/ProjectInfoModal";
 import { useUIStore } from "./store/uiStore";
+
 import { useEngineStore } from "./store/engineStore";
 import { initProjectEventListeners } from "./store/projectStore";
 import { initLogEventListeners } from "./store/logStore";
@@ -100,22 +102,35 @@ function App() {
 
   // Routing Logic
   const renderView = () => {
-    if (!isSetup || isSettingsOpen) {
+    // 1. Initial Setup (Full Screen)
+    if (isSetup === false) {
       return (
-        <motion.div key="setup" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="page-wrapper">
+        <motion.div key="initial-setup" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="page-wrapper">
           <SetupPage 
             onComplete={() => {
               setIsSetup(true);
-              toggleSettings(false);
               navigateTo('DASHBOARD');
             }} 
-            onBack={isSetup ? () => toggleSettings(false) : undefined}
           />
         </motion.div>
       );
     }
 
+    // 2. App Content (Inside RootLayout)
     const viewContent = (() => {
+      // If settings is open, it takes precedence in the content area
+      if (isSettingsOpen) {
+        return (
+          <motion.div key="settings" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.02 }} className="page-wrapper">
+            <SetupPage 
+              onComplete={() => {
+                toggleSettings(false);
+              }} 
+            />
+          </motion.div>
+        );
+      }
+
       switch (currentView) {
         case 'CREATE_PROJECT':
           return (
@@ -179,7 +194,9 @@ function App() {
         }}
         errorInfo={lastError} 
       />
+      <ProjectInfoModal />
     </div>
+
   );
 }
 

@@ -30,6 +30,8 @@ interface UIState {
   sidebarWidth: number; 
   metaPanelWidth: number;
   logPanelHeight: number;
+  isProjectInfoOpen: boolean;
+
 
   // Persistence State
   boardViewState: BoardViewState;
@@ -59,6 +61,8 @@ interface UIState {
   setSidebarWidth: (width: number) => void;
   setMetaPanelWidth: (width: number) => void;
   setLogPanelHeight: (height: number) => void;
+  toggleProjectInfo: (open: boolean) => void;
+
   
   // Persistence Actions
   setBoardViewState: (state: Partial<BoardViewState>) => void;
@@ -86,13 +90,16 @@ export const useUIStore = create<UIState>()(
       sidebarWidth: 20,
       metaPanelWidth: 20,
       logPanelHeight: 30,
+      isProjectInfoOpen: false,
+
 
       boardViewState: { zoom: 1, panX: 0, panY: 0 },
       scrollPositions: {},
 
       navigateTo: (view: AppView) => set({ 
         currentView: view,
-        isCreatingProject: view === 'CREATE_PROJECT'
+        isCreatingProject: view === 'CREATE_PROJECT',
+        isSettingsOpen: false
       }),
 
       openProject: (projectId: string) => set({
@@ -101,6 +108,7 @@ export const useUIStore = create<UIState>()(
         selectedNodeId: null,
         selectedModuleId: null,
         workspaceViewMode: 'BOARD',
+        isSettingsOpen: false,
         boardViewState: { zoom: 1, panX: 0, panY: 0 },
         dirtyNodes: [],
         isRawMode: false,
@@ -183,6 +191,8 @@ export const useUIStore = create<UIState>()(
       setSidebarWidth: (width: number) => set({ sidebarWidth: width }),
       setMetaPanelWidth: (width: number) => set({ metaPanelWidth: width }),
       setLogPanelHeight: (height: number) => set({ logPanelHeight: height }),
+      toggleProjectInfo: (open: boolean) => set({ isProjectInfoOpen: open }),
+
 
       setBoardViewState: (viewState: Partial<BoardViewState>) => set((state) => ({
         boardViewState: { ...state.boardViewState, ...viewState }

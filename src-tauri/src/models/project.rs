@@ -48,6 +48,9 @@ pub struct DocumentNode {
     #[serde(default)]
     #[sqlx(default)]
     pub is_active: bool,
+    #[serde(default)]
+    #[sqlx(default)]
+    pub is_locked: bool,
 }
 
 /// 생성 반복(iteration) 결과 - 초안 + 평가 점수

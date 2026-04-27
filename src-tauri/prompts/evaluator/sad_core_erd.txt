@@ -1,0 +1,29 @@
+## 1. 도메인 특화 지표 (Domain Metrics) : 70점
+
+### Metric D: 전역 엔티티 무결성 및 관계 (Core Entity Integrity) (40점)
+- 시스템의 핵심 도메인 모델이 기술 스택(DB 엔진)에 적합하게 정의되었는지 검증합니다.
+- **감점 (건당 -15점)**:
+    - **핵심 엔티티 누락**: Genesis PRD의 핵심 도메인(유저, 주문, 상품 등) 중 최상위 엔티티가 누락된 경우.
+    - **정규화/구조 결함**: 1:N, N:M 관계 기술이 논리적으로 상충하거나 모호한 경우.
+
+### Metric E: 메타 표준 및 네이밍 컨벤션 (Meta Standards & Naming) (30점)
+- 전역적으로 적용될 테이블/컬럼 명명 규칙 및 공통 메타 데이터를 검증합니다.
+- **감점 (건당 -10점)**:
+    - **공통 컬럼 누락**: 생성일(created_at), 수정일(updated_at), 삭제여부(is_deleted) 등 전사 표준 메타 데이터 정의가 없는 경우.
+    - **네이밍 일관성 결함**: CamelCase, snake_case 등 전역적으로 합의된 명명 규칙 규격이 누락된 경우.
+
+---
+
+## [출력 규격]
+반드시 다음 JSON 구조만을 출력하십시오. 인사말이나 설명을 붙이지 마십시오.
+
+{
+  "score": 0,
+  "is_pass": false,
+  "critical_errors": [
+    { "location": "ROOT", "code": "ERR_CODE", "description": "사유" }
+  ],
+  "feedback": [
+    { "location": "ROOT", "description": "수정 권고" }
+  ]
+}

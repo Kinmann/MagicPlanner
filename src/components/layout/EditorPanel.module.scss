@@ -10,16 +10,58 @@
 }
 
 .tabs {
-  height: 36px;
+  height: 40px;
   display: flex;
-  background-color: v.$background;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #18181b;
   border-bottom: 1px solid v.$border;
-  overflow-x: auto;
   flex-shrink: 0;
+}
+
+/* Global scrollbar class to ensure it bypasses module mapping issues */
+:global(.tab-scrollbar) {
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  
+  /* Support for overlay behavior if possible */
+  overflow-x: overlay !important;
 
   &::-webkit-scrollbar {
-    height: 2px;
+    height: 6px !important;
+    background: transparent !important;
   }
+
+  &::-webkit-scrollbar-track {
+    background: transparent !important;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background-color: transparent !important;
+    border-radius: 10px !important;
+  }
+
+  &:hover {
+    &::-webkit-scrollbar-thumb {
+      background-color: rgba(255, 255, 255, 0.4) !important;
+      
+      &:hover {
+        background-color: rgba(255, 255, 255, 0.6) !important;
+      }
+    }
+  }
+
+  &::-webkit-scrollbar-button {
+    display: none !important;
+  }
+}
+
+.tabList {
+  flex: 1;
+  display: flex;
+  height: 100%;
+  min-width: 0;
+  position: relative;
 }
 
 .tab {
@@ -34,6 +76,7 @@
   transition: all 0.2s ease;
   white-space: nowrap;
   position: relative;
+  flex-shrink: 0;
 
   &:hover {
     background-color: rgba(255, 255, 255, 0.05);
@@ -44,8 +87,8 @@
   }
 
   &.active {
-    background-color: v.$surface-sidebar;
-    color: v.$primary;
+    background-color: v.$background;
+    color: v.$foreground;
     &::after {
       content: '';
       position: absolute;
@@ -60,10 +103,17 @@
       opacity: 1;
     }
   }
+
+  svg {
+    display: block;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
 }
 
 .tabTitle {
   margin-right: 8px;
+  line-height: 1;
 }
 
 .closeTabBtn {
@@ -81,6 +131,41 @@
     background-color: rgba(255, 255, 255, 0.1);
     color: v.$foreground;
   }
+}
+
+.projectInfoBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #9ca3af;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: #e5e7eb;
+  }
+
+  svg {
+    opacity: 0.8;
+    display: block; // Ensure SVG doesn't have extra space
+  }
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  flex-shrink: 0;
+  height: 100%;
+  background-color: #18181b;
+  z-index: 2;
 }
 
 .toolbar {
@@ -103,9 +188,15 @@
 .breadcrumbItem {
   display: flex;
   align-items: center;
+  line-height: 1;
   
   &.active {
     color: v.$foreground;
+  }
+
+  svg {
+    display: block;
+    margin-right: 4px;
   }
 }
 
@@ -116,12 +207,196 @@
 
 .content {
   flex: 1;
-  overflow: auto;
-  background-color: v.$background;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background-color: #121216; /* Reference background */
+}
+
+.headerRow {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 32px 32px 24px 32px;
+  border-bottom: 1px solid #27272a;
+  background-color: #121216;
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.startBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background-color: rgba(16, 185, 129, 0.05);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 6px;
+  color: #10b981;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover:not(:disabled) {
+    background-color: rgba(16, 185, 129, 0.1);
+    border-color: #10b981;
+  }
+
+  &:disabled {
+    background-color: #1a1a1c !important;
+    border-color: #27272a !important;
+    color: #52525b !important;
+    opacity: 0.6;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+}
+
+.nextStepBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background-color: rgba(59, 130, 246, 0.05);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 6px;
+  color: #3b82f6;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover:not(:disabled) {
+    background-color: rgba(59, 130, 246, 0.1);
+    border-color: #3b82f6;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.draftsWrapper {
+  margin-top: 0;
+  animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.headerMain {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.headerInfo {
+  flex: 1;
+  min-width: 300px;
+  
+  h1 {
+    font-size: 24px;
+    font-weight: 800;
+    color: #f3f4f6;
+    margin: 0 0 8px 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    
+    svg {
+      color: v.$primary;
+    }
+  }
+  
+  .description {
+    font-size: 14px;
+    color: #9ca3af;
+    margin: 0;
+    line-height: 1.5;
+  }
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.iterationBox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #0c0c0e;
+  border: 1px solid #27272a;
+  border-radius: 6px;
+  padding: 6px 12px;
+  height: 36px;
+  
+  .label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #9ca3af;
+  }
+  
+  .controlGroup {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-family: v.$font-mono;
+    font-size: 14px;
+    
+    .current { color: #3b82f6; font-weight: 700; }
+    .sep { color: #52525b; }
+    input {
+      width: 28px;
+      background: transparent;
+      border: none;
+      border-bottom: 1px dashed #3f3f46;
+      color: #d4d4d8;
+      text-align: center;
+      padding: 0;
+      appearance: textfield;
+
+      &::-webkit-inner-spin-button,
+      &::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+
+      &:focus {
+        outline: none;
+        border-bottom-color: v.$primary;
+      }
+    }
+  }
+}
+
+.scrollContainer {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.contentWrapper {
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 48px 32px 32px 32px;
 }
 
 .emptyState {
   flex: 1;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;

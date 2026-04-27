@@ -57,7 +57,7 @@ const ErdRenderer: React.FC<{ data: any }> = ({ data }) => {
                 <td><strong className={styles.textPrimary}>{ent.entity_name}</strong></td>
                 <td className={`${styles.opacity80} ${styles.textSm}`}>{ent.description}</td>
                 <td>
-                  <div className={styles.attributeList}>
+                  <div className={`${styles.attributeList} ${styles.valueWrapper}`}>
                     {ent.attributes?.map((attr: any, j: number) => (
                       <div key={j} className={styles.attribute}>
                         <span className={styles.name}>{attr.name}</span>
@@ -110,11 +110,11 @@ const RbacRenderer: React.FC<{ data: any }> = ({ data }) => {
       <div className={styles.techGrid}>
         <div className={styles.techCard}>
           <div className={styles.category}>Auth Method</div>
-          <div className={styles.name}>{data.auth_method}</div>
+          <div className={`${styles.name} ${styles.valueWrapper}`}>{data.auth_method}</div>
         </div>
         <div className={styles.techCard}>
           <div className={styles.category}>Token Strategy</div>
-          <div className={styles.name}>{data.token_strategy}</div>
+          <div className={`${styles.name} ${styles.valueWrapper}`}>{data.token_strategy}</div>
         </div>
       </div>
 
@@ -172,7 +172,7 @@ const TechStackRenderer: React.FC<{ data: any }> = ({ data }) => {
                 <Icon size={14} className="text-primary" />
                 <span className={styles.category}>{cat.label}</span>
               </div>
-              <div className={styles.name}>{data[cat.id] || 'N/A'}</div>
+              <div className={`${styles.name} ${styles.valueWrapper}`}>{data[cat.id] || 'N/A'}</div>
             </div>
           );
         })}
@@ -205,11 +205,11 @@ const InterfaceRenderer: React.FC<{ data: any }> = ({ data }) => {
       <div className={styles.techGrid}>
         <div className={styles.techCard}>
           <div className={styles.category}>API Versioning</div>
-          <div className={styles.name}>{data.api_versioning_strategy}</div>
+          <div className={`${styles.name} ${styles.valueWrapper}`}>{data.api_versioning_strategy}</div>
         </div>
         <div className={styles.techCard}>
           <div className={styles.category}>Response Format</div>
-          <div className={styles.name}>{data.response_format}</div>
+          <div className={`${styles.name} ${styles.valueWrapper}`}>{data.response_format}</div>
         </div>
       </div>
 
@@ -265,7 +265,121 @@ const ModuleListRenderer: React.FC<{ data: any }> = ({ data }) => {
 };
 
 /**
- * 6. Fallback Renderer (JSON)
+ * 6. Non-Technical Renderer (sad_non_tech)
+ */
+const NonTechRenderer: React.FC<{ data: any }> = ({ data }) => {
+  const sections = [
+    { label: 'Legal Constraints', items: data.legal_constraints },
+    { label: 'Compliance', items: data.compliance_requirements },
+    { label: 'Performance Targets', items: data.performance_targets },
+    { label: 'Scalability', items: data.scalability_requirements },
+    { label: 'Budget', items: data.budget_constraints },
+  ];
+  return (
+    <div className={styles.container}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {sections.map((s, i) => (
+          <div key={i} className={styles.techCard}>
+            <div className={styles.category}>{s.label}</div>
+            <ul className="mt-2 space-y-2">
+              {s.items?.map((item: string, j: number) => (
+                <li key={j} className="text-sm opacity-80 flex gap-2">
+                  <span className="text-primary">•</span> {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * 7. Epic Mapping Renderer (sad_epic_mapping)
+ */
+const EpicMappingRenderer: React.FC<{ data: any }> = ({ data }) => {
+  return (
+    <div className={styles.container}>
+      <div className={styles.tableContainer}>
+        <table>
+          <thead>
+            <tr>
+              <th>Epic</th>
+              <th>Mapped Modules</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(data.mappings || []).map((m: any, i: number) => (
+              <tr key={i}>
+                <td><strong className={styles.textPrimary}>{m.epic_name}</strong> <span className="opacity-40 text-xs">({m.epic_id})</span></td>
+                <td>
+                  <div className="flex flex-wrap gap-2">
+                    {m.mapped_modules?.map((mod: string, j: number) => (
+                      <span key={j} className={`${styles.badge} ${styles['badge--secondary']}`}>{mod}</span>
+                    ))}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * 8. Module Dependencies Renderer (sad_module_deps)
+ */
+const ModuleDepsRenderer: React.FC<{ data: any }> = ({ data }) => {
+  return (
+    <div className={styles.container}>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2">
+          <div className={styles.sectionHeader}>
+            <GitBranch className={styles.icon} size={14} />
+            <h3>Dependency Chain</h3>
+          </div>
+          <div className="space-y-4">
+            {(data.dependencies || []).map((dep: any, i: number) => (
+              <div key={i} className={styles.relCard}>
+                <div className={styles.relInfo}>
+                  <span className={styles.textPrimary}>{dep.from_module}</span>
+                  <ChevronRight size={12} className={styles.opacity40} />
+                  <span className={styles.textSecondary}>{dep.to_module}</span>
+                </div>
+                <div className="mt-2 flex items-center gap-3">
+                  <span className={styles.relType}>{dep.dependency_type}</span>
+                  <span className="text-sm opacity-60 italic">{dep.description}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div className={styles.sectionHeader}>
+            <Layers className={styles.icon} size={14} />
+            <h3>Build Order</h3>
+          </div>
+          <div className="bg-surface-container-high rounded-xl border border-border p-4">
+            <div className="space-y-3">
+              {(data.recommended_build_order || []).map((mod: string, i: number) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="w-6 h-6 rounded-full bg-primary/20 text-primary text-xs flex items-center justify-center font-bold">{i + 1}</div>
+                  <span className="text-sm font-medium">{mod}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * 9. Fallback Renderer (JSON)
  */
 const FallbackRenderer: React.FC<{ data: any }> = ({ data }) => {
   return (
@@ -293,16 +407,30 @@ const SadSpecRenderer: React.FC<SadSpecRendererProps> = ({ type, data, isRaw }) 
 
   switch (type) {
     case 'sad_core_erd':
+    case 'SAD_Core_ERD':
     case 'ERD':
       return <ErdRenderer data={workingData} />;
     case 'sad_auth_rbac':
+    case 'SAD_Auth_RBAC':
       return <RbacRenderer data={workingData} />;
     case 'sad_tech_stack':
+    case 'SAD_Tech_Stack':
       return <TechStackRenderer data={workingData} />;
     case 'sad_interface_error':
+    case 'SAD_Interface_Error':
       return <InterfaceRenderer data={workingData} />;
+    case 'sad_non_tech':
+    case 'SAD_Non_Tech':
+      return <NonTechRenderer data={workingData} />;
     case 'sad_module_list':
+    case 'SAD_Module_List':
       return <ModuleListRenderer data={workingData} />;
+    case 'sad_epic_mapping':
+    case 'SAD_Epic_Mapping':
+      return <EpicMappingRenderer data={workingData} />;
+    case 'sad_module_deps':
+    case 'SAD_Module_Deps':
+      return <ModuleDepsRenderer data={workingData} />;
     case 'PRD':
       // PRD Renderer logic truncated for brevity but follow the same style pattern
       return <FallbackRenderer data={workingData} />;

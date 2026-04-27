@@ -1,6 +1,7 @@
 use chrono::Utc;
 use tauri::{Manager, Emitter};
 use sqlx::{SqlitePool, Row};
+use uuid::Uuid;
 use crate::ActiveTasks;
 
 // ============================================================
@@ -11,11 +12,7 @@ pub use crate::models::{
 };
 
 // 서비스 함수 임포트
-use crate::services::dag_engine::sync_module_completion_status;
-
-// EvaluationResult is now imported from crate::schemas
-
-// EvaluationResult is now imported from crate::schemas
+use crate::services::dag_engine::{sync_module_completion_status, is_node_locked};
 
 
 #[tauri::command]
@@ -24,7 +21,7 @@ pub async fn get_project_nodes(
     active_tasks: tauri::State<'_, ActiveTasks>,
     project_id: String,
 ) -> Result<Vec<DocumentNode>, String> {
-    // [??? ?╊겘占? 辱뷂옙占썼쳺?100%?蘊덀ゲ ?占쏙옙??? ?劑눂? 獄덂댖占???占쏙옙辱뷂옙 ?屍귩쪟?獄?縕먩른占?
+    // [??€? ?╊겘占? 辱뷂옙占썼쳺?100%?蘊덀ゲ ?占쏙옙??? ?劑눂? 獄덂댖占???占쏙옙辱뷂옙 ?屍귩쪟?獄?縕먩른占?
     let modules = sqlx::query_as::<_, LocalModule>(
         "SELECT * FROM local_module WHERE project_id = ? AND is_deleted = 0"
     )
@@ -43,19 +40,69 @@ pub async fn get_project_nodes(
     let mut nodes = sqlx::query_as::<_, DocumentNode>(
         "SELECT * FROM document_node WHERE project_id = ? AND is_deleted = 0 ORDER BY created_at ASC"
     )
-    .bind(project_id)
+    .bind(&project_id)
     .fetch_all(&*pool)
     .await
     .map_err(|e| e.to_string())?;
 
-    // ActiveTasks 기반으로 is_active 상태 업데이트
-    if let Ok(tasks) = active_tasks.0.lock() {
-        let tasks: &std::collections::HashSet<String> = &*tasks;
-        for node in &mut nodes {
-            if tasks.contains(&node.node_id) {
-                node.is_active = true;
+    // SAD 단계인데 노드가 누락된 경우 자동 보정 (레거시 대응)
+    let project_phase = sqlx::query("SELECT pipeline_phase FROM project WHERE project_id = ?")
+        .bind(&project_id).fetch_one(&*pool).await.map_err(|e| e.to_string())?
+        .get::<String, _>(0);
+
+    if project_phase == "SAD" {
+        let global_types = vec![
+            "SAD_Non_Tech", "SAD_Tech_Stack", "SAD_Core_ERD", "SAD_Auth_RBAC", "SAD_Interface_Error"
+        ];
+        let mut needed_fix = false;
+        let now = Utc::now().to_rfc3339();
+
+        for t_type in global_types {
+            if !nodes.iter().any(|n| n.target_node_type == t_type) {
+                needed_fix = true;
+                let state = if t_type == "SAD_Non_Tech" { "READY" } else { "PENDING" };
+                sqlx::query(
+                    "INSERT INTO document_node (node_id, project_id, module_id, target_node_type, node_category, node_state, current_iteration, max_iterations, threshold_score, current_best_score, created_at, updated_at, is_deleted) VALUES (?, ?, NULL, ?, 'SAD', ?, 0, 10, 80, 0, ?, ?, 0)"
+                )
+                .bind(Uuid::new_v4().to_string())
+                .bind(&project_id)
+                .bind(t_type)
+                .bind(state)
+                .bind(&now)
+                .bind(&now)
+                .execute(&*pool)
+                .await
+                .map_err(|e| e.to_string())?;
             }
         }
+
+        if needed_fix {
+            // 다시 조회
+            nodes = sqlx::query_as::<_, DocumentNode>(
+                "SELECT * FROM document_node WHERE project_id = ? AND is_deleted = 0 ORDER BY created_at ASC"
+            )
+            .bind(&project_id)
+            .fetch_all(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+        }
+    }
+
+    // 1. is_active 상태 업데이트 (락을 짧게 유지)
+    {
+        if let Ok(tasks) = active_tasks.0.lock() {
+            let tasks: &std::collections::HashSet<String> = &*tasks;
+            for node in &mut nodes {
+                if tasks.contains(&node.node_id) {
+                    node.is_active = true;
+                }
+            }
+        }
+    }
+
+    // 2. 잠금 상태 계산 (await가 포함되므로 락 외부에서 수행)
+    for node in &mut nodes {
+        node.is_locked = is_node_locked(&*pool, node).await?;
     }
 
     Ok(nodes)
@@ -76,6 +123,23 @@ pub async fn get_node_iterations(
     .map_err(|e| e.to_string())?;
 
     Ok(iterations)
+}
+
+
+#[tauri::command]
+pub async fn get_iteration_by_id(
+    pool: tauri::State<'_, SqlitePool>,
+    iteration_id: String,
+) -> Result<Option<GenerationIteration>, String> {
+    let iteration = sqlx::query_as::<_, GenerationIteration>(
+        "SELECT * FROM generation_iteration WHERE iteration_id = ? AND is_deleted = 0"
+    )
+    .bind(iteration_id)
+    .fetch_optional(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(iteration)
 }
 
 
@@ -122,13 +186,17 @@ pub async fn get_module_nodes(
     pool: tauri::State<'_, SqlitePool>,
     module_id: String,
 ) -> Result<Vec<DocumentNode>, String> {
-    let nodes = sqlx::query_as::<_, DocumentNode>(
+    let mut nodes = sqlx::query_as::<_, DocumentNode>(
         "SELECT node_id, project_id, module_id, target_node_type, node_category, node_state, current_iteration, max_iterations, threshold_score, current_best_score, api_error_code, api_error_message, created_at, updated_at FROM document_node WHERE module_id = ? AND is_deleted = 0 ORDER BY created_at ASC"
     )
     .bind(module_id)
     .fetch_all(&*pool)
     .await
     .map_err(|e| e.to_string())?;
+
+    for node in &mut nodes {
+        node.is_locked = is_node_locked(&*pool, node).await?;
+    }
 
     Ok(nodes)
 }
@@ -222,36 +290,18 @@ pub async fn delete_generation_iteration(
     .map_err(|e| e.to_string())?;
 
     let node_id: String = iter_row.get(0);
-    let node_type: String = iter_row.get(1);
-    let project_id: String = iter_row.get(3);
+    let _node_type: String = iter_row.get(1);
+    let _project_id: String = iter_row.get(3);
 
-    // 2. Lock Policy 墉?르占?(?占쏙옙 ?靜♥占?辱뷂옙占?辱쀰、언쬃?グ???占?蘊깍옙?)
-    // - Genesis PRD: SAD 생성 이후에는 삭제 금지
-    if node_type == "Genesis_PRD" || node_type.starts_with("GPRD_") {
-        let sad_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM document_node WHERE project_id = ? AND target_node_type LIKE 'SAD_%' AND node_state != 'PENDING'")
-            .bind(&project_id)
-            .fetch_one(&*pool)
-            .await
-            .map_err(|e| e.to_string())?;
-        if sad_count > 0 { return Err("SAD 파이프라인이 이미 진행 중이거나 완료되었습니다. PRD 이터레이션을 삭제할 수 없습니다.".into()); }
-    }
-    // - SAD_Global: SAD_Module 생성 이후에는 삭제 금지
-    else if node_type == "SAD_Global" {
-         let mod_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM document_node WHERE project_id = ? AND target_node_type = 'SAD_Module' AND node_state != 'PENDING'")
-            .bind(&project_id)
-            .fetch_one(&*pool)
-            .await
-            .map_err(|e| e.to_string())?;
-        if mod_count > 0 { return Err("모듈 분할 단계가 진행 중이거나 완료되었습니다. SAD Global 이터레이션을 삭제할 수 없습니다.".into()); }
-    }
-    // - SAD_Module: 하위 모듈 문서 생성 이후에는 삭제 금지
-    else if node_type == "SAD_Module" {
-         let sub_mod_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM document_node WHERE project_id = ? AND target_node_type NOT LIKE 'SAD_%' AND target_node_type NOT LIKE 'GPRD_%' AND target_node_type != 'Genesis_PRD' AND node_state != 'PENDING'")
-            .bind(&project_id)
-            .fetch_one(&*pool)
-            .await
-            .map_err(|e| e.to_string())?;
-        if sub_mod_count > 0 { return Err("하위 모듈의 개별 문서들이 이미 생성되었습니다. 모듈 목록 이터레이션을 삭제할 수 없습니다.".into()); }
+    // 2. Lock Policy 확인 (하위 노드에 결과물이 있으면 삭제 불가)
+    let node = sqlx::query_as::<_, DocumentNode>("SELECT * FROM document_node WHERE node_id = ?")
+        .bind(&node_id)
+        .fetch_one(&*pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if is_node_locked(&*pool, &node).await? {
+        return Err("하위 파이프라인에 이미 결과물이 생성되어 있어 이터레이션을 삭제할 수 없습니다.".into());
     }
 
     // 3. 소프트 삭제(is_deleted = 1) 처리

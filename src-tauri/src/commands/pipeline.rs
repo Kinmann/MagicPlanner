@@ -19,7 +19,7 @@ use crate::services::embedding::{store_document_embeddings};
 use crate::services::gemini::call_gemini;
 use crate::services::prd_merger::{get_full_approved_prd};
 use crate::services::draft_generator::{generate_draft, evaluate_draft};
-use crate::services::dag_engine::{trigger_next_nodes, trigger_module_next_nodes};
+use crate::services::dag_engine::{trigger_next_nodes, trigger_module_next_nodes, is_node_locked};
 use crate::utils::get_prompts_dir;
 use crate::commands::approval::actual_approve_genesis_prd;
 
@@ -45,6 +45,11 @@ pub async fn run_pipeline(
     .await
     .map_err(|e| e.to_string())?
     .ok_or_else(|| format!("Node not found: {}", node_type))?;
+
+    // 잠금 상태 확인
+    if is_node_locked(&*pool, &node).await? {
+        return Err("하위 노드가 이미 진행 중이거나 완료되어 이 노드를 다시 실행할 수 없습니다.".into());
+    }
 
     let actual_node_type = node.target_node_type.clone();
 
@@ -163,7 +168,13 @@ pub async fn run_pipeline(
             .bind("초안 생성 중...").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
             .execute(&*pool).await.map_err(|e| e.to_string())?;
 
-        let draft_res = generate_draft(&app_handle, &pool, &client, &api_key, &project.project_id, &actual_node_type, &project.raw_input_text, &previous_draft, &previous_feedback, i, vec![]).await;
+        let input_text = if node.node_category == "SAD" {
+            get_full_approved_prd(&*pool, &project.project_id).await
+        } else {
+            project.raw_input_text.clone()
+        };
+
+        let draft_res = generate_draft(&app_handle, &pool, &client, &api_key, &project.project_id, &actual_node_type, &input_text, &previous_draft, &previous_feedback, i, vec![]).await;
         let draft = match draft_res {
             Ok(d) => d,
             Err(e) => {
@@ -185,9 +196,30 @@ pub async fn run_pipeline(
             .bind("초안 평가 중...").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
             .execute(&*pool).await.map_err(|e| e.to_string())?;
 
-        let input_text_for_eval = if actual_node_type == "Genesis_PRD" { Some(project.raw_input_text.clone()) } else { None };
+        let input_text_for_eval = if actual_node_type == "Genesis_PRD" || node.node_category == "SAD" { 
+            let itext = if node.node_category == "SAD" {
+                get_full_approved_prd(&*pool, &project.project_id).await
+            } else {
+                project.raw_input_text.clone()
+            };
+            Some(itext)
+        } else { 
+            None 
+        };
+        let mut global_ctx_str = String::new();
+        if node.node_category == "SAD" {
+            use sqlx::Row;
+            let contexts = sqlx::query("SELECT context_type, context_data_json FROM global_context WHERE project_id = ? AND is_deleted = 0")
+                .bind(&project.project_id).fetch_all(&*pool).await.map_err(|e| e.to_string())?;
+            for row in contexts {
+                let t: String = row.get("context_type");
+                let d: String = row.get("context_data_json");
+                global_ctx_str.push_str(&format!("\n[{}]\n{}\n", t, d));
+            }
+        }
+
         let empty_feedback = Vec::new(); // run_pipeline에서는 이전 피드백을 사용하여 생성을 유도하므로 별도 피드백은 비움
-        let eval_res = evaluate_draft(&app_handle, &pool, &client, &api_key, &project.project_id, &actual_node_type, &draft, input_text_for_eval, "", "", &empty_feedback, i, vec![]).await;
+        let eval_res = evaluate_draft(&app_handle, &pool, &client, &api_key, &project.project_id, &actual_node_type, &draft, input_text_for_eval, &global_ctx_str, "", &empty_feedback, i, vec![]).await;
         let eval = match eval_res {
             Ok(e) => e,
             Err(e) => {
@@ -542,251 +574,7 @@ pub async fn manually_trigger_next_nodes(
     trigger_next_nodes(app_handle, &project_id, &completed_node_type).await
 }
 
-#[tauri::command]
-pub async fn run_sad_global_pipeline(
-    app_handle: tauri::AppHandle,
-    pool: tauri::State<'_, SqlitePool>,
-    active_tasks: tauri::State<'_, ActiveTasks>,
-    project_id: String,
-    api_key: String,
-) -> Result<String, String> {
-    let client = reqwest::Client::new();
-    let sad_node = sqlx::query_as::<_, DocumentNode>("SELECT * FROM document_node WHERE project_id = ? AND target_node_type = 'SAD_Global'")
-        .bind(&project_id).fetch_optional(&*pool).await.map_err(|e| e.to_string())?
-        .ok_or_else(|| "SAD_Global node not found".to_string())?;
 
-    let _guard = TaskGuard { tasks: active_tasks.0.clone(), node_id: sad_node.node_id.clone() };
-    let genesis_prd_content = get_full_approved_prd(&*pool, &project_id).await;
-    
-    sqlx::query("UPDATE document_node SET node_state = 'IN_PROGRESS', last_action = 'SAD 분석 중...', updated_at = ? WHERE node_id = ?")
-        .bind(Utc::now().to_rfc3339()).bind(&sad_node.node_id).execute(&*pool).await.map_err(|e| e.to_string())?;
-    let _ = app_handle.emit("nodes-updated", ());
-
-    let global_types = vec!["sad_non_tech", "sad_tech_stack", "sad_core_erd", "sad_auth_rbac", "sad_interface_error"];
-    let mut stage_context = serde_json::json!({});
-    let prompts_dir = get_prompts_dir(&app_handle);
-    let common_gen = std::fs::read_to_string(prompts_dir.join("generator/common.txt")).unwrap_or_default();
-
-    for ctx_type in global_types {
-        let status_text = match ctx_type {
-            "sad_non_tech" => "비기술 요건 분석 중",
-            "sad_tech_stack" => "기술 스택 설계 중",
-            "sad_core_erd" => "데이터베이스 설계 중",
-            "sad_auth_rbac" => "권한/인증 설계 중",
-            "sad_interface_error" => "인터페이스 설계 중",
-            _ => "세부 항목 생성 중",
-        };
-        let _ = app_handle.emit("pipeline-status", status_text);
-
-        // [UPDATE] DB의 last_action 업데이트하여 Live Activity 반영
-        sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-            .bind(status_text)
-            .bind(Utc::now().to_rfc3339())
-            .bind(&sad_node.node_id)
-            .execute(&*pool)
-            .await
-            .map_err(|e| e.to_string())?;
-        let _ = app_handle.emit("nodes-updated", ());
-
-        let schema = crate::schemas::get_schema_for_node(ctx_type);
-        let type_p = std::fs::read_to_string(prompts_dir.join(format!("generator/{}.txt", ctx_type))).unwrap_or_default();
-        let sys_p = format!("{}\n\n{}", common_gen, type_p);
-        let user_p = format!("SOURCE: {}\nCONTEXT: {}", genesis_prd_content, stage_context);
-        
-        let res = call_gemini(&client, &api_key, &sys_p, &user_p, schema).await.map_err(|e| e.to_string())?;
-        stage_context[ctx_type] = serde_json::from_str(&res).unwrap_or_default();
-    }
-
-    // [ADD] 최종 설계안 검증 단계
-    let validation_msg = "글로벌 설계 검증 중";
-    let _ = app_handle.emit("pipeline-status", validation_msg);
-
-    sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-        .bind(validation_msg)
-        .bind(Utc::now().to_rfc3339())
-        .bind(&sad_node.node_id)
-        .execute(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-    let _ = app_handle.emit("nodes-updated", ());
-    let draft_json = stage_context.to_string();
-    let eval_res = evaluate_draft(
-        &app_handle, &pool, &client, &api_key, &project_id, 
-        "sad_global", &draft_json, Some(genesis_prd_content.clone()), 
-        "", "", &vec![], 1, vec![]
-    ).await;
-
-    let eval = match eval_res {
-        Ok(e) => e,
-        Err(e) => {
-            // 평가 실패 시 기본값으로 진행 (또는 에러 처리)
-            println!(">>> [SAD-Global-Eval] Failed: {:?}", e);
-            crate::schemas::EvaluationResult { score: 70, is_pass: true, critical_errors: vec![], feedback: vec![] }
-        }
-    };
-
-    let iter_id = Uuid::new_v4().to_string();
-    let errors_json = serde_json::to_string(&eval.critical_errors).unwrap_or_default();
-    let feedback_json = serde_json::to_string(&eval.feedback).unwrap_or_default();
-
-    sqlx::query("INSERT INTO generation_iteration (iteration_id, node_id, iteration_number, generated_draft_json, calculated_score, is_pass, critical_errors_array, actionable_feedback_text, created_at, updated_at, is_deleted) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, 0)")
-        .bind(&iter_id)
-        .bind(&sad_node.node_id)
-        .bind(&draft_json)
-        .bind(eval.score)
-        .bind(eval.is_pass)
-        .bind(errors_json)
-        .bind(feedback_json)
-        .bind(Utc::now().to_rfc3339())
-        .bind(Utc::now().to_rfc3339())
-        .execute(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    for (k, v) in stage_context.as_object().unwrap() {
-        sqlx::query("INSERT INTO global_context (context_id, project_id, iteration_id, context_type, context_data_json, version, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, 1, ?, ?, 0)")
-            .bind(Uuid::new_v4().to_string()).bind(&project_id).bind(&iter_id).bind(k).bind(v.to_string()).bind(Utc::now().to_rfc3339()).bind(Utc::now().to_rfc3339()).execute(&*pool).await.map_err(|e| e.to_string())?;
-    }
-
-    sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', current_iteration = 1, current_best_score = ?, updated_at = ? WHERE node_id = ?")
-        .bind(eval.score)
-        .bind(Utc::now().to_rfc3339())
-        .bind(&sad_node.node_id)
-        .execute(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    sqlx::query("UPDATE document_node SET node_state = 'READY', updated_at = ? WHERE project_id = ? AND target_node_type = 'SAD_Module'")
-        .bind(Utc::now().to_rfc3339()).bind(&project_id).execute(&*pool).await.map_err(|e| e.to_string())?;
-
-    let _ = app_handle.emit("nodes-updated", ());
-    Ok("SAD global completed".to_string())
-}
-
-#[tauri::command]
-pub async fn run_sad_module_pipeline(
-    app_handle: tauri::AppHandle,
-    pool: tauri::State<'_, SqlitePool>,
-    active_tasks: tauri::State<'_, ActiveTasks>,
-    project_id: String,
-    api_key: String,
-    target_module_count: Option<i32>,
-) -> Result<String, String> {
-    let client = reqwest::Client::new();
-    let sad_node = sqlx::query_as::<_, DocumentNode>("SELECT * FROM document_node WHERE project_id = ? AND target_node_type = 'SAD_Module'")
-        .bind(&project_id).fetch_optional(&*pool).await.map_err(|e| e.to_string())?
-        .ok_or_else(|| "SAD_Module node not found".to_string())?;
-
-    let _guard = TaskGuard { tasks: active_tasks.0.clone(), node_id: sad_node.node_id.clone() };
-    let genesis_prd = get_full_approved_prd(&*pool, &project_id).await;
-    
-    let contexts = sqlx::query("SELECT context_type, context_data_json FROM global_context WHERE project_id = ? AND is_deleted = 0")
-        .bind(&project_id).fetch_all(&*pool).await.map_err(|e| e.to_string())?;
-    let mut all_ctx = serde_json::json!({});
-    for row in contexts {
-        let t: String = row.get("context_type");
-        let d: String = row.get("context_data_json");
-        all_ctx[&t] = serde_json::from_str(&d).unwrap_or(serde_json::json!(d));
-    }
-
-    sqlx::query("UPDATE document_node SET node_state = 'IN_PROGRESS', last_action = '모듈 분할 중...', updated_at = ? WHERE node_id = ?")
-        .bind(Utc::now().to_rfc3339()).bind(&sad_node.node_id).execute(&*pool).await.map_err(|e| e.to_string())?;
-    let _ = app_handle.emit("nodes-updated", ());
-
-    let module_types = vec!["sad_module_list", "sad_epic_mapping", "sad_module_deps"];
-    let mut stage_module = serde_json::json!({});
-    let prompts_dir = get_prompts_dir(&app_handle);
-    let common_gen = std::fs::read_to_string(prompts_dir.join("generator/common.txt")).unwrap_or_default();
-
-    for ctx_type in module_types {
-        let status_text = match ctx_type {
-            "sad_module_list" => "모듈 목록 정의 중",
-            "sad_epic_mapping" => "에픽 매핑 설계 중",
-            "sad_module_deps" => "모듈 의존성 설계 중",
-            _ => "모듈 세부 항목 생성 중",
-        };
-        let _ = app_handle.emit("pipeline-status", status_text);
-
-        // [UPDATE] DB의 last_action 업데이트하여 Live Activity 반영
-        sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-            .bind(status_text)
-            .bind(Utc::now().to_rfc3339())
-            .bind(&sad_node.node_id)
-            .execute(&*pool)
-            .await
-            .map_err(|e| e.to_string())?;
-        let _ = app_handle.emit("nodes-updated", ());
-
-        let schema = crate::schemas::get_schema_for_node(ctx_type);
-        let type_p = std::fs::read_to_string(prompts_dir.join(format!("generator/{}.txt", ctx_type))).unwrap_or_default();
-        let sys_p = format!("{}\n\n{}", common_gen, type_p);
-        let user_p = format!("PRD: {}\nGLOBAL: {}\nPREV: {}\nCOUNT: {:?}", genesis_prd, all_ctx, stage_module, target_module_count);
-        
-        let res = call_gemini(&client, &api_key, &sys_p, &user_p, schema).await.map_err(|e| e.to_string())?;
-        stage_module[ctx_type] = serde_json::from_str(&res).unwrap_or_default();
-    }
-
-    // [ADD] 최종 설계안 검증 단계
-    let validation_msg = "모듈 설계 검증 중";
-    let _ = app_handle.emit("pipeline-status", validation_msg);
-
-    sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-        .bind(validation_msg)
-        .bind(Utc::now().to_rfc3339())
-        .bind(&sad_node.node_id)
-        .execute(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-    let _ = app_handle.emit("nodes-updated", ());
-    let draft_json = stage_module.to_string();
-    let eval_res = evaluate_draft(
-        &app_handle, &pool, &client, &api_key, &project_id, 
-        "sad_module", &draft_json, Some(genesis_prd.clone()), 
-        &all_ctx.to_string(), "", &vec![], 1, vec![]
-    ).await;
-
-    let eval = match eval_res {
-        Ok(e) => e,
-        Err(e) => {
-            println!(">>> [SAD-Module-Eval] Failed: {:?}", e);
-            crate::schemas::EvaluationResult { score: 70, is_pass: true, critical_errors: vec![], feedback: vec![] }
-        }
-    };
-
-    let iter_id = Uuid::new_v4().to_string();
-    let errors_json = serde_json::to_string(&eval.critical_errors).unwrap_or_default();
-    let feedback_json = serde_json::to_string(&eval.feedback).unwrap_or_default();
-
-    sqlx::query("INSERT INTO generation_iteration (iteration_id, node_id, iteration_number, generated_draft_json, calculated_score, is_pass, critical_errors_array, actionable_feedback_text, created_at, updated_at, is_deleted) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, 0)")
-        .bind(&iter_id)
-        .bind(&sad_node.node_id)
-        .bind(&draft_json)
-        .bind(eval.score)
-        .bind(eval.is_pass)
-        .bind(errors_json)
-        .bind(feedback_json)
-        .bind(Utc::now().to_rfc3339())
-        .bind(Utc::now().to_rfc3339())
-        .execute(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    for (k, v) in stage_module.as_object().unwrap() {
-        sqlx::query("INSERT INTO global_context (context_id, project_id, iteration_id, context_type, context_data_json, version, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, 1, ?, ?, 0)")
-            .bind(Uuid::new_v4().to_string()).bind(&project_id).bind(&iter_id).bind(k).bind(v.to_string()).bind(Utc::now().to_rfc3339()).bind(Utc::now().to_rfc3339()).execute(&*pool).await.map_err(|e| e.to_string())?;
-    }
-
-    sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', current_iteration = 1, current_best_score = ?, updated_at = ? WHERE node_id = ?")
-        .bind(eval.score)
-        .bind(Utc::now().to_rfc3339())
-        .bind(&sad_node.node_id)
-        .execute(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let _ = app_handle.emit("nodes-updated", ());
-    Ok("SAD module split completed".to_string())
-}
 
 #[tauri::command]
 pub async fn run_module_pipeline(

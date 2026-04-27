@@ -60,6 +60,23 @@ pub async fn generate_draft(
         domain_prompt = domain_prompt.replace("{{PREVIOUS_DRAFT}}", previous_draft);
     }
 
+    // SAD 노드의 경우 전역 컨텍스트 로드
+    if node_type.starts_with("SAD_") {
+        use sqlx::Row;
+        let contexts = sqlx::query("SELECT context_type, context_data_json FROM global_context WHERE project_id = ? AND is_deleted = 0")
+            .bind(project_id).fetch_all(pool).await.map_err(|e| PipelineError::Internal(e.to_string()))?;
+        let mut all_ctx = String::new();
+        for row in contexts {
+            let t: String = row.get("context_type");
+            let d: String = row.get("context_data_json");
+            all_ctx.push_str(&format!("\n[{}]\n{}\n", t, d));
+        }
+        domain_prompt = domain_prompt.replace("{{GLOBAL_CONTEXT}}", &all_ctx);
+        domain_prompt = domain_prompt.replace("{{PREVIOUS_DRAFT}}", previous_draft);
+        let feedback_text = if previous_feedback.is_empty() { "없음".to_string() } else { previous_feedback.join("\n") };
+        domain_prompt = domain_prompt.replace("{{EVALUATOR_FEEDBACK}}", &feedback_text);
+    }
+
     let schema_obj = crate::schemas::get_schema_for_node(&node_normalized);
 
     let combined_sys_prompt = format!(
@@ -87,6 +104,22 @@ pub async fn generate_draft(
                 previous_feedback.join("\n"),
                 previous_draft
             );
+        }
+
+        // SAD 노드의 경우 사용자 프롬프트에 글로벌 컨텍스트 추가
+        if node_type.starts_with("SAD_") {
+            use sqlx::Row;
+            let contexts = sqlx::query("SELECT context_type, context_data_json FROM global_context WHERE project_id = ? AND is_deleted = 0")
+                .bind(project_id).fetch_all(pool).await.map_err(|e| PipelineError::Internal(e.to_string()))?;
+            let mut all_ctx = String::new();
+            for row in contexts {
+                let t: String = row.get("context_type");
+                let d: String = row.get("context_data_json");
+                all_ctx.push_str(&format!("\n[{}]\n{}\n", t, d));
+            }
+            if !all_ctx.is_empty() {
+                up = format!("{}\n\n$GLOBAL_CONTEXT\n{}", up, all_ctx);
+            }
         }
         up
     };
@@ -146,6 +179,10 @@ pub async fn evaluate_draft(
                 get_approved_node_output(pool, project_id, "GPRD_Capability_Actor").await;
             domain_rubric = domain_rubric.replace("{{APPROVED_1B}}", &approved_1b);
         }
+    }
+
+    if node_type.starts_with("SAD_") {
+        domain_rubric = domain_rubric.replace("{{GLOBAL_CONTEXT}}", global_context);
     }
 
     let combined_sys_prompt = format!(

@@ -4,10 +4,8 @@ import {
   Minus, 
   Square, 
   X, 
-  Search, 
   PanelLeft, 
   PanelRight,
-  Menu,
   ChevronDown
 } from 'lucide-react';
 import { safeWindow } from '../../utils/tauri';
@@ -21,6 +19,7 @@ export const Header: React.FC = () => {
     isRightPanelOpen, 
     toggleSidebar, 
     toggleRightPanel,
+    currentView
   } = useUIStore();
 
   const { currentProject } = useProjectStore();
@@ -31,25 +30,20 @@ export const Header: React.FC = () => {
 
   return (
     <div className={styles.header} data-tauri-drag-region>
-      <div className={styles.leftSection}>
-        <Menu size={16} className={styles.menuIcon} />
-        <div className={styles.logoWrapper}>
-          <Box size={14} className="text-[#10b981]" />
-          <span className={styles.logoText}>
-            {currentProject?.project_name || 'Magic Planner Hub'}
-          </span>
-          <ChevronDown size={14} className={styles.chevron} />
-        </div>
+      <div className={styles.leftSection} data-tauri-drag-region>
+        {currentView !== 'DASHBOARD' && (
+          <div className={styles.logoWrapper} data-tauri-drag-region>
+            <Box size={14} className="text-[#10b981]" />
+            <span className={styles.logoText} data-tauri-drag-region>
+              {currentProject?.project_name || 'Magic Planner Hub'}
+            </span>
+            <ChevronDown size={14} className={styles.chevron} />
+          </div>
+        )}
       </div>
 
-      <div className={styles.searchContainer}>
-        <div className={styles.searchBox}>
-          <Search size={14} className="text-gray-500" />
-          <input 
-            type="text" 
-            placeholder="Search nodes..." 
-          />
-        </div>
+      <div className={styles.centerSection} data-tauri-drag-region>
+        <div className={styles.titleText} data-tauri-drag-region>Magic Planner</div>
       </div>
 
       <div className={styles.rightSection}>

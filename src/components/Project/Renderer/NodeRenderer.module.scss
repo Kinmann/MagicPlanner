@@ -33,39 +33,113 @@
   }
 }
 
+.mockBanner {
+  padding: 0.5rem 1.5rem;
+  background: rgba(245, 158, 11, 0.1);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.3);
+  color: #f59e0b;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .rawMode {
   padding: v.$space-8;
   max-width: 1000px;
   margin: 0 auto;
-  animation: fadeIn 0.3s ease forwards;
+  animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 
-  .header {
+  .premiumHeader {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: v.$space-4;
+    padding: 1.25rem 0;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+
+    .headerTitleArea {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
 
     h2 {
-      font-size: v.$text-lg;
-      font-family: v.$font-mono;
-      color: v.$text-muted;
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: #f3f4f6;
+      letter-spacing: -0.02em;
+    }
+
+    .badge {
+      padding: 0.25rem 0.625rem;
+      background: rgba(v.$primary, 0.1);
+      border: 1px solid rgba(v.$primary, 0.3);
+      color: v.$primary;
+      font-size: 0.65rem;
+      font-weight: 800;
+      border-radius: 4px;
+      letter-spacing: 0.05em;
+    }
+
+    .copyBtn {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.875rem;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      color: #9ca3af;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.2);
+        color: #f3f4f6;
+        transform: translateY(-1px);
+      }
+
+      &.copied {
+        background: rgba(16, 185, 129, 0.1);
+        border-color: #10b981;
+        color: #10b981;
+      }
     }
   }
 
-  .codeBlock {
-    background-color: #121216;
-    border: 1px solid v.$border;
-    border-radius: v.$radius-lg;
-    padding: v.$space-6;
-    overflow: auto;
-    max-height: 70vh;
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  .codeBlockWrapper {
+    background-color: #0c0c0e;
+    border: 1px solid #27272a;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    
+    .codeBlock {
+      padding: 1.5rem;
+      overflow: auto;
+      max-height: 70vh;
+      display: flex;
+      flex-direction: column;
 
-    pre {
-      font-size: v.$text-sm;
-      font-family: v.$font-mono;
-      color: rgba(v.$primary, 0.8);
-      line-height: 1.6;
+      &::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+      &::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      &::-webkit-scrollbar-thumb {
+        background: #1f1f23;
+        border: 3px solid #0c0c0e;
+        border-radius: 10px;
+        &:hover { background: #27272a; }
+      }
     }
   }
 }
@@ -102,6 +176,144 @@
       font-style: italic;
       margin-bottom: 0;
     }
+  }
+}
+
+.integratedView {
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+  padding-bottom: 4rem;
+  animation: fadeIn 0.4s ease-out;
+}
+
+.integratedSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+
+  .sectionHeader {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(v.$border, 0.5);
+
+    .sectionBadge {
+      font-size: 0.65rem;
+      font-weight: 800;
+      padding: 0.2rem 0.5rem;
+      background: rgba(v.$primary, 0.1);
+      color: v.$primary;
+      border-radius: 4px;
+      letter-spacing: 0.05em;
+    }
+
+    .sectionTitle {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: v.$foreground;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      opacity: 0.8;
+    }
+  }
+
+  .sectionContent {
+    // Specialized renderers have their own styles, but we can add overrides here if needed
+  }
+}
+
+.magicEmptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 500px;
+  background-color: #09090b;
+  color: #71717a;
+  font-family: v.$font-sans;
+
+  .centerContent {
+    text-align: center;
+    max-width: 440px;
+    padding: 2rem;
+  }
+
+  .logoArea {
+    margin-bottom: 2rem;
+    display: flex;
+    justify-content: center;
+
+    .iconBox {
+      width: 56px;
+      height: 56px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid #27272a;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: v.$primary;
+      transition: all 0.3s ease;
+
+      &:hover {
+        border-color: rgba(v.$primary, 0.4);
+        background: rgba(v.$primary, 0.05);
+      }
+    }
+  }
+
+  h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #f4f4f5;
+    margin-bottom: 0.75rem;
+    letter-spacing: -0.01em;
+  }
+
+  .description {
+    font-size: 0.875rem;
+    color: #52525b;
+    line-height: 1.6;
+    margin-bottom: 2.5rem;
+  }
+
+  .guideList {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1.5rem;
+    background: rgba(255, 255, 255, 0.01);
+    border: 1px solid #18181b;
+    border-radius: 12px;
+
+    .guideItem {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 0.8125rem;
+      color: #71717a;
+
+      &::before {
+        content: '';
+        width: 4px;
+        height: 4px;
+        background: #27272a;
+        border-radius: 50%;
+      }
+    }
+  }
+
+  .footerHint {
+    margin-top: 3rem;
+    font-size: 0.75rem;
+    color: #3f3f46;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: v.$font-mono;
   }
 }
 

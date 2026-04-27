@@ -12,13 +12,18 @@ pub async fn trigger_next_nodes(
 ) -> Result<(), String> {
     let pool = app_handle.state::<SqlitePool>();
 
-    // 프로젝트 수준 DAG 의존성 맵 (선행 노드 → 후속 노드)
     let next_map = vec![
         ("GPRD_Context_Goal", vec!["GPRD_Capability_Actor"]),
         ("GPRD_Capability_Actor", vec!["GPRD_Architecture_Schema"]),
-        ("GPRD_Architecture_Schema", vec!["SAD_Global"]),
-        ("SAD_Global", vec!["SAD_Module"]),
-        ("Genesis_PRD", vec!["SAD_Global"]),
+        ("GPRD_Architecture_Schema", vec!["SAD_Non_Tech"]),
+        ("Genesis_PRD", vec!["SAD_Non_Tech"]),
+        ("SAD_Non_Tech", vec!["SAD_Tech_Stack", "SAD_Auth_RBAC", "SAD_Interface_Error"]),
+        ("SAD_Tech_Stack", vec!["SAD_Core_ERD", "SAD_Auth_RBAC", "SAD_Interface_Error"]),
+        ("SAD_Auth_RBAC", vec!["SAD_Core_ERD", "SAD_Interface_Error"]),
+        ("SAD_Core_ERD", vec!["SAD_Interface_Error"]),
+        ("SAD_Interface_Error", vec!["SAD_Module_List"]),
+        ("SAD_Module_List", vec!["SAD_Epic_Mapping"]),
+        ("SAD_Epic_Mapping", vec!["SAD_Module_Deps"]),
     ];
 
     let mut nodes_to_check = Vec::new();
@@ -35,14 +40,20 @@ pub async fn trigger_next_nodes(
         let prerequisites = match target {
             "GPRD_Capability_Actor" => vec!["GPRD_Context_Goal"],
             "GPRD_Architecture_Schema" => vec!["GPRD_Capability_Actor"],
-            "SAD_Global" => {
+            "SAD_Non_Tech" => {
                 if completed_node_type == "Genesis_PRD" {
                     vec!["Genesis_PRD"]
                 } else {
                     vec!["GPRD_Architecture_Schema"]
                 }
             }
-            "SAD_Module" => vec!["SAD_Global"],
+            "SAD_Tech_Stack" => vec!["SAD_Non_Tech"],
+            "SAD_Auth_RBAC" => vec!["SAD_Non_Tech", "SAD_Tech_Stack"],
+            "SAD_Core_ERD" => vec!["SAD_Tech_Stack", "SAD_Auth_RBAC"],
+            "SAD_Interface_Error" => vec!["SAD_Non_Tech", "SAD_Tech_Stack", "SAD_Auth_RBAC", "SAD_Core_ERD"],
+            "SAD_Module_List" => vec!["SAD_Interface_Error"],
+            "SAD_Epic_Mapping" => vec!["SAD_Module_List"],
+            "SAD_Module_Deps" => vec!["SAD_Epic_Mapping"],
             _ => vec![],
         };
 
@@ -94,13 +105,18 @@ pub async fn reset_downstream_ready_nodes(
 ) -> Result<(), String> {
     let pool = app_handle.state::<SqlitePool>();
 
-    // 프로젝트 수준 DAG 의존성 맵 (선행 노드 → 후속 노드)
     let next_map = vec![
         ("GPRD_Context_Goal", vec!["GPRD_Capability_Actor"]),
         ("GPRD_Capability_Actor", vec!["GPRD_Architecture_Schema"]),
-        ("GPRD_Architecture_Schema", vec!["SAD_Global"]),
-        ("SAD_Global", vec!["SAD_Module"]),
-        ("Genesis_PRD", vec!["SAD_Global"]),
+        ("GPRD_Architecture_Schema", vec!["SAD_Non_Tech"]),
+        ("Genesis_PRD", vec!["SAD_Non_Tech"]),
+        ("SAD_Non_Tech", vec!["SAD_Tech_Stack", "SAD_Auth_RBAC", "SAD_Interface_Error"]),
+        ("SAD_Tech_Stack", vec!["SAD_Core_ERD", "SAD_Auth_RBAC", "SAD_Interface_Error"]),
+        ("SAD_Auth_RBAC", vec!["SAD_Core_ERD", "SAD_Interface_Error"]),
+        ("SAD_Core_ERD", vec!["SAD_Interface_Error"]),
+        ("SAD_Interface_Error", vec!["SAD_Module_List"]),
+        ("SAD_Module_List", vec!["SAD_Epic_Mapping"]),
+        ("SAD_Epic_Mapping", vec!["SAD_Module_Deps"]),
     ];
 
     let mut nodes_to_check = Vec::new();
@@ -319,4 +335,117 @@ pub async fn sync_module_completion_status(
         }
     }
     Ok(())
+}
+
+/// 노드 잠금 여부를 확인합니다.
+/// 하위 노드 중 하나라도 COMPLETED 상태이거나 이터레이션 결과(score > 0)가 있다면 상위 노드는 잠금 상태입니다.
+pub async fn is_node_locked(
+    pool: &sqlx::SqlitePool,
+    node: &DocumentNode,
+) -> Result<bool, String> {
+    // 1. 전역 의존성 맵 (모든 노드 타입은 소문자로 관리)
+    let next_map = vec![
+        // Context & Goal -> 나머지 모든 GPRD, SAD, Module 노드들
+        ("gprd_context_goal", vec![
+            "gprd_capability_actor", "gprd_architecture_schema", 
+            "sad_non_tech", "sad_tech_stack", "sad_core_erd", "sad_auth_rbac", "sad_interface_error",
+            "sad_module_list", "sad_epic_mapping", "sad_module_deps"
+        ]),
+        // Epics & Actors -> Architecture, SAD, Module 노드들
+        ("gprd_capability_actor", vec![
+            "gprd_architecture_schema", 
+            "sad_non_tech", "sad_tech_stack", "sad_core_erd", "sad_auth_rbac", "sad_interface_error",
+            "sad_module_list", "sad_epic_mapping", "sad_module_deps"
+        ]),
+        // Architecture Schema -> SAD, Module 노드들
+        ("gprd_architecture_schema", vec![
+            "sad_non_tech", "sad_tech_stack", "sad_core_erd", "sad_auth_rbac", "sad_interface_error",
+            "sad_module_list", "sad_epic_mapping", "sad_module_deps"
+        ]),
+        // SAD 글로벌 항목들 -> SAD 모듈 분할 및 모든 개별 모듈 문서들
+        ("sad_non_tech", vec!["sad_module_list", "sad_epic_mapping", "sad_module_deps"]),
+        ("sad_tech_stack", vec!["sad_module_list", "sad_epic_mapping", "sad_module_deps"]),
+        ("sad_core_erd", vec!["sad_module_list", "sad_epic_mapping", "sad_module_deps"]),
+        ("sad_auth_rbac", vec!["sad_module_list", "sad_epic_mapping", "sad_module_deps"]),
+        ("sad_interface_error", vec!["sad_module_list", "sad_epic_mapping", "sad_module_deps"]),
+        
+        // SAD 모듈 분할 항목들 -> 모든 개별 모듈 문서들
+        ("sad_module_list", vec![]), // SAD_Module 가상 노드 처리를 위해 아래에서 별도 처리
+        ("sad_epic_mapping", vec![]),
+        ("sad_module_deps", vec![]),
+    ];
+
+    // 2. 모듈 내 의존성 맵 (PRD -> FSD -> Flow/ERD/IA -> Wireframe/API -> TC)
+    let module_next_map = vec![
+        ("prd", vec!["fsd", "user_flow", "ia", "erd", "wireframe", "api_spec", "tc"]),
+        ("fsd", vec!["user_flow", "ia", "erd", "wireframe", "api_spec", "tc"]),
+        ("user_flow", vec!["ia", "wireframe", "tc"]),
+        ("ia", vec!["wireframe", "tc"]),
+        ("erd", vec!["api_spec", "tc"]),
+        ("api_spec", vec!["tc"]),
+    ];
+
+    let target_type = node.target_node_type.to_lowercase();
+    let mut children_types = Vec::new();
+    
+
+    for (parent, children) in next_map {
+        if parent == target_type { 
+            for c in children { children_types.push(c.to_string()); }
+        }
+    }
+    for (parent, children) in module_next_map {
+        if parent == target_type { 
+            for c in children { children_types.push(c.to_string()); }
+        }
+    }
+
+
+    // SAD_Module 관련 노드이거나 SAD_Module 자체인 경우
+    let is_sad_module_related = target_type == "sad_module_list" || target_type == "sad_epic_mapping" || target_type == "sad_module_deps" || target_type == "sad_module";
+
+    if is_sad_module_related {
+        // SAD_Module 하위에는 모든 개별 모듈 노드들이 포함됨
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM document_node WHERE project_id = ? AND module_id IS NOT NULL AND (node_state = 'COMPLETED' OR current_best_score > 0) AND is_deleted = 0"
+        )
+        .bind(&node.project_id)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+        
+        if count > 0 { 
+            return Ok(true); 
+        }
+    }
+
+    if !children_types.is_empty() {
+        let mut query_builder = sqlx::QueryBuilder::new("SELECT COUNT(*) FROM document_node WHERE project_id = ");
+        query_builder.push_bind(&node.project_id);
+        query_builder.push(" AND is_deleted = 0 AND (node_state = 'COMPLETED' OR current_best_score > 0) ");
+        
+        if let Some(mid) = &node.module_id {
+            query_builder.push(" AND module_id = ").push_bind(mid);
+        } else {
+            query_builder.push(" AND module_id IS NULL ");
+        }
+
+        query_builder.push(" AND LOWER(target_node_type) IN (");
+        let mut sep = query_builder.separated(", ");
+        for t in children_types {
+            sep.push_bind(t.to_lowercase());
+        }
+        query_builder.push(")");
+
+        let count: i64 = query_builder.build_query_scalar()
+            .fetch_one(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if count > 0 { 
+            return Ok(true); 
+        }
+    }
+
+    Ok(false)
 }

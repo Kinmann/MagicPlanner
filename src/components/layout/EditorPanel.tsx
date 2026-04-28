@@ -12,7 +12,9 @@ import {
   Settings2,
   GitBranch,
   Lock,
-  Sparkles
+  Sparkles,
+  Square,
+  Layers
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -24,11 +26,14 @@ import { mapNodesToTree, TreeItem } from '../../utils/treeMapper';
 import { ErrorBoundary } from '../ui/Layout';
 import { NodeRenderer } from '../Project/Renderer/NodeRenderer';
 import { NodeActionHeader } from '../Project/NodeActionHeader';
+import { Dialog } from '../ui/Dialog';
+import { Button } from '../ui/Button';
 import styles from './EditorPanel.module.scss';
 
 export const EditorPanel: React.FC = () => {
   const [iterations, setIterations] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [iterToDelete, setIterToDelete] = React.useState<string | null>(null);
   const { 
     selectedNodeId, 
     openNodeIds, 
@@ -47,12 +52,15 @@ export const EditorPanel: React.FC = () => {
     currentProject, 
     nodes, 
     runNode, 
+    stopNode,
     updateMaxIterations,
+    updateTargetCount,
     confirmGenesisIteration,
-    unconfirmIteration
+    unconfirmIteration,
+    deleteIteration
   } = useProjectStore();
   
-  const { isProcessing } = useEngineStore();
+  const { isProcessing, isEmbedding, runningNodes } = useEngineStore();
   const { addLog } = useLogStore();
 
   const selectedNode = React.useMemo(() => {
@@ -119,7 +127,10 @@ export const EditorPanel: React.FC = () => {
 
   React.useEffect(() => {
     const unlisten = listen('nodes-updated', () => {
-      if (selectedNodeId) loadIterations();
+      if (selectedNodeId) {
+        loadIterations();
+        if (currentProject?.project_id) fetchNodes(currentProject.project_id);
+      }
     });
     return () => {
       unlisten.then(f => f());
@@ -146,12 +157,50 @@ export const EditorPanel: React.FC = () => {
     }
   };
 
+  const handleStop = async () => {
+    if (!selectedNodeId) return;
+    try {
+      await stopNode(selectedNodeId);
+    } catch (e) {
+      console.error("Failed to stop node:", e);
+    }
+  };
+
+  React.useEffect(() => {
+    const unlistenEvent = listen('pipeline-event', (event: any) => {
+      const { node_id, state } = event.payload;
+      if (node_id === selectedNodeId && state === 'PAUSED_HITL') {
+        addLog('SUCCESS', `초안 생성 완료`, selectedNode?.target_node_type);
+        loadIterations();
+      }
+    });
+
+    const unlistenStatus = listen('pipeline-status', (event: any) => {
+      const payload = event.payload;
+      if (payload && typeof payload === 'object') {
+        const status = payload.status || payload.event;
+        const nodeId = payload.node_id || payload.nodeId;
+        if ((status === 'ITERATION_COMPLETED' || status === 'iteration_completed' || payload.message?.includes('완료')) && nodeId === selectedNodeId) {
+          loadIterations();
+        }
+      }
+    });
+
+    return () => {
+      unlistenEvent.then(u => u());
+      unlistenStatus.then(u => u());
+    };
+  }, [selectedNodeId, selectedNode]);
+
   const loadIterations = async () => {
     if (!selectedNodeId) return;
     setLoading(true);
     try {
       const iters = await invoke<any[]>('get_node_iterations', { nodeId: selectedNodeId });
-      const sorted = [...iters].sort((a, b) => a.iteration_number - b.iteration_number);
+      // 생성 일자(created_at) 기준으로 오름차순 정렬
+      const sorted = [...iters].sort((a, b) => 
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
       setIterations(sorted);
       
       // Auto-select pass or latest if nothing selected
@@ -184,6 +233,24 @@ export const EditorPanel: React.FC = () => {
       setSelectedIteration(it.iteration_id);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteIteration = (iterId: string) => {
+    setIterToDelete(iterId);
+  };
+
+  const confirmDelete = async () => {
+    if (!iterToDelete || !currentProject) return;
+    setLoading(true);
+    try {
+      await deleteIteration(iterToDelete);
+      addLog('WARN', `Iteration deleted`, selectedNode?.target_node_type);
+      await loadIterations();
+      setSelectedIteration(null);
+    } finally {
+      setLoading(false);
+      setIterToDelete(null);
     }
   };
 
@@ -249,8 +316,8 @@ export const EditorPanel: React.FC = () => {
       return <Zap size={24} />;
     };
 
-    const isRunning = selectedNode.node_state === 'IN_PROGRESS';
-    const hasPassedIter = selectedNode.current_best_score > 0; // Simplified check
+    const isRunning = selectedNode.node_state === 'IN_PROGRESS' || selectedNode.is_active;
+    const hasPassedIter = (selectedNode.current_best_score > 0) || iterations.some(it => it.is_pass);
     const isCompleted = selectedNode.node_state === 'COMPLETED';
 
     return (
@@ -266,58 +333,103 @@ export const EditorPanel: React.FC = () => {
             </p>
           </div>
 
-          <div className={styles.controls}>
-            <div className={styles.iterationBox}>
-              <Settings2 size={14} className={styles.label} />
-              <span className={styles.label}>Iteration</span>
-              <div className={styles.controlGroup}>
-                <span className={styles.current}>{selectedNode.current_iteration}</span>
-                <span className={styles.sep}>/</span>
-                <input 
-                  type="number" 
-                  value={selectedNode.max_iterations} 
-                  onChange={(e) => updateMaxIterations(selectedNode.node_id, parseInt(e.target.value) || 1)}
-                  min={1}
-                  max={10}
-                />
+          {/* Determine if stopping */}
+          {(() => {
+            const runningNode = runningNodes.find(n => n.nodeId === selectedNode.node_id);
+            const isStopping = runningNode?.lastAction?.includes('종료 중');
+            
+            return (
+              <div className={styles.controls}>
+                {selectedNode.target_node_type === 'SAD_Module_List' && (
+                  <div className={styles.iterationBox} style={{ marginRight: '8px' }}>
+                    <Layers size={14} className={styles.label} />
+                    <span className={styles.label}>Modules</span>
+                    <div className={styles.controlGroup}>
+                      <input 
+                        type="number" 
+                        value={selectedNode.target_count || 5} 
+                        onChange={(e) => updateTargetCount(selectedNode.node_id, parseInt(e.target.value) || 1)}
+                        min={1}
+                        max={20}
+                        title="생성할 모듈 개수를 지정합니다."
+                      />
+                    </div>
+                  </div>
+                )}
+                <div className={styles.iterationBox}>
+                  <Settings2 size={14} className={styles.label} />
+                  <span className={styles.label}>Iteration</span>
+                  <div className={styles.controlGroup}>
+                    <span className={styles.current}>{selectedNode.current_iteration}</span>
+                    <span className={styles.sep}>/</span>
+                    <input 
+                      type="number" 
+                      value={selectedNode.max_iterations} 
+                      onChange={(e) => updateMaxIterations(selectedNode.node_id, parseInt(e.target.value) || 1)}
+                      min={1}
+                      max={10}
+                    />
+                  </div>
+                </div>
+
+                <div className={styles.actionGroup}>
+                  <button 
+                    className={styles.startBtn}
+                    onClick={() => {
+                      addLog('INFO', `Starting node execution`, selectedNode.target_node_type);
+                      runNode(selectedNode.node_id);
+                    }}
+                    disabled={isProcessing || isEmbedding || isRunning || loading || selectedNode.is_locked || isStopping}
+                  >
+                    {selectedNode.is_locked ? (
+                      <Lock size={16} />
+                    ) : isRunning ? (
+                      <RotateCcw size={16} className="animate-spin" />
+                    ) : isCompleted ? (
+                      <RefreshCw size={16} />
+                    ) : (
+                      <Play size={16} fill="currentColor" />
+                    )}
+                    <span>{selectedNode.is_locked ? 'Locked' : (isRunning ? 'Running' : (isCompleted ? 'Regenerate' : 'Start'))}</span>
+                  </button>
+
+                  {isRunning && (
+                    <button 
+                      className={styles.stopBtn}
+                      onClick={handleStop}
+                      disabled={isStopping}
+                      style={isStopping ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                    >
+                      <Square size={16} />
+                      <span>{isStopping ? 'Stopping...' : 'Stop'}</span>
+                    </button>
+                  )}
+                </div>
+
+                {hasPassedIter && !isCompleted && (
+                  <button 
+                    className={styles.nextStepBtn}
+                    onClick={async () => {
+                      addLog('SUCCESS', `Approving node and moving to next step`, selectedNode.target_node_type);
+                      const store = useProjectStore.getState();
+                      if (selectedNode.target_node_type === 'GPRD_Architecture_Schema') {
+                        await store.approveGenesisPrd();
+                      } else if (selectedNode.target_node_type.startsWith('SAD_')) {
+                        await store.approveSadNode(selectedNode.node_id);
+                      } else {
+                        await store.approveGenesisNode(selectedNode.node_id);
+                      }
+                      goToNextNode();
+                    }}
+                    disabled={isProcessing || loading}
+                  >
+                    <span>Next Step</span>
+                    <ChevronRight size={16} />
+                  </button>
+                )}
               </div>
-            </div>
-
-            <button 
-              className={styles.startBtn}
-              onClick={() => {
-                addLog('INFO', `Starting node execution`, selectedNode.target_node_type);
-                runNode(selectedNode.node_id);
-              }}
-              disabled={isProcessing || isRunning || loading || selectedNode.is_locked}
-            >
-              {selectedNode.is_locked ? (
-                <Lock size={16} />
-              ) : isRunning ? (
-                <RotateCcw size={16} className="animate-spin" />
-              ) : isCompleted ? (
-                <RefreshCw size={16} />
-              ) : (
-                <Play size={16} fill="currentColor" />
-              )}
-              <span>{selectedNode.is_locked ? 'Locked' : (isRunning ? 'Running' : (isCompleted ? 'Regenerate' : 'Start'))}</span>
-            </button>
-
-            {hasPassedIter && !isCompleted && (
-              <button 
-                className={styles.nextStepBtn}
-                onClick={async () => {
-                  addLog('SUCCESS', `Approving node and moving to next step`, selectedNode.target_node_type);
-                  await useProjectStore.getState().approveGenesisNode(selectedNode.node_id);
-                  goToNextNode();
-                }}
-                disabled={isProcessing || loading}
-              >
-                <span>Next Step</span>
-                <ChevronRight size={16} />
-              </button>
-            )}
-          </div>
+            );
+          })()}
         </div>
 
         {/* Drafts Section Integrated into Header */}
@@ -326,21 +438,17 @@ export const EditorPanel: React.FC = () => {
             <NodeActionHeader 
               iterations={iterations}
               selectedIterationId={selectedIterationId}
-              onSelectIteration={(id) => {
-                setSelectedIteration(id);
-              }}
+              onSelectIteration={setSelectedIteration}
               onConfirmIteration={(id) => {
                 const idx = iterations.findIndex(it => it.iteration_id === id);
                 if (idx >= 0) handleConfirmIteration(idx);
               }}
+              onDeleteIteration={handleDeleteIteration}
               isRawMode={isRawMode}
-              onToggleRawMode={() => {
-                const newMode = !isRawMode;
-                addLog('INFO', `Toggled ${newMode ? 'Raw' : 'Preview'} mode`, selectedNode.target_node_type);
-                toggleRawMode();
-              }}
+              onToggleRawMode={toggleRawMode}
               isLocked={selectedNode.is_locked}
-              title="Generated Drafts"
+              title={selectedNode.target_node_type}
+              countLabel="Draft"
             />
           </div>
         )}
@@ -418,6 +526,33 @@ export const EditorPanel: React.FC = () => {
           </>
         )}
       </div>
+      {/* 삭제 확인 모달 (IDE Style) */}
+      <Dialog
+        isOpen={!!iterToDelete}
+        onClose={() => setIterToDelete(null)}
+        title="Confirm Delete"
+        size="sm"
+      >
+        <div className={styles.confirmModal}>
+          <p className={styles.message}>
+            This iteration will be permanently removed. This action cannot be undone and may affect the project's dependency graph.
+          </p>
+          <div className={styles.actions}>
+            <button 
+              onClick={() => setIterToDelete(null)}
+              className={styles.cancelBtn}
+            >
+              Cancel
+            </button>
+            <button 
+              onClick={confirmDelete}
+              className={styles.deleteBtn}
+            >
+              Delete Iteration
+            </button>
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 };

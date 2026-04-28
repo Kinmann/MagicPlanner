@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { listen } from '@tauri-apps/api/event';
 import { useProjectStore } from './projectStore';
+import { normalizePipelineStatus, formatStatusMessage } from '../utils/statusHandler';
 
 export interface LogEntry {
   id: string;
@@ -40,29 +41,44 @@ export const useLogStore = create<LogState>((set) => ({
 }));
 
 // 실시간 이벤트 리스너 등록
+let isLogListenerRegistered = false;
+
 export const initLogEventListeners = async () => {
+  if (isLogListenerRegistered) return;
+  isLogListenerRegistered = true;
+
   // 백엔드 파이프라인 상태 이벤트 리스너
   await listen<any>('pipeline-status', (event) => {
-    const payload = event.payload;
-    let message = '';
-    let level: LogEntry['level'] = 'INFO';
-    let nodeType = undefined;
+    const status = normalizePipelineStatus(event.payload);
+    if (!status) return;
 
-    if (typeof payload === 'string') {
-      message = payload;
-    } else if (payload && typeof payload === 'object') {
-      message = payload.message || JSON.stringify(payload);
-      level = (payload.level as any) || 'INFO';
-      nodeType = payload.node_type || payload.target_node_type;
+    const level = status.level;
+    const nodeType = status.node_type;
+    const message = formatStatusMessage(status);
+
+    // Iteration 완료 감지 및 로그 기록
+    const isCompletionStatus = status.status === 'ITERATION_COMPLETED';
+    const isCompletionMessage = status.message?.includes('평가 완료') || 
+                               status.message?.includes('검증 완료') || 
+                               status.message?.includes('생성 완료') ||
+                               status.message?.includes('Iteration 완료');
+
+    if (isCompletionStatus || (isCompletionMessage && status.current_iteration !== null)) {
+      const iterText = status.current_iteration !== null && status.max_iterations !== null 
+        ? ` (${status.current_iteration}/${status.max_iterations})` : '';
+      const successMsg = isCompletionStatus ? `초안 생성 완료${iterText}` : `Iteration${iterText} completed`;
+      useLogStore.getState().addLog('SUCCESS', successMsg, nodeType);
     }
-
-    if (message) {
+    // Stop 종료 감지 및 기타 상태 처리 (else if로 연결하여 중복 방지)
+    else if (status.status === 'STOPPED') {
+      useLogStore.getState().addLog('WARN', 'Node execution cancelled', nodeType);
+    } else if (status.status === 'EMBEDDING_COMPLETE') {
+      useLogStore.getState().addLog('SUCCESS', `RAG 임베딩 완료`, nodeType);
+    } else if (status.status === 'EMBEDDING_FAILED') {
+      useLogStore.getState().addLog('ERROR', `RAG 임베딩 실패`, nodeType);
+    } else if (message && message !== 'Orchestrating...') {
       useLogStore.getState().addLog(level, message, nodeType);
     }
   });
 
-  // 노드 업데이트 이벤트 리스너
-  await listen('nodes-updated', () => {
-    useLogStore.getState().addLog('SUCCESS', 'Project nodes updated and synchronized.');
-  });
 };

@@ -18,8 +18,22 @@ const calculateFolderStatus = (items: TreeItem[]): 'Pending' | 'Active' | 'Compl
   );
 
   if (nodeStates.length === 0) return 'Pending';
-  if (nodeStates.every(s => s === 'COMPLETED' || s === 'Completed')) return 'Completed';
-  if (nodeStates.some(s => s === 'IN_PROGRESS' || s === 'Active')) return 'Active';
+  
+  // If any child node is in an active-like state, the folder is Active
+  const isActive = nodeStates.some(s => 
+    s === 'IN_PROGRESS' || 
+    s === 'Active' || 
+    s === 'REFINING' || 
+    s === 'READY' || 
+    s === 'PAUSED_HITL'
+  );
+  
+  if (isActive) return 'Active';
+
+  // If all children are completed, the folder is Completed
+  const isAllCompleted = nodeStates.every(s => s === 'COMPLETED' || s === 'Completed');
+  if (isAllCompleted) return 'Completed';
+
   return 'Pending';
 };
 
@@ -33,8 +47,8 @@ const NODE_LABELS: Record<string, string> = {
   'GPRD_Architecture_Schema': 'Node 3: Architecture & Schema',
   'SAD_Non_Tech': 'Node 1: Non tech',
   'SAD_Tech_Stack': 'Node 2: Tech stack',
-  'SAD_Core_ERD': 'Node 3: Core ERD',
-  'SAD_Auth_RBAC': 'Node 4: Auth & RBAC',
+  'SAD_Auth_RBAC': 'Node 3: Auth & RBAC',
+  'SAD_Core_ERD': 'Node 4: Core ERD',
   'SAD_Interface_Error': 'Node 5: Interface & Errors',
   'SAD_Module_List': 'Node 1: Module list',
   'SAD_Epic_Mapping': 'Node 2: Epic Mapping',
@@ -78,7 +92,7 @@ export const mapNodesToTree = (
   });
 
   // 2. SAD Phase
-  const sadGlobalChildren = buildChildren(['SAD_Non_Tech', 'SAD_Tech_Stack', 'SAD_Core_ERD', 'SAD_Auth_RBAC', 'SAD_Interface_Error']);
+  const sadGlobalChildren = buildChildren(['SAD_Non_Tech', 'SAD_Tech_Stack', 'SAD_Auth_RBAC', 'SAD_Core_ERD', 'SAD_Interface_Error']);
   const sadSplitChildren = buildChildren(['SAD_Module_List', 'SAD_Epic_Mapping', 'SAD_Module_Deps']);
   
   const sadChildren: TreeItem[] = [

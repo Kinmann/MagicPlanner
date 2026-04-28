@@ -510,13 +510,6 @@ export const SadGlobalRenderer = ({ content }: { content: any }) => {
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
       {contexts.map((ctx: any, idx: number) => (
         <div key={idx} className={`${styles.card} ${styles.col12} p-0 overflow-visible`}>
-          <div className="flex items-center justify-between px-6 py-3 border-bottom border-border bg-surface-container-high rounded-t-xl">
-             <div className="flex items-center gap-2">
-               <Box size={14} className="text-primary" />
-               <span className="text-[11px] font-bold tracking-widest opacity-60 uppercase">{ctx.context_type?.replace('sad_', '')} Specification</span>
-             </div>
-             <span className="text-[10px] font-mono opacity-30">{ctx.context_type?.toUpperCase()}.JSON</span>
-          </div>
           <div className="p-6 max-h-[500px] overflow-auto custom-scrollbar">
             <SadSpecRenderer
               type={ctx.context_type}

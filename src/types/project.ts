@@ -23,6 +23,7 @@ export interface DocumentNode {
   max_iterations: number;
   threshold_score: number;
   current_best_score: number;
+  target_count?: number;
   api_error_code?: number;
   api_error_message?: string;
   created_at: string;

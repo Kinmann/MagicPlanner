@@ -254,6 +254,26 @@
   }
 }
 
+.stopBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background-color: rgba(239, 68, 68, 0.05);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 6px;
+  color: #ef4444;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background-color: rgba(239, 68, 68, 0.1);
+    border-color: #ef4444;
+  }
+}
+
 .nextStepBtn {
   display: flex;
   align-items: center;
@@ -328,6 +348,12 @@
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
+}
+
+.actionGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .iterationBox {
@@ -417,4 +443,55 @@
   letter-spacing: 0.2em;
   color: v.$foreground;
   pointer-events: none;
+}
+
+.confirmModal {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 4px;
+
+  .message {
+    font-size: 13px;
+    color: #94a3b8;
+    line-height: 1.6;
+  }
+
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding-top: 12px;
+    margin-top: 4px;
+
+    .cancelBtn {
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #94a3b8;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: all 0.2s;
+      &:hover { color: #ffffff; background: rgba(255, 255, 255, 0.05); }
+    }
+
+    .deleteBtn {
+      padding: 6px 16px;
+      font-size: 12px;
+      font-weight: 500;
+      background: rgba(248, 113, 113, 0.08);
+      color: #f87171;
+      border: 1px solid rgba(248, 113, 113, 0.15);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+      &:hover { 
+        background: rgba(248, 113, 113, 0.15); 
+        border-color: rgba(248, 113, 113, 0.3);
+      }
+    }
+  }
 }

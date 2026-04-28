@@ -1,11 +1,5 @@
 @use '../../styles/variables' as v;
 
-.container {
-  display: flex;
-  flex-direction: column;
-  gap: v.$space-8;
-  color: v.$foreground;
-}
 
 .tableContainer {
   width: 100%;
@@ -67,10 +61,10 @@
   
   &:hover {
     background: rgba(v.$primary, 0.05);
-    .name { color: v.$primary; }
+    .name { color: rgba(v.$foreground, 0.9); }
   }
 
-  .name { font-family: v.$font-mono; font-weight: 700; color: v.$accent; transition: color 0.2s; }
+  .name { font-family: v.$font-mono; font-weight: 700; color: v.$primary; transition: color 0.2s; }
   .type { font-size: 11px; opacity: 0.6; font-family: v.$font-mono; }
   .badge { font-size: 9px; padding: 1px 4px; border-radius: 3px; background: v.$primary; color: v.$on-primary; font-weight: 800; }
 }
@@ -81,23 +75,6 @@
   gap: v.$space-3;
 }
 
-.relCard {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid v.$border;
-  border-radius: v.$radius-md;
-  padding: v.$space-3;
-  transition: all 0.3s ease;
-
-  &:hover {
-    background: rgba(v.$primary, 0.05);
-    border-color: v.$primary;
-    transform: translateX(4px);
-  }
-
-  .relInfo { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; }
-  .relType { font-size: 10px; color: v.$primary; background: rgba(v.$primary, 0.1); padding: 2px 6px; border-radius: 4px; }
-  .desc { font-size: 11px; color: v.$text-muted; margin-top: 4px; }
-}
 
 .techGrid {
   display: grid;
@@ -125,6 +102,59 @@
   .rationale { font-size: 12px; color: v.$text-muted; margin-top: v.$space-3; line-height: 1.5; }
 }
 
+.minimalRelRow {
+  display: flex;
+  align-items: center;
+  gap: v.$space-6;
+  padding: v.$space-2 v.$space-4;
+  border-radius: v.$radius-md;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  
+  &:hover {
+    background: rgba(v.$primary, 0.04);
+    border-color: rgba(v.$primary, 0.1);
+    .relNames { color: v.$foreground; }
+  }
+  
+  .relNames {
+    display: flex;
+    align-items: center;
+    gap: v.$space-3;
+    min-width: 280px;
+    font-weight: 700;
+    font-size: 14px;
+    color: rgba(v.$foreground, 0.8);
+    transition: color 0.2s;
+  }
+  
+  .relMeta {
+    display: flex;
+    align-items: center;
+    gap: v.$space-4;
+    flex: 1;
+  }
+  
+  .relBadge {
+    font-family: v.$font-mono;
+    font-size: 10px;
+    font-weight: 800;
+    color: v.$primary;
+    background: rgba(v.$primary, 0.1);
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(v.$primary, 0.2);
+    min-width: 40px;
+    text-align: center;
+  }
+  
+  .relDescription {
+    font-size: 13px;
+    color: v.$text-muted;
+    line-height: 1.5;
+  }
+}
+
 .emptyState {
   padding: v.$space-10;
   text-align: center;
@@ -134,7 +164,7 @@
 
 // Helpers for Tailwind classes
 .textPrimary { color: v.$primary; }
-.textSecondary { color: v.$accent; }
+.textSecondary { color: rgba(v.$foreground, 0.6); }
 .fontBold { font-weight: v.$font-weight-bold; }
 .opacity80 { opacity: 0.8; }
 .opacity60 { opacity: 0.6; }
@@ -204,5 +234,179 @@
     background: rgba(v.$accent, 0.1);
     color: v.$accent;
     border: 1px solid rgba(v.$accent, 0.2);
+  }
+
+  &--primary {
+    background: rgba(v.$primary, 0.1);
+    color: v.$primary;
+    border: 1px solid rgba(v.$primary, 0.2);
+  }
+}
+
+// Epic & Actor Styles for consistency
+.epicActorContainer {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-8;
+  padding-bottom: v.$space-4;
+  width: 100%;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-4;
+}
+
+.sectionTitle {
+  font-size: v.$text-lg;
+  font-weight: v.$font-weight-bold;
+  color: v.$foreground;
+  border-bottom: 1px solid v.$border;
+  padding-bottom: v.$space-2;
+  display: flex;
+  align-items: center;
+  gap: v.$space-2;
+  
+  .icon {
+    color: v.$primary;
+  }
+}
+
+.epicList {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-6;
+  padding-left: v.$space-2;
+}
+
+.actorList {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-6;
+  padding-left: v.$space-2;
+}
+
+.actorItem {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-2;
+  padding: v.$space-2 v.$space-4;
+  margin-left: -16px;
+  border-radius: v.$radius-lg;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: rgba(v.$primary, 0.03);
+    .actorName { color: v.$primary; }
+  }
+
+  .actorName {
+    font-size: 15px;
+    font-weight: 800;
+    color: v.$foreground;
+    display: flex;
+    align-items: center;
+    gap: v.$space-2;
+    transition: color 0.2s;
+    .icon { color: v.$primary; }
+  }
+  
+  .actorDesc {
+    font-size: v.$text-sm;
+    color: v.$text-muted;
+    padding-left: v.$space-6;
+    line-height: 1.6;
+    opacity: 0.8;
+  }
+}
+
+.epicItem {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-4;
+}
+
+.epicHeader {
+  display: flex;
+  align-items: center;
+  gap: v.$space-2;
+  
+  .epicId {
+    font-size: 11px;
+    font-family: v.$font-mono;
+    color: v.$text-muted;
+    opacity: 0.5;
+    margin-right: 8px;
+    font-weight: 500;
+  }
+  
+  .epicTitle {
+    font-size: v.$text-lg;
+    font-weight: v.$font-weight-semibold;
+    color: v.$foreground;
+  }
+}
+
+.epicBody {
+  padding-left: v.$space-4;
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-4;
+}
+
+.epicDesc {
+  font-size: v.$text-sm;
+  color: v.$foreground;
+  line-height: 1.6;
+  border-left: 2px solid v.$border;
+  padding-left: v.$space-4;
+  opacity: 0.8;
+}
+
+.criteriaSection {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-3;
+}
+
+.criteriaTitle {
+  font-size: v.$text-sm;
+  font-weight: v.$font-weight-semibold;
+  color: v.$text-muted;
+  display: flex;
+  align-items: center;
+  gap: v.$space-1_5;
+}
+
+.criteriaList {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-2;
+  font-size: v.$text-sm;
+  color: v.$text-muted;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.criteriaItem {
+  display: flex;
+  align-items: flex-start;
+  gap: v.$space-2_5;
+  line-height: 1.4;
+  transition: color 0.2s;
+  padding: v.$space-1 0;
+  
+  &:hover {
+    color: v.$foreground;
+    .checkIcon { color: v.$primary; }
+  }
+  
+  .checkIcon {
+    color: rgba(v.$primary, 0.5);
+    flex-shrink: 0;
+    margin-top: 2px;
+    transition: color 0.2s;
   }
 }

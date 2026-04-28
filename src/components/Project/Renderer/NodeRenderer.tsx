@@ -163,10 +163,15 @@ export const NodeRenderer: React.FC = () => {
   // Status message listener
   useEffect(() => {
     const unlisten = listen<any>('pipeline-status', (event) => {
-      const msg = event.payload;
-      if (typeof msg === 'string') {
-        if (msg.includes('임베딩 중')) setStatusMsg(msg);
-        else if (msg.includes('임베딩 완료') || msg.includes('임베딩 실패')) setStatusMsg(null);
+      const payload = event.payload;
+      if (typeof payload === 'string') {
+        if (payload.includes('임베딩 중')) setStatusMsg(payload);
+        else if (payload.includes('임베딩 완료') || payload.includes('임베딩 실패')) setStatusMsg(null);
+      } else if (payload && typeof payload === 'object') {
+        const msg = payload.message || '';
+        const status = payload.status;
+        if (status === 'EMBEDDING_START' || msg.includes('임베딩 중')) setStatusMsg(msg);
+        else if (status === 'EMBEDDING_COMPLETE' || status === 'EMBEDDING_FAILED' || msg.includes('임베딩 완료')) setStatusMsg(null);
       }
     });
     return () => { unlisten.then(fn => fn()); };
@@ -346,7 +351,6 @@ export const NodeRenderer: React.FC = () => {
           {isPrd && <PrdBentoRenderer content={content} isIntegrated={false} stage={prdStage} />}
           {isSad && (
             <div className="bg-surface-container border border-border rounded-xl p-6">
-              <h2 className="text-xl font-bold mb-6 pb-2 border-b border-border/50">{node.target_node_type} Specification</h2>
               <SadSpecRenderer type={node.target_node_type} data={content} isRaw={false} />
             </div>
           )}

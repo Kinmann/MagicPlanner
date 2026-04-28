@@ -3,12 +3,13 @@ use uuid::Uuid;
 use chrono::Utc;
 use tauri::{Manager, Emitter};
 use sqlx::{SqlitePool, Row};
+use serde_json::json;
 
 // ============================================================
 // models/ 모듈에서 구조체/열거형 재내보내기
 // ============================================================
 pub use crate::models::{
-    RagErrorInfo, DocumentNode, GenerationIteration,
+    RagErrorInfo, DocumentNode, GenerationIteration, PipelineStatusPayload,
 };
 
 // 서비스 함수 임포트
@@ -111,7 +112,6 @@ pub async fn approve_genesis_prd_node(
     .map_err(|e| e.to_string())?;
 
     trigger_next_nodes(app_handle.clone(), &node.project_id, &node.target_node_type).await?;
-    let _ = app_handle.emit("nodes-updated", ());
     Ok(())
 }
 
@@ -182,13 +182,68 @@ pub async fn approve_genesis_prd(
                 _ => return,
             };
 
-            let _ = store_document_embeddings(
+            // [LOG] RAG 시작 알림 및 DB 상태 업데이트
+            let _ = app_handle_clone.emit("pipeline-status", PipelineStatusPayload {
+                message: "RAG 저장 중...".into(),
+                node_id: node_id_clone.clone(),
+                node_type: node_type_clone.clone(),
+                project_id: project_id_clone.clone(),
+                level: "INFO".into(),
+                status: "EMBEDDING_START".into(),
+                current_iteration: None,
+                max_iterations: None,
+            });
+            let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
+                .bind("RAG 저장 중...")
+                .bind(Utc::now().to_rfc3339())
+                .bind(&node_id_clone)
+                .execute(&pool_clone)
+                .await;
+            let _ = app_handle_clone.emit("nodes-updated", ());
+
+            let embedding_res = store_document_embeddings(
                 &pool_clone, &*client, &api_key_str,
                 &project_id_clone, None,
                 &node_id_clone, &node_type_clone,
                 &iteration_id_clone, &full_prd,
                 score,
             ).await;
+
+            match embedding_res {
+                Ok(_) => {
+                    let _ = app_handle_clone.emit("pipeline-status", PipelineStatusPayload {
+                        message: "RAG 저장 완료".into(),
+                        node_id: node_id_clone.clone(),
+                        node_type: node_type_clone.clone(),
+                        project_id: project_id_clone.clone(),
+                        level: "SUCCESS".into(),
+                        status: "EMBEDDING_COMPLETE".into(),
+                        current_iteration: None,
+                        max_iterations: None,
+                    });
+                },
+                Err(e) => {
+                    let _ = app_handle_clone.emit("pipeline-status", PipelineStatusPayload {
+                        message: "RAG 저장 실패".into(),
+                        node_id: node_id_clone.clone(),
+                        node_type: node_type_clone.clone(),
+                        project_id: project_id_clone.clone(),
+                        level: "ERROR".into(),
+                        status: "EMBEDDING_FAILED".into(),
+                        current_iteration: None,
+                        max_iterations: None,
+                    });
+                    println!(">>> [RAG] Genesis PRD Embedding Failed: {}", e);
+                }
+            }
+
+            // DB 상태 초기화
+            let _ = sqlx::query("UPDATE document_node SET last_action = NULL, updated_at = ? WHERE node_id = ?")
+                .bind(Utc::now().to_rfc3339())
+                .bind(&node_id_clone)
+                .execute(&pool_clone)
+                .await;
+            let _ = app_handle_clone.emit("nodes-updated", ());
         });
     }
 
@@ -237,6 +292,16 @@ pub async fn actual_approve_genesis_prd(
             .bind(state)
             .bind(&now)
             .bind(&now)
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+        } else if state == "READY" {
+            sqlx::query(
+                "UPDATE document_node SET node_state = 'READY', updated_at = ? WHERE project_id = ? AND target_node_type = ? AND node_state = 'PENDING'"
+            )
+            .bind(&now)
+            .bind(project_id)
+            .bind(t_type)
             .execute(pool)
             .await
             .map_err(|e| e.to_string())?;
@@ -399,7 +464,62 @@ pub async fn approve_sad_node(
             };
         }
         if let Some(key) = actual_api_key {
-            let _ = store_document_embeddings(&pool_clone, &*client, &key, &project_id_clone, None, &node_id_bg, &node_type_bg, &iter_id_bg, &draft_bg, score_bg).await;
+            // [LOG] RAG 시작 알림 및 DB 상태 업데이트
+            let _ = app_handle_clone.emit("pipeline-status", PipelineStatusPayload {
+                message: "RAG 저장 중...".into(),
+                node_id: node_id_bg.clone(),
+                node_type: node_type_bg.clone(),
+                project_id: project_id_clone.clone(),
+                level: "INFO".into(),
+                status: "EMBEDDING_START".into(),
+                current_iteration: None,
+                max_iterations: None,
+            });
+            let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
+                .bind("RAG 저장 중...")
+                .bind(Utc::now().to_rfc3339())
+                .bind(&node_id_bg)
+                .execute(&pool_clone)
+                .await;
+            let _ = app_handle_clone.emit("nodes-updated", ());
+
+            let embedding_res = store_document_embeddings(&pool_clone, &*client, &key, &project_id_clone, None, &node_id_bg, &node_type_bg, &iter_id_bg, &draft_bg, score_bg).await;
+
+            match embedding_res {
+                Ok(_) => {
+                    let _ = app_handle_clone.emit("pipeline-status", PipelineStatusPayload {
+                        message: "RAG 저장 완료".into(),
+                        node_id: node_id_bg.clone(),
+                        node_type: node_type_bg.clone(),
+                        project_id: project_id_clone.clone(),
+                        level: "SUCCESS".into(),
+                        status: "EMBEDDING_COMPLETE".into(),
+                        current_iteration: None,
+                        max_iterations: None,
+                    });
+                },
+                Err(e) => {
+                    let _ = app_handle_clone.emit("pipeline-status", PipelineStatusPayload {
+                        message: "RAG 저장 실패".into(),
+                        node_id: node_id_bg.clone(),
+                        node_type: node_type_bg.clone(),
+                        project_id: project_id_clone.clone(),
+                        level: "ERROR".into(),
+                        status: "EMBEDDING_FAILED".into(),
+                        current_iteration: None,
+                        max_iterations: None,
+                    });
+                    println!(">>> [RAG] SAD Node Embedding Failed: {}", e);
+                }
+            }
+
+            // DB 상태 초기화
+            let _ = sqlx::query("UPDATE document_node SET last_action = NULL, updated_at = ? WHERE node_id = ?")
+                .bind(Utc::now().to_rfc3339())
+                .bind(&node_id_bg)
+                .execute(&pool_clone)
+                .await;
+            let _ = app_handle_clone.emit("nodes-updated", ());
         }
     });
 
@@ -448,21 +568,44 @@ pub async fn approve_sad_node(
         let mapping_data: serde_json::Value = serde_json::from_str(&mapping_iter.generated_draft_json).unwrap_or_default();
         let epic_mappings: Vec<serde_json::Value> = mapping_data.get("mappings").and_then(|m| m.as_array()).cloned().unwrap_or_default();
 
+        // SAD_Module_Deps 데이터 파싱 (의존성 및 빌드 순서)
+        let deps_data: serde_json::Value = serde_json::from_str(&confirmed_iter.generated_draft_json).unwrap_or_default();
+        let all_dependencies = deps_data.get("dependencies").and_then(|d| d.as_array()).cloned().unwrap_or_default();
+        let build_order = deps_data.get("recommended_build_order").and_then(|b| b.as_array()).cloned().unwrap_or_default();
+
         let raw_modules = modules_val.as_array().cloned().unwrap_or_default();
         let modules_to_create: Vec<serde_json::Value> = raw_modules.iter().map(|m| {
             let mid = m.get("module_id").and_then(|v| v.as_str()).unwrap_or("");
+            
+            // 해당 모듈의 에픽 매핑 추출
             let assigned_epics: Vec<String> = epic_mappings.iter()
                 .filter(|em| em.get("mapped_modules").and_then(|mm| mm.as_array())
                     .map_or(false, |mm| mm.iter().any(|val| val.as_str() == Some(mid))))
                 .filter_map(|em| em.get("epic_id").and_then(|e| e.as_str()).map(|e| e.to_string()))
                 .collect();
+
+            // 해당 모듈의 의존성(dependency_spec) 추출
+            let my_deps: Vec<serde_json::Value> = all_dependencies.iter()
+                .filter(|d| d.get("from_module").and_then(|f| f.as_str()) == Some(mid))
+                .cloned()
+                .collect();
+            let dependency_spec = serde_json::to_string(&my_deps).unwrap_or_else(|_| "[]".to_string());
+
+            // 빌드 순서에 따른 우선순위 결정
+            let priority = build_order.iter()
+                .position(|b| b.as_str() == Some(mid))
+                .map(|pos| pos as i64)
+                .or_else(|| m.get("priority_order").and_then(|p| p.as_i64()))
+                .unwrap_or(0);
+
             serde_json::json!({
                 "module_id": mid,
                 "name": m.get("module_name").or(m.get("name")),
                 "description": m.get("description"),
                 "responsibility": m.get("core_responsibility").or(m.get("responsibility")),
                 "mapped_epics": assigned_epics.join(", "),
-                "priority_order": m.get("priority_order")
+                "dependency_spec": dependency_spec,
+                "priority_order": priority
             })
         }).collect();
 

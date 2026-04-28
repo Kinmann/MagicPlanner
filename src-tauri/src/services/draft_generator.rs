@@ -18,6 +18,7 @@ pub async fn generate_draft(
     previous_draft: &str,
     previous_feedback: &Vec<String>,
     iteration: i32,
+    target_count: i32,
     _exclude_node_ids: Vec<String>,
 ) -> Result<String, PipelineError> {
     let node_normalized = node_type.to_lowercase().replace(" ", "_");
@@ -69,7 +70,7 @@ pub async fn generate_draft(
         for row in contexts {
             let t: String = row.get("context_type");
             let d: String = row.get("context_data_json");
-            all_ctx.push_str(&format!("\n[{}]\n{}\n", t, d));
+            all_ctx.push_str(&format!("\n[{}]\n{}\n", t.to_lowercase(), d));
         }
         domain_prompt = domain_prompt.replace("{{GLOBAL_CONTEXT}}", &all_ctx);
         domain_prompt = domain_prompt.replace("{{PREVIOUS_DRAFT}}", previous_draft);
@@ -93,13 +94,13 @@ pub async fn generate_draft(
         format!("$DOCUMENT_TYPE: {}\n$ITERATION: {}", node_type, iteration)
     } else {
         let mut up = format!(
-            "$DOCUMENT_TYPE\n{}\n\n$ITERATION_COUNT\n{}\n\n$SOURCE_DOCUMENTS\n{}",
+            "[Document Type]\n{}\n\n[Iteration Count]\n{}\n\n[Source Documents]\n{}",
             node_type, iteration, input_text
         );
 
         if !previous_feedback.is_empty() {
             up = format!(
-                "{}\n\n$EVALUATOR_FEEDBACK\n{}\n\n$PREVIOUS_DRAFT\n{}",
+                "{}\n\n[Evaluator Feedback]\n{}\n\n[Previous Draft]\n{}",
                 up,
                 previous_feedback.join("\n"),
                 previous_draft
@@ -115,11 +116,15 @@ pub async fn generate_draft(
             for row in contexts {
                 let t: String = row.get("context_type");
                 let d: String = row.get("context_data_json");
-                all_ctx.push_str(&format!("\n[{}]\n{}\n", t, d));
+                all_ctx.push_str(&format!("\n[{}]\n{}\n", t.to_lowercase(), d));
             }
             if !all_ctx.is_empty() {
-                up = format!("{}\n\n$GLOBAL_CONTEXT\n{}", up, all_ctx);
+                up = format!("{}\n\n[Global Context]\n{}", up, all_ctx);
             }
+        }
+
+        if target_count > 0 {
+            up = format!("{}\n\n[Target Count]\n{}", up, target_count);
         }
         up
     };
@@ -205,15 +210,18 @@ pub async fn evaluate_draft(
 
     // $SOURCE_DOCUMENTS: 평가에 필요한 원본 문서 참조
     let mut source_docs = String::new();
-    if node_type == "Genesis_PRD" {
-        if let Some(original_idea) = input_text {
-            source_docs = original_idea;
+    
+    // 1. 기본적으로 input_text(원본 입력 혹은 전달된 텍스트)를 베이스로 사용
+    if let Some(itext) = input_text {
+        source_docs = itext;
+    }
+
+    // 2. GPRD나 SAD 노드 등 상위 맥락이 필요한 경우 global_context를 추가하여 SSOT 확보
+    if !global_context.is_empty() {
+        if !source_docs.is_empty() {
+            source_docs.push_str("\n\n$GLOBAL_CONTEXT (GPRD Sub-node Outputs)\n");
         }
-    } else {
-        // 모듈 수준 노드: global_context에서 PRD, FSD, API_Spec 등 참조
-        if !global_context.is_empty() {
-            source_docs = global_context.to_string();
-        }
+        source_docs.push_str(global_context);
     }
 
     if !source_docs.is_empty() {

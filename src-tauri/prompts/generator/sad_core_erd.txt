@@ -3,7 +3,7 @@ Genesis PRD를 기반으로 전체 시스템의 데이터베이스 표준 및 �
 ## [SAD - Global Context 설계 원칙]
 1. **SSOT 상속**: 주입된 `Genesis PRD`를 절대적인 진실 공급원(SSOT)으로 삼으십시오.
 2. **전역 표준 중심**: 개별 비즈니스 로직에 종속된 마이크로 설계가 아닌, 시스템 전체를 관통하는 공통 규격에 집중하십시오.
-3. **기술 스택 정합성**: `$PREVIOUS_ARCHITECTURAL_DECISIONS`에 주입된 `sad_tech_stack`에서 확정된 데이터베이스 종류 및 사양에 최적화된 엔티티 설계를 수행하십시오.
+3. **기술 스택 정합성**: `[Global Context]`에 주입된 `sad_tech_stack`에서 확정된 데이터베이스 종류 및 사양에 최적화된 엔티티 설계를 수행하십시오.
 4. **이전 설계 계승(Refinement)**: `$PREVIOUS_DRAFT`에 데이터가 존재한다면 이를 기본 골격으로 삼고, `$EVALUATOR_FEEDBACK`의 교정 지시 사항을 최우선으로 반영하여 엔티티 및 관계를 점진적으로 개선하십시오.
 4. **마이크로 설계 배제 (절대 금지)**:
    - 개별 물리 테이블의 상세 컬럼 사양(예: `VARCHAR(255)`, `INT`, `PRIMARY KEY`, `NOT NULL` 등)을 절대 기술하지 마십시오.

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { safeInvoke, safeListen } from '../utils/tauri';
+import { normalizePipelineStatus, formatStatusMessage } from '../utils/statusHandler';
 import { useProjectStore } from './projectStore';
 
 export interface RunningNode {
@@ -22,6 +23,7 @@ interface EngineState {
   lastError: RagErrorInfo | null;
   isErrorModalOpen: boolean;
   isProcessing: boolean;
+  isEmbedding: boolean;
 
   // Actions
   addRunningNode: (node: RunningNode) => void;
@@ -30,6 +32,7 @@ interface EngineState {
   setLastError: (error: RagErrorInfo | null) => void;
   toggleErrorModal: (open: boolean) => void;
   setProcessing: (processing: boolean) => void;
+  setEmbedding: (embedding: boolean) => void;
   initEngineEventListeners: () => Promise<() => void>;
 }
 
@@ -38,6 +41,7 @@ export const useEngineStore = create<EngineState>((set, get) => ({
   lastError: null,
   isErrorModalOpen: false,
   isProcessing: false,
+  isEmbedding: false,
 
   addRunningNode: (node) => set((state) => {
     if (state.runningNodes.some(n => n.nodeId === node.nodeId)) return state;
@@ -77,6 +81,7 @@ export const useEngineStore = create<EngineState>((set, get) => ({
   toggleErrorModal: (open) => set({ isErrorModalOpen: open }),
 
   setProcessing: (processing) => set({ isProcessing: processing }),
+  setEmbedding: (embedding) => set({ isEmbedding: embedding }),
 
   initEngineEventListeners: async () => {
     if ((window as any).__engineEventListenersInitialized) {
@@ -88,35 +93,55 @@ export const useEngineStore = create<EngineState>((set, get) => ({
       get().syncRunningNodes();
     });
 
-    // 2. 파이프라인 상세 상태 메시지 처리 (문자열 또는 객체 지원)
+    // 2. 파이프라인 상세 상태 메시지 처리
     const unlistenStatus = await safeListen<any>('pipeline-status', (event) => {
-      const payload = event.payload;
-      
-      if (typeof payload === 'string') {
-        // 모든 실행 중인 노드 중 관련 있는 노드의 lastAction 업데이트 (보통 현재 워크스페이스 노드)
-        set(state => ({
-          runningNodes: state.runningNodes.map(n => ({
-            ...n,
-            lastAction: payload // 일단 모든 활성 노드에 메시지 전파 (상세 매칭 로직은 추후 보강 가능)
-          }))
-        }));
-      } else if (payload && typeof payload === 'object') {
-        const { node_id, project_id, project_name, node_type, status } = payload;
-        if (status === 'START') {
-          get().addRunningNode({ 
-            nodeId: node_id, 
-            projectId: project_id, 
-            projectName: project_name || 'Unknown Project',
-            nodeType: node_type 
+      const status = normalizePipelineStatus(event.payload);
+      if (!status) return;
+
+      const { node_id, project_id, node_type, status: eventStatus } = status;
+      const displayAction = formatStatusMessage(status);
+
+      if (eventStatus === 'EMBEDDING_START') {
+        set({ isEmbedding: true });
+      } else if (eventStatus === 'EMBEDDING_COMPLETE' || eventStatus === 'EMBEDDING_FAILED') {
+        set({ isEmbedding: false });
+      }
+
+      const isFinalIteration = status.current_iteration !== undefined && 
+                               status.max_iterations !== undefined && 
+                               status.current_iteration === status.max_iterations;
+
+      const isRemovalStatus = ['COMPLETED', 'ERROR', 'FAILED', 'STOPPED', 'EMBEDDING_COMPLETE', 'EMBEDDING_FAILED'].includes(eventStatus) || 
+                              (eventStatus === 'ITERATION_COMPLETED' && isFinalIteration);
+      const isAdditionStatus = ['START', 'IN_PROGRESS', 'EMBEDDING_START'].includes(eventStatus) || 
+                               (eventStatus === 'ITERATION_COMPLETED' && !isFinalIteration);
+
+      if (isRemovalStatus) {
+        get().removeRunningNode(node_id);
+        const projectStore = useProjectStore.getState();
+        if (projectStore.currentProject?.project_id === project_id) {
+          projectStore.fetchNodes(project_id);
+          projectStore.fetchModules(project_id);
+          projectStore.fetchProject(project_id);
+        }
+      } else if (isAdditionStatus || (node_id && !get().runningNodes.some(n => n.nodeId === node_id))) {
+        // 새 노드 추가 또는 상태 업데이트
+        if (!get().runningNodes.some(n => n.nodeId === node_id)) {
+          const projectName = useProjectStore.getState().currentProject?.project_name || 'System';
+          get().addRunningNode({
+            nodeId: node_id,
+            projectId: project_id,
+            projectName: projectName,
+            nodeType: node_type,
+            lastAction: displayAction
           });
         } else {
-          get().removeRunningNode(node_id);
-          const projectStore = useProjectStore.getState();
-          if (projectStore.currentProject?.project_id === project_id) {
-            projectStore.fetchNodes(project_id);
-            projectStore.fetchModules(project_id);
-            projectStore.fetchProject(project_id);
-          }
+          // 상태 업데이트
+          set(state => ({
+            runningNodes: state.runningNodes.map(n => 
+              n.nodeId === node_id ? { ...n, lastAction: displayAction } : n
+            )
+          }));
         }
       }
     });

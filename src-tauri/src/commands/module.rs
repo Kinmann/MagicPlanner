@@ -93,12 +93,13 @@ pub async fn create_local_modules(
         let m_desc = module["description"].as_str().unwrap_or("");
         let m_resp = module["responsibility"].as_str().unwrap_or("");
         let m_epics = module["mapped_epics"].as_str().unwrap_or(""); // 獄덌옙占?占썲컧獄?獄↑퀎占??容뷰눢占?
+        let m_deps = module["dependency_spec"].as_str().unwrap_or("[]");
         let priority = module["priority_order"].as_i64().unwrap_or(idx as i64) as i32;
 
         sqlx::query(
-            "INSERT INTO local_module (module_id, project_id, module_name, module_description, core_responsibility, mapped_epics, priority_order, module_state, display_order, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, 0)"
+            "INSERT INTO local_module (module_id, project_id, module_name, module_description, core_responsibility, mapped_epics, dependency_spec, priority_order, module_state, display_order, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, 0)"
         )
-        .bind(&module_id).bind(&project_id).bind(m_name).bind(m_desc).bind(m_resp).bind(m_epics)
+        .bind(&module_id).bind(&project_id).bind(m_name).bind(m_desc).bind(m_resp).bind(m_epics).bind(m_deps)
         .bind(priority).bind(idx as i32).bind(&now).bind(&now)
         .execute(&*pool).await.map_err(|e| e.to_string())?;
 

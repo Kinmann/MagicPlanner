@@ -11,6 +11,7 @@ import { DocumentNode, LocalModule } from '../../types/project';
 import { formatNodeTitle } from '../../utils/formatters';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
+import { useEngineStore } from '../../store/engineStore';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Progress } from '../ui/Progress';
@@ -46,6 +47,8 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
   })));
 
   const setSelectedNode = useUIStore(state => state.setSelectedNode);
+  const isEmbedding = useEngineStore(state => state.isEmbedding);
+  const isActuallyDisabled = isLocked || disabled || isEmbedding || node.is_active;
 
   React.useLayoutEffect(() => {
     if (!containerRef.current || !onDimensionsChange) return;
@@ -79,6 +82,7 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
   };
 
   const statusConfig = (() => {
+    if (node.is_active) return { variant: 'primary', label: 'RUNNING', active: true };
     switch (node.node_state) {
       case 'PENDING': return { variant: 'outline', label: 'PENDING', active: false };
       case 'PAUSED_STOPPED': return { variant: 'outline', label: 'Stopped', active: false };
@@ -152,37 +156,42 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
       </div>
 
       <div className={styles.actions}>
-        {node.node_state === 'READY' && (
-          <Button variant="primary" size="sm" className="w-full" disabled={isLocked || disabled} onClick={(e) => { e.stopPropagation(); runNode(node.node_id); }} leftIcon={<Play size={12} />}>
+        {node.node_state === 'READY' && !node.is_active && (
+          <Button variant="primary" size="sm" className="w-full" disabled={isActuallyDisabled} onClick={(e) => { e.stopPropagation(); runNode(node.node_id); }} leftIcon={<Play size={12} />}>
             Execute
           </Button>
         )}
-        {node.node_state === 'STALE' && (
+        {node.node_state === 'STALE' && !node.is_active && (
           <Button variant="secondary" size="sm" className="w-full" onClick={(e) => { e.stopPropagation(); runNode(node.node_id); }} leftIcon={<RotateCcw size={12} />}>
             Refine
           </Button>
         )}
-        {node.node_state === 'PAUSED_STOPPED' && (
-          <Button variant="primary" size="sm" className="w-full" disabled={isLocked || disabled} onClick={(e) => { e.stopPropagation(); resumeNode(node.node_id); }} leftIcon={<RefreshCw size={12} />}>
+        {node.node_state === 'PAUSED_STOPPED' && !node.is_active && (
+          <Button variant="primary" size="sm" className="w-full" disabled={isActuallyDisabled} onClick={(e) => { e.stopPropagation(); resumeNode(node.node_id); }} leftIcon={<RefreshCw size={12} />}>
             Resume
           </Button>
         )}
-        {node.node_state === 'PAUSED_HITL' && (
+        {node.node_state === 'PAUSED_HITL' && !node.is_active && (
           <div className="flex gap-1 w-full">
-            <Button variant="outline" size="sm" className="flex-1 border-secondary/30 text-secondary" disabled={isLocked || disabled} onClick={(e) => { e.stopPropagation(); handleHITLAction(node.node_id, 'APPROVE'); }} leftIcon={<CheckCircle size={12} />}>
+            <Button variant="outline" size="sm" className="flex-1 border-secondary/30 text-secondary" disabled={isActuallyDisabled} onClick={(e) => { e.stopPropagation(); handleHITLAction(node.node_id, 'APPROVE'); }} leftIcon={<CheckCircle size={12} />}>
               Pass
             </Button>
-            <Button variant="primary" size="sm" className="flex-1" disabled={isLocked || disabled} onClick={(e) => { e.stopPropagation(); handleHITLAction(node.node_id, 'RETRY'); }} leftIcon={<RotateCcw size={12} />}>
+            <Button variant="primary" size="sm" className="flex-1" disabled={isActuallyDisabled} onClick={(e) => { e.stopPropagation(); handleHITLAction(node.node_id, 'RETRY'); }} leftIcon={<RotateCcw size={12} />}>
               Retry
             </Button>
           </div>
         )}
-        {node.node_state === 'IN_PROGRESS' && (
-          <Button variant="ghost" size="sm" className="w-full text-danger hover:bg-danger/10" onClick={(e) => { e.stopPropagation(); stopNode(node.node_id); }} leftIcon={<Square size={12} />}>
-            Stop
-          </Button>
+        {(node.node_state === 'IN_PROGRESS' || node.is_active) && (
+          <div className="flex gap-1 w-full">
+            <Button variant="primary" size="sm" className="flex-1 opacity-80 cursor-default pointer-events-none" leftIcon={<RefreshCw size={12} className="animate-spin" />}>
+              Running
+            </Button>
+            <Button variant="ghost" size="sm" className="flex-1 text-danger hover:bg-danger/10" onClick={(e) => { e.stopPropagation(); stopNode(node.node_id); }} leftIcon={<Square size={12} />}>
+              Stop
+            </Button>
+          </div>
         )}
-        {node.node_state === 'COMPLETED' && (
+        {node.node_state === 'COMPLETED' && !node.is_active && (
           <Button variant="ghost" size="sm" className="w-full" onClick={(e) => { e.stopPropagation(); setSelectedNode(node.node_id); }} leftIcon={<Eye size={12} />}>
             Inspect
           </Button>

@@ -30,6 +30,7 @@ interface ProjectState {
   handleHITLAction: (nodeId: string, action: 'APPROVE' | 'RETRY') => Promise<void>;
   retryPatchLoop: (nodeId: string, retryCount: number) => Promise<void>;
   updateMaxIterations: (nodeId: string, maxIterations: number) => Promise<void>;
+  updateTargetCount: (nodeId: string, targetCount: number) => Promise<void>;
   deleteIteration: (iterationId: string) => Promise<void>;
   downloadSpecs: (nodeId: string, iterations: any[]) => Promise<void>;
   
@@ -143,11 +144,27 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   stopNode: async (nodeId) => {
-    const { currentProject } = get();
+    const { currentProject, nodes } = get();
     if (!currentProject) return;
     const engine = useEngineStore.getState();
+    const node = nodes.find(n => n.node_id === nodeId);
+    
+    // Mark as stopping in engineStore to disable UI buttons
     engine.setProcessing(true);
+    
     try {
+      // Update local message for overlay
+      engine.addRunningNode({
+        nodeId,
+        projectId: currentProject.project_id,
+        projectName: currentProject.project_name,
+        nodeType: node?.target_node_type || 'Unknown',
+        lastAction: '🛑 Loop 종료 중...'
+      });
+      
+      const { useLogStore } = await import('./logStore');
+      useLogStore.getState().addLog('WARN', 'Loop 종료 중...', node?.target_node_type);
+
       await safeInvoke('stop_node_pipeline', { nodeId });
     } catch (err: any) {
       set({ error: err.toString() });
@@ -205,6 +222,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (!currentProject) return;
     try {
       await safeInvoke('update_node_max_iterations', { projectId: currentProject.project_id, nodeId, maxIterations });
+      await fetchNodes(currentProject.project_id);
+    } catch (err: any) {
+      set({ error: err.toString() });
+    }
+  },
+
+  updateTargetCount: async (nodeId, targetCount) => {
+    const { currentProject, fetchNodes } = get();
+    if (!currentProject) return;
+    try {
+      await safeInvoke('update_node_target_count', { nodeId, targetCount });
       await fetchNodes(currentProject.project_id);
     } catch (err: any) {
       set({ error: err.toString() });

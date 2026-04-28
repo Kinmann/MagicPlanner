@@ -42,9 +42,9 @@ const EngineStatusOverlay: React.FC = () => {
       <div className={styles.list}>
         {runningNodes.map((node) => (
           <div key={node.nodeId} className={styles.item}>
-            <div className="flex items-center gap-2">
+            <div className={styles.projectInfoLine}>
               <span className={styles.projectTag}>{node.projectName}</span>
-              <Layers size={10} className="opacity-20" />
+              <Layers size={10} />
             </div>
             <div className={styles.nodeInfo}>
               <span className={styles.nodeName}>

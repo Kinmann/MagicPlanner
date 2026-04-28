@@ -14,6 +14,18 @@ pub enum NodeState {
     Refining,
 }
 
+#[derive(serde::Serialize, Clone, Debug)]
+pub struct PipelineStatusPayload {
+    pub message: String,
+    pub node_id: String,
+    pub node_type: String,
+    pub project_id: String,
+    pub level: String, // "INFO", "SUCCESS", "WARN", "ERROR"
+    pub status: String, // "START", "IN_PROGRESS", "ITERATION_COMPLETED", "COMPLETED", "STOPPED", "FAILED", "EMBEDDING_START", "EMBEDDING_COMPLETE", "EMBEDDING_FAILED"
+    pub current_iteration: Option<i32>,
+    pub max_iterations: Option<i32>,
+}
+
 impl ToString for NodeState {
     fn to_string(&self) -> String {
         match self {

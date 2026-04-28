@@ -182,6 +182,27 @@ pub async fn update_node_max_iterations(
 
 
 #[tauri::command]
+pub async fn update_node_target_count(
+    pool: tauri::State<'_, SqlitePool>,
+    node_id: String,
+    target_count: i32,
+) -> Result<(), String> {
+    println!(">>> Updating target_count to {} for node: {}", target_count, node_id);
+    sqlx::query(
+        "UPDATE document_node SET target_count = ?, updated_at = ? WHERE node_id = ?"
+    )
+    .bind(target_count)
+    .bind(Utc::now().to_rfc3339())
+    .bind(node_id)
+    .execute(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+
+#[tauri::command]
 pub async fn get_module_nodes(
     pool: tauri::State<'_, SqlitePool>,
     module_id: String,

@@ -61,21 +61,46 @@
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+.projectInfoLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+  
+  svg {
+    color: #94a3b8;
+    opacity: 0.5;
+  }
+}
+
 .projectTag {
   font-size: 10px;
   font-weight: 900;
-  color: v.$accent;
+  color: #f8fafc;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  opacity: 0.6;
+  opacity: 1;
 }
 
 .nodeInfo {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  .nodeName { font-size: 13px; font-weight: 800; color: v.$foreground; }
-  .action { font-size: 11px; color: v.$text-muted; font-style: italic; opacity: 0.5; }
+  flex-direction: column;
+  gap: 1px;
+  
+  .nodeName { 
+    font-size: 11px; 
+    font-weight: 700; 
+    color: #94a3b8;
+    opacity: 0.8;
+  }
+  
+  .action { 
+    font-size: 16px; 
+    color: #f1f5f9;
+    font-weight: 800;
+    opacity: 1;
+    letter-spacing: -0.01em;
+  }
 }
 
 @keyframes slideIn {

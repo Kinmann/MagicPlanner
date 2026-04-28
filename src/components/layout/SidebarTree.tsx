@@ -65,9 +65,7 @@ const TreeItemComponent: React.FC<TreeItemProps> = ({ item, level, selectedId, o
   };
 
   const handleSelect = () => {
-    const { addLog } = useLogStore.getState();
     if (!isFolder) {
-      addLog('INFO', `Selected node`, item.label);
       onSelect(item.id);
     } else if (
       item.id.startsWith('phase-') || 
@@ -75,7 +73,6 @@ const TreeItemComponent: React.FC<TreeItemProps> = ({ item, level, selectedId, o
       item.id.startsWith('stage-') || 
       item.id.startsWith('module-')
     ) {
-      addLog('INFO', `Viewing integrated view`, item.label);
       onSelect(item.id);
     }
   };
@@ -104,7 +101,9 @@ const TreeItemComponent: React.FC<TreeItemProps> = ({ item, level, selectedId, o
       case 'IN_PROGRESS': return <CircleDot {...iconProps} className="text-[#10b981]" />;
       case 'COMPLETED': return <CheckCircle2 {...iconProps} className="text-emerald-600" />;
       case 'STALE': return <Lightbulb {...iconProps} className="text-yellow-400 fill-yellow-400/20" />;
-      case 'PAUSED_HITL': return <PauseCircle {...iconProps} className="text-orange-400" />;
+      case 'PAUSED_HITL':
+      case 'PAUSED_STOPPED': return <PauseCircle {...iconProps} className="text-orange-400" />;
+      case 'PAUSED_API_ERROR': return <PauseCircle {...iconProps} className="text-red-400" />;
       case 'REFINING': return <Sparkles {...iconProps} className="text-purple-400" />;
       default: return null;
     }

@@ -210,6 +210,7 @@ pub fn run() {
                 // 3. document_node 테이블
                 let _ = sqlx::query("ALTER TABLE document_node ADD COLUMN module_id VARCHAR(36)").execute(&pool).await;
                 let _ = sqlx::query("ALTER TABLE document_node ADD COLUMN node_category VARCHAR(30) NOT NULL DEFAULT 'MODULE'").execute(&pool).await;
+                let _ = sqlx::query("ALTER TABLE document_node ADD COLUMN target_count INTEGER DEFAULT 0").execute(&pool).await;
                 
                 // last_action 컬럼 추가 시도
                 match sqlx::query("ALTER TABLE document_node ADD COLUMN last_action TEXT").execute(&pool).await {
@@ -247,6 +248,7 @@ pub fn run() {
             commands::node::get_latest_iteration,
             commands::pipeline::handle_hitl_action,
             commands::node::update_node_max_iterations,
+            commands::node::update_node_target_count,
             commands::project::index_project_embeddings,
             commands::project::save_file,
             commands::project::delete_project,

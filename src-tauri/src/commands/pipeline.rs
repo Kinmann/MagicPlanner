@@ -12,6 +12,7 @@ use std::sync::Arc;
 pub use crate::models::{
     NodeState, PipelineError, RagErrorInfo,
     Project, DocumentNode, GenerationIteration,
+    PipelineStatusPayload,
 };
 
 // 서비스 함수 임포트
@@ -162,19 +163,35 @@ pub async fn run_pipeline(
     for i in start_iter..=max_iters {
         final_iteration_count = i;
         println!(">>> Iteration {}/{} starting for {}", i, max_iters, actual_node_type);
-        let _ = app_handle.emit("pipeline-status", "초안 생성 중");
+        let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
+            message: "초안 생성 중".into(),
+            node_type: actual_node_type.clone(),
+            level: "INFO".into(),
+            current_iteration: Some(i),
+            max_iterations: Some(max_iters),
+            node_id: node.node_id.clone(),
+            project_id: project.project_id.clone(),
+            status: "IN_PROGRESS".into(),
+        });
         
         sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
             .bind("초안 생성 중...").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
             .execute(&*pool).await.map_err(|e| e.to_string())?;
 
         let input_text = if node.node_category == "SAD" {
-            get_full_approved_prd(&*pool, &project.project_id).await
+            let out_1a = crate::services::prd_merger::get_approved_node_output(&*pool, &project_id, "GPRD_Context_Goal").await;
+            let out_1b = crate::services::prd_merger::get_approved_node_output(&*pool, &project_id, "GPRD_Capability_Actor").await;
+            let out_1c = crate::services::prd_merger::get_approved_node_output(&*pool, &project_id, "GPRD_Architecture_Schema").await;
+            
+            format!(
+                "[GPRD_Context_Goal]\n{}\n\n[GPRD_Capability_Actor]\n{}\n\n[GPRD_Architecture_Schema]\n{}", 
+                out_1a, out_1b, out_1c
+            )
         } else {
             project.raw_input_text.clone()
         };
 
-        let draft_res = generate_draft(&app_handle, &pool, &client, &api_key, &project.project_id, &actual_node_type, &input_text, &previous_draft, &previous_feedback, i, vec![]).await;
+        let draft_res = generate_draft(&app_handle, &pool, &client, &api_key, &project.project_id, &actual_node_type, &input_text, &previous_draft, &previous_feedback, i, node.target_count, vec![]).await;
         let draft = match draft_res {
             Ok(d) => d,
             Err(e) => {
@@ -190,22 +207,22 @@ pub async fn run_pipeline(
         }
 
         println!(">>> Iteration {}: Draft generated, evaluating...", i);
-        let _ = app_handle.emit("pipeline-status", "초안 평가 중");
+        let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
+            message: "초안 평가 중".into(),
+            node_type: actual_node_type.clone(),
+            level: "INFO".into(),
+            current_iteration: Some(i),
+            max_iterations: Some(max_iters),
+            node_id: node.node_id.clone(),
+            project_id: project.project_id.clone(),
+            status: "IN_PROGRESS".into(),
+        });
         
         sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
             .bind("초안 평가 중...").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
             .execute(&*pool).await.map_err(|e| e.to_string())?;
 
-        let input_text_for_eval = if actual_node_type == "Genesis_PRD" || node.node_category == "SAD" { 
-            let itext = if node.node_category == "SAD" {
-                get_full_approved_prd(&*pool, &project.project_id).await
-            } else {
-                project.raw_input_text.clone()
-            };
-            Some(itext)
-        } else { 
-            None 
-        };
+        let input_text_for_eval = Some(input_text.clone());
         let mut global_ctx_str = String::new();
         if node.node_category == "SAD" {
             use sqlx::Row;
@@ -214,7 +231,7 @@ pub async fn run_pipeline(
             for row in contexts {
                 let t: String = row.get("context_type");
                 let d: String = row.get("context_data_json");
-                global_ctx_str.push_str(&format!("\n[{}]\n{}\n", t, d));
+                global_ctx_str.push_str(&format!("\n[{}]\n{}\n", t.to_lowercase(), d));
             }
         }
 
@@ -239,7 +256,7 @@ pub async fn run_pipeline(
         let errors_json = serde_json::to_string(&eval.critical_errors).unwrap_or_default();
         let feedback_json = serde_json::to_string(&eval.feedback).unwrap_or_default();
         
-        let is_passed = eval.score >= threshold && eval.critical_errors.is_empty();
+        let is_passed = false; // [FIX] 자동 통과 제거 (사용자 수동 확정 필수)
 
         // [주의] 통과 시 이전 통과 상태 무효화
         if is_passed {
@@ -286,6 +303,18 @@ pub async fn run_pipeline(
         }
 
         println!(">>> Iteration {}: Score = {}, Pass = {}", i, eval.score, eval.is_pass);
+
+        // [LOG] 초안 생성 완료 이벤트 발행
+        let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
+            message: "초안 생성 완료".into(),
+            node_type: actual_node_type.clone(),
+            level: "SUCCESS".into(),
+            current_iteration: Some(i),
+            max_iterations: Some(max_iters),
+            node_id: node.node_id.clone(),
+            project_id: project.project_id.clone(),
+            status: "ITERATION_COMPLETED".into(),
+        });
         
         // 다음 반복을 위한 피드백 구성 (이전 초안 피드백 업데이트)
         previous_draft = draft;
@@ -301,6 +330,16 @@ pub async fn run_pipeline(
     // 반복문 종료 후 상태 확인 (PAUSED_STOPPED 상태 등 체크)
     if is_node_stopped(&pool, &node.node_id).await {
         println!(">>> Pipeline loop for node {} terminated due to manual stop signal.", node.node_id);
+        let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
+            message: "파이프라인 루프가 사용자에 의해 중단되었습니다.".into(),
+            node_id: node.node_id.clone(),
+            project_id: project.project_id.clone(),
+            status: "STOPPED".into(),
+            current_iteration: Some(final_iteration_count),
+            max_iterations: Some(max_iters),
+            node_type: actual_node_type.clone(),
+            level: "WARN".into()
+        });
         return Ok(current_best_content);
     }
 
@@ -334,10 +373,8 @@ pub async fn run_pipeline(
                 return Err(msg);
             }
         }
-    } else if actual_node_type.starts_with("GPRD_") || actual_node_type == "Genesis_PRD" || current_best_score < threshold {
-        NodeState::PausedHitl
     } else {
-        NodeState::Completed
+        NodeState::PausedHitl
     };
 
     sqlx::query(
@@ -365,9 +402,18 @@ pub async fn run_pipeline(
         
         if let Some(iter) = best_iter {
             if node.node_category != "GENESIS" {
-                let _ = app_handle.emit("pipeline-status", "RAG 임베딩 중...");
+                let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
+                    message: "RAG 저장 중...".into(),
+                    node_id: node.node_id.clone(),
+                    node_type: actual_node_type.clone(),
+                    project_id: project_id.clone(),
+                    level: "INFO".into(),
+                    status: "EMBEDDING_START".into(),
+                    current_iteration: None,
+                    max_iterations: None,
+                });
                 sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-                    .bind("RAG 임베딩 중...")
+                    .bind("RAG 저장 중...")
                     .bind(Utc::now().to_rfc3339())
                     .bind(&node.node_id)
                     .execute(&*pool)
@@ -385,7 +431,16 @@ pub async fn run_pipeline(
 
                 match embedding_res {
                     Ok(_) => {
-                        let _ = app_handle.emit("pipeline-status", "RAG 임베딩 완료");
+                        let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
+                            message: "RAG 저장 완료".into(),
+                            node_id: node.node_id.clone(),
+                            node_type: actual_node_type.clone(),
+                            project_id: project_id.clone(),
+                            level: "SUCCESS".into(),
+                            status: "EMBEDDING_COMPLETE".into(),
+                            current_iteration: None,
+                            max_iterations: None,
+                        });
                     },
                     Err(e) => {
                         let err_msg = format!("RAG 임베딩 실패({}): {}", actual_node_type, e);
@@ -398,6 +453,16 @@ pub async fn run_pipeline(
                             error_message: e.to_string(),
                         };
                         let _ = app_handle.emit("rag-error", error_info);
+                        let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
+                            message: "RAG 저장 실패".into(),
+                            node_id: node.node_id.clone(),
+                            node_type: actual_node_type.clone(),
+                            project_id: project_id.clone(),
+                            level: "ERROR".into(),
+                            status: "EMBEDDING_FAILED".into(),
+                            current_iteration: None,
+                            max_iterations: None,
+                        });
                     }
                 }
 
@@ -488,7 +553,25 @@ pub async fn handle_hitl_action(
                 if let Ok(Some(iter)) = best_iter_res {
                     let mut embedding_success = true;
                     if node_category_for_bg != "GENESIS" {
-                        let _ = app_handle_clone.emit("pipeline-status", "RAG 임베딩 중...");
+                        // [LOG] RAG 시작 알림 및 DB 상태 업데이트
+                        let _ = app_handle_clone.emit("pipeline-status", PipelineStatusPayload {
+                            message: "RAG 저장 중...".into(),
+                            node_id: node_id_clone.clone(),
+                            node_type: node_type_clone.clone(),
+                            project_id: project_id_clone.clone(),
+                            level: "INFO".into(),
+                            status: "EMBEDDING_START".into(),
+                            current_iteration: None,
+                            max_iterations: None,
+                        });
+                        let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
+                            .bind("RAG 저장 중...")
+                            .bind(Utc::now().to_rfc3339())
+                            .bind(&node_id_clone)
+                            .execute(&pool_clone)
+                            .await;
+                        let _ = app_handle_clone.emit("nodes-updated", ());
+
                         let embedding_res = store_document_embeddings(
                             &pool_clone, &*client, &final_api_key,
                             &project_id_clone, module_id_clone.as_deref(),
@@ -499,7 +582,16 @@ pub async fn handle_hitl_action(
 
                         match embedding_res {
                             Ok(_) => {
-                                let _ = app_handle_clone.emit("pipeline-status", "RAG 임베딩 완료");
+                                let _ = app_handle_clone.emit("pipeline-status", PipelineStatusPayload {
+                                    message: "RAG 저장 완료".into(),
+                                    node_id: node_id_clone.clone(),
+                                    node_type: node_type_clone.clone(),
+                                    project_id: project_id_clone.clone(),
+                                    level: "SUCCESS".into(),
+                                    status: "EMBEDDING_COMPLETE".into(),
+                                    current_iteration: None,
+                                    max_iterations: None,
+                                });
                             },
                             Err(e) => {
                                 embedding_success = false;
@@ -513,8 +605,26 @@ pub async fn handle_hitl_action(
                                     error_message: e.to_string(),
                                 };
                                 let _ = app_handle_clone.emit("rag-error", error_info);
+                                let _ = app_handle_clone.emit("pipeline-status", PipelineStatusPayload {
+                                    message: "RAG 저장 실패".into(),
+                                    node_id: node_id_clone.clone(),
+                                    node_type: node_type_clone.clone(),
+                                    project_id: project_id_clone.clone(),
+                                    level: "ERROR".into(),
+                                    status: "EMBEDDING_FAILED".into(),
+                                    current_iteration: None,
+                                    max_iterations: None,
+                                });
                             }
                         }
+                        
+                        // DB 상태 초기화
+                        let _ = sqlx::query("UPDATE document_node SET last_action = NULL, updated_at = ? WHERE node_id = ?")
+                            .bind(Utc::now().to_rfc3339())
+                            .bind(&node_id_clone)
+                            .execute(&pool_clone)
+                            .await;
+                        let _ = app_handle_clone.emit("nodes-updated", ());
                     }
 
                     if embedding_success {
@@ -596,15 +706,14 @@ pub async fn run_module_pipeline(
         .bind(Utc::now().to_rfc3339()).bind(&node.node_id).execute(&*pool).await.map_err(|e| e.to_string())?;
     let _ = app_handle.emit("nodes-updated", ());
 
-    let res = generate_draft(&app_handle, &pool, &client, &api_key, &project_id, &node_type, "Module context...", "", &vec![], 1, vec![]).await.map_err(|e| e.to_string())?;
+    let res = generate_draft(&app_handle, &pool, &client, &api_key, &project_id, &node_type, "Module context...", "", &vec![], 1, node.target_count, vec![]).await.map_err(|e| e.to_string())?;
     
     sqlx::query("INSERT INTO generation_iteration (iteration_id, node_id, iteration_number, generated_draft_json, calculated_score, is_pass, created_at, updated_at, is_deleted) VALUES (?, ?, 1, ?, 100, 1, '[]', '[]', ?, ?, 0)")
         .bind(Uuid::new_v4().to_string()).bind(&node.node_id).bind(&res).bind(Utc::now().to_rfc3339()).bind(Utc::now().to_rfc3339()).execute(&*pool).await.map_err(|e| e.to_string())?;
 
-    sqlx::query("UPDATE document_node SET node_state = 'COMPLETED', updated_at = ? WHERE node_id = ?")
+    sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', updated_at = ? WHERE node_id = ?")
         .bind(Utc::now().to_rfc3339()).bind(&node.node_id).execute(&*pool).await.map_err(|e| e.to_string())?;
     
-    trigger_module_next_nodes(&app_handle, &module_id, &node_type).await?;
     let _ = app_handle.emit("nodes-updated", ());
     Ok(res)
 }

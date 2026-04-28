@@ -363,15 +363,15 @@ pub async fn is_node_locked(
             "sad_module_list", "sad_epic_mapping", "sad_module_deps"
         ]),
         // SAD 글로벌 항목들 -> SAD 모듈 분할 및 모든 개별 모듈 문서들
-        ("sad_non_tech", vec!["sad_module_list", "sad_epic_mapping", "sad_module_deps"]),
-        ("sad_tech_stack", vec!["sad_module_list", "sad_epic_mapping", "sad_module_deps"]),
-        ("sad_core_erd", vec!["sad_module_list", "sad_epic_mapping", "sad_module_deps"]),
-        ("sad_auth_rbac", vec!["sad_module_list", "sad_epic_mapping", "sad_module_deps"]),
+        ("sad_non_tech", vec!["sad_tech_stack", "sad_auth_rbac", "sad_interface_error", "sad_module_list", "sad_epic_mapping", "sad_module_deps"]),
+        ("sad_tech_stack", vec!["sad_core_erd", "sad_auth_rbac", "sad_interface_error", "sad_module_list", "sad_epic_mapping", "sad_module_deps"]),
+        ("sad_core_erd", vec!["sad_interface_error", "sad_module_list", "sad_epic_mapping", "sad_module_deps"]),
+        ("sad_auth_rbac", vec!["sad_core_erd", "sad_interface_error", "sad_module_list", "sad_epic_mapping", "sad_module_deps"]),
         ("sad_interface_error", vec!["sad_module_list", "sad_epic_mapping", "sad_module_deps"]),
         
         // SAD 모듈 분할 항목들 -> 모든 개별 모듈 문서들
-        ("sad_module_list", vec![]), // SAD_Module 가상 노드 처리를 위해 아래에서 별도 처리
-        ("sad_epic_mapping", vec![]),
+        ("sad_module_list", vec!["sad_epic_mapping", "sad_module_deps"]),
+        ("sad_epic_mapping", vec!["sad_module_deps"]),
         ("sad_module_deps", vec![]),
     ];
 

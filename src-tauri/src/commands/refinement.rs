@@ -12,7 +12,7 @@ use serde_json::Value;
 pub use crate::models::{
     PipelineError,
     Project, DocumentNode, GenerationIteration,
-    GlobalContext, LocalModule,
+    GlobalContext, LocalModule, PipelineStatusPayload,
 };
 
 // 서비스 함수 임포트
@@ -310,7 +310,16 @@ pub async fn apply_taint_cascade(
 
     // 3. UI 업데이트 이벤트 발행
     let _ = app_handle.emit("nodes-updated", ());
-    let _ = app_handle.emit("pipeline-status", "Taint Cascade 완료: 영향받는 노드들을 STALE 상태로 전환했습니다.");
+    let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
+        message: "Taint Cascade 완료: 영향받는 노드들을 STALE 상태로 전환했습니다.".into(),
+        node_id: "".into(),
+        node_type: "System".into(),
+        project_id: project_id.clone(),
+        level: "SUCCESS".into(),
+        status: "COMPLETED".into(),
+        current_iteration: None,
+        max_iterations: None,
+    });
 
     Ok(())
 }
@@ -368,7 +377,16 @@ pub async fn generate_and_apply_patch(
             .map_err(|e| e.to_string())?;
 
         let _ = app_handle.emit("nodes-updated", ());
-        let _ = app_handle.emit("pipeline-status", format!("노드 {} 복구: 변경 사항 없음", node.target_node_type));
+        let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
+            message: format!("노드 {} 복구: 변경 사항 없음", node.target_node_type),
+            node_id: node_id.clone(),
+            node_type: node.target_node_type.clone(),
+            project_id: project_id.clone(),
+            level: "SUCCESS".into(),
+            status: "COMPLETED".into(),
+            current_iteration: None,
+            max_iterations: None,
+        });
 
 
         return Ok(());
@@ -391,7 +409,16 @@ pub async fn generate_and_apply_patch(
 
     // 2. ?占썩?占썰궩 辱쀯옙壅?
     // 2. RAG 컨텍스트 확보
-    let _ = app_handle.emit("pipeline-status", "RAG 분석 중...");
+    let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
+        message: "RAG 분석 중...".into(),
+        node_id: node_id.clone(),
+        node_type: node.target_node_type.clone(),
+        project_id: project_id.clone(),
+        level: "INFO".into(),
+        status: "IN_PROGRESS".into(),
+        current_iteration: None,
+        max_iterations: None,
+    });
     sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
         .bind("RAG 분석 중...").bind(Utc::now().to_rfc3339()).bind(&node_id)
         .execute(&*pool).await.map_err(|e| e.to_string())?;
@@ -403,7 +430,16 @@ pub async fn generate_and_apply_patch(
         });
 
     // RAG 분석 완료 후 패치 생성 단계로 상태 업데이트
-    let _ = app_handle.emit("pipeline-status", "패치 생성 중...");
+    let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
+        message: "패치 생성 중...".into(),
+        node_id: node_id.clone(),
+        node_type: node.target_node_type.clone(),
+        project_id: project_id.clone(),
+        level: "INFO".into(),
+        status: "IN_PROGRESS".into(),
+        current_iteration: None,
+        max_iterations: None,
+    });
     let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
         .bind("패치 생성 중...").bind(Utc::now().to_rfc3339()).bind(&node_id)
         .execute(&*pool).await;
@@ -521,7 +557,16 @@ pub async fn generate_and_apply_patch(
     tx.commit().await.map_err(|e| e.to_string())?;
 
     let _ = app_handle.emit("nodes-updated", ());
-    let _ = app_handle.emit("pipeline-status", format!("Patch applied to {}. Starting auto-validation...", node.target_node_type));
+    let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
+        message: format!("Patch applied to {}. Starting auto-validation...", node.target_node_type),
+        node_id: node_id.clone(),
+        node_type: node.target_node_type.clone(),
+        project_id: project_id.clone(),
+        level: "INFO".into(),
+        status: "IN_PROGRESS".into(),
+        current_iteration: None,
+        max_iterations: None,
+    });
 
     // 6. 자동 검증 프로세스 시작 (Sprint 4)
     validate_refinement_node(app_handle, pool, client, api_key, project_id, node_id, response).await?;
@@ -614,7 +659,16 @@ pub async fn validate_refinement_node(
 
     // 2. ?占썩?占썰궩 辱쀯옙壅?
     // 2. RAG 컨텍스트 확보
-    let _ = app_handle.emit("pipeline-status", "RAG 분석 중...");
+    let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
+        message: "RAG 분석 중...".into(),
+        node_id: node_id.clone(),
+        node_type: node.target_node_type.clone(),
+        project_id: project_id.clone(),
+        level: "INFO".into(),
+        status: "IN_PROGRESS".into(),
+        current_iteration: None,
+        max_iterations: None,
+    });
     sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
         .bind("RAG 분석 중...").bind(Utc::now().to_rfc3339()).bind(&node_id)
         .execute(&*pool).await.map_err(|e| e.to_string())?;
@@ -626,7 +680,16 @@ pub async fn validate_refinement_node(
         });
  
     // RAG 분석 완료 후 패치 검증 단계로 상태 업데이트
-    let _ = app_handle.emit("pipeline-status", "패치 검증 중...");
+    let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
+        message: "패치 검증 중...".into(),
+        node_id: node_id.clone(),
+        node_type: node.target_node_type.clone(),
+        project_id: project_id.clone(),
+        level: "INFO".into(),
+        status: "IN_PROGRESS".into(),
+        current_iteration: None,
+        max_iterations: None,
+    });
     let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
         .bind("패치 검증 중...").bind(Utc::now().to_rfc3339()).bind(&node_id)
         .execute(&*pool).await;
@@ -682,7 +745,16 @@ pub async fn validate_refinement_node(
         .map_err(|e| e.to_string())?;
 
     let _ = app_handle.emit("nodes-updated", ());
-    let _ = app_handle.emit("pipeline-status", format!("{} Validation Complete (Score: {})", node.target_node_type, eval.score));
+    let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
+        message: format!("{} Validation Complete (Score: {})", node.target_node_type, eval.score),
+        node_id: node_id.clone(),
+        node_type: node.target_node_type.clone(),
+        project_id: project_id.clone(),
+        level: "SUCCESS".into(),
+        status: "COMPLETED".into(),
+        current_iteration: None,
+        max_iterations: None,
+    });
     
     // 리파인먼트 결과 수신 시, 클라이언트에게 결과 패키지 전송 (결과 모달 표시용)
     let _ = app_handle.emit("refinement-validation-result", serde_json::json!({
@@ -715,7 +787,16 @@ pub async fn retry_patch_loop(
     
     for i in 0..retry_count {
         println!(">>> Retry Attempt {}/{}", i + 1, retry_count);
-        let _ = app_handle.emit("pipeline-status", format!("Retrying patch... (Attempt {}/{})", i + 1, retry_count));
+        let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
+            message: format!("Retrying patch... (Attempt {}/{})", i + 1, retry_count),
+            node_id: node_id.clone(),
+            node_type: "Refinement".into(), // Or query from DB
+            project_id: project_id.clone(),
+            level: "INFO".into(),
+            status: "IN_PROGRESS".into(),
+            current_iteration: Some(i + 1),
+            max_iterations: Some(retry_count),
+        });
         
         match generate_and_apply_patch(
             app_handle.clone(),
@@ -766,7 +847,16 @@ pub async fn finalize_refinement_update(
     println!(">>> Finalizing Refinement Update (Global Commit) for project: {}", project_id);
     let now = Utc::now().to_rfc3339();
 
-    let _ = app_handle.emit("pipeline-status", "Global Refinement: Committing all changes...");
+    let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
+        message: "Global Refinement: Committing all changes...".into(),
+        node_id: "".into(),
+        node_type: "System".into(),
+        project_id: project_id.clone(),
+        level: "INFO".into(),
+        status: "IN_PROGRESS".into(),
+        current_iteration: None,
+        max_iterations: None,
+    });
 
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
@@ -823,7 +913,16 @@ pub async fn finalize_refinement_update(
     tx.commit().await.map_err(|e| e.to_string())?;
 
     let _ = app_handle.emit("nodes-updated", ());
-    let _ = app_handle.emit("pipeline-status", "Global Refinement Committed Successfully.");
+    let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
+        message: "Global Refinement Committed Successfully.".into(),
+        node_id: "".into(),
+        node_type: "System".into(),
+        project_id: project_id.clone(),
+        level: "SUCCESS".into(),
+        status: "COMPLETED".into(),
+        current_iteration: None,
+        max_iterations: None,
+    });
 
     Ok(())
 }

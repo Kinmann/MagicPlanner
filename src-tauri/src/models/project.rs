@@ -39,6 +39,8 @@ pub struct DocumentNode {
     pub max_iterations: i32,
     pub threshold_score: i32,
     pub current_best_score: i32,
+    #[sqlx(default)]
+    pub target_count: i32,
     pub api_error_code: Option<i32>,
     pub api_error_message: Option<String>,
     pub created_at: String,

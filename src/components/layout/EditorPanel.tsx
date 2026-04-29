@@ -5,12 +5,10 @@ import {
   Info, 
   Folder, 
   FileText, 
-  Zap, 
   Play,
   RotateCcw,
   RefreshCw,
   Settings2,
-  GitBranch,
   Lock,
   Sparkles,
   Square,
@@ -27,12 +25,10 @@ import { mapNodesToTree, TreeItem } from '../../utils/treeMapper';
 import { ErrorBoundary } from '../ui/Layout';
 import { NodeRenderer } from '../Project/Renderer/NodeRenderer';
 import { NodeActionHeader } from '../Project/NodeActionHeader';
-import { CommentPopover } from '../ui/CommentPopover';
 import { ReviewPopover } from '../ui/ReviewPopover';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { Dialog } from '../ui/Dialog';
-import { MessageSquare, ChevronDown } from 'lucide-react';
-import { Button } from '../ui/Button';
+import { MessageSquare } from 'lucide-react';
 import styles from './EditorPanel.module.scss';
 
 export const EditorPanel: React.FC = () => {
@@ -64,10 +60,12 @@ export const EditorPanel: React.FC = () => {
     updateTargetCount,
     confirmGenesisIteration,
     unconfirmIteration,
-    deleteIteration
+    deleteIteration,
+    fetchNodes,
+    modules
   } = useProjectStore();
   
-  const { isProcessing, isEmbedding, runningNodes } = useEngineStore();
+  const { isEmbedding, runningNodes } = useEngineStore();
   const { addLog } = useLogStore();
   const comments = useCommentStore(state => state.comments);
 
@@ -330,13 +328,6 @@ export const EditorPanel: React.FC = () => {
         </div>
       );
     }
-
-    const getIcon = () => {
-      const type = selectedNode.target_node_type;
-      if (type === 'Genesis_PRD' || type.startsWith('GPRD_')) return <FileText size={24} />;
-      if (type === 'SAD_Global' || type === 'SAD_Module') return <GitBranch size={24} />;
-      return <Zap size={24} />;
-    };
 
     const isRunning = selectedNode.node_state === 'IN_PROGRESS' || selectedNode.is_active;
     const hasPassedIter = (selectedNode.current_best_score > 0) || iterations.some(it => it.is_pass);

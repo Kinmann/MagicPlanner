@@ -1,11 +1,9 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { X, AlertCircle, Trash2, Pencil, Check, RotateCcw } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Trash2, Pencil, Check, RotateCcw } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useCommentStore } from '../../store/commentStore';
 import { useUIStore } from '../../store/uiStore';
 import { useModalStore } from '../../store/modalStore';
-import { Dialog } from '../ui/Dialog';
-import { Button } from '../ui/Button';
 import styles from './CommentableRow.module.scss';
 
 interface CommentPopoverProps {
@@ -24,7 +22,7 @@ export const CommentPopover: React.FC<CommentPopoverProps> = ({
   const [newComment, setNewComment] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
-  const { showAlert, showConfirm, showError } = useModalStore();
+  const { showAlert, showError } = useModalStore();
   const allComments = useCommentStore(state => state.comments);
   const comments = useMemo(() => 
     (allComments || []).filter(c => c.json_path === jsonPath),
@@ -56,6 +54,10 @@ export const CommentPopover: React.FC<CommentPopoverProps> = ({
     
     
     try {
+      if (!projectId) {
+        showError("프로젝트 ID가 유효하지 않습니다.", "오류");
+        return;
+      }
       await addComment({
         projectId,
         nodeId,

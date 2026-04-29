@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { ChevronDown, ChevronRight, MessageSquare, Send, Trash2, Pencil, Check, RotateCcw } from 'lucide-react';
+import React, { useState } from 'react';
+import { ChevronDown, ChevronRight, Trash2, Pencil, Check, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCommentStore } from '../../store/commentStore';
 import { useUIStore } from '../../store/uiStore';
@@ -27,7 +27,7 @@ export const ReviewPopover: React.FC<ReviewPopoverProps> = ({
   const projectId = useUIStore.getState().currentProjectId;
 
   const handleSubmit = async () => {
-    if (!newComment.trim() || !iterationId) return;
+    if (!newComment.trim() || !iterationId || !projectId) return;
     
     try {
       await addComment({

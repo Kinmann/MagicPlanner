@@ -42,16 +42,20 @@ const EngineStatusOverlay: React.FC = () => {
       <div className={styles.list}>
         {runningNodes.map((node) => (
           <div key={node.nodeId} className={styles.item}>
-            <div className={styles.projectInfoLine}>
+            <div className={styles.projectInfo}>
               <span className={styles.projectTag}>{node.projectName}</span>
-              <Layers size={10} />
+              <Layers size={10} className={styles.projectIcon} />
             </div>
-            <div className={styles.nodeInfo}>
-              <span className={styles.nodeName}>
-                {NODE_TYPE_LABELS[node.nodeType] || node.nodeType}
-              </span>
-              <span className={styles.action}>{node.lastAction || "Initializing..."}</span>
-            </div>
+            
+            <div className={styles.divider} />
+            
+            <span className={styles.nodeName}>
+              {NODE_TYPE_LABELS[node.nodeType] || node.nodeType}
+            </span>
+            
+            <div className={styles.divider} />
+            
+            <span className={styles.action}>{node.lastAction || "Initializing..."}</span>
           </div>
         ))}
       </div>

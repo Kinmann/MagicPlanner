@@ -22,11 +22,16 @@ import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useEngineStore } from '../../store/engineStore';
 import { useLogStore } from '../../store/logStore';
+import { useCommentStore } from '../../store/commentStore';
 import { mapNodesToTree, TreeItem } from '../../utils/treeMapper';
 import { ErrorBoundary } from '../ui/Layout';
 import { NodeRenderer } from '../Project/Renderer/NodeRenderer';
 import { NodeActionHeader } from '../Project/NodeActionHeader';
+import { CommentPopover } from '../ui/CommentPopover';
+import { ReviewPopover } from '../ui/ReviewPopover';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Dialog } from '../ui/Dialog';
+import { MessageSquare, ChevronDown } from 'lucide-react';
 import { Button } from '../ui/Button';
 import styles from './EditorPanel.module.scss';
 
@@ -46,6 +51,8 @@ export const EditorPanel: React.FC = () => {
     isRawMode,
     toggleRawMode
   } = useUIStore();
+  
+  const [isReviewOpen, setIsReviewOpen] = React.useState(false);
 
   
   const { 
@@ -62,6 +69,7 @@ export const EditorPanel: React.FC = () => {
   
   const { isProcessing, isEmbedding, runningNodes } = useEngineStore();
   const { addLog } = useLogStore();
+  const comments = useCommentStore(state => state.comments);
 
   const selectedNode = React.useMemo(() => {
     const node = nodes.find(n => n.node_id === selectedNodeId);
@@ -279,6 +287,20 @@ export const EditorPanel: React.FC = () => {
           {isVirtual ? <Sparkles size={12} className="text-primary" /> : <FileText size={12} className="opacity-60" />}
           {label}
         </span>
+        
+        <button 
+          className={styles.reviewBtn}
+          onClick={() => setIsReviewOpen(true)}
+        >
+          <MessageSquare size={12} />
+          <span>Review</span>
+          {comments.length > 0 && (
+            <span className={styles.reviewBtnCount}>{comments.length}</span>
+          )}
+          {selectedNode?.node_state === 'PAUSED_HITL' && (
+            <span className={styles.reviewBadge} />
+          )}
+        </button>
       </div>
     );
   };
@@ -320,6 +342,13 @@ export const EditorPanel: React.FC = () => {
     const hasPassedIter = (selectedNode.current_best_score > 0) || iterations.some(it => it.is_pass);
     const isCompleted = selectedNode.node_state === 'COMPLETED';
 
+    const runningNode = runningNodes.find(n => n.nodeId === selectedNode.node_id);
+    const isStopping = !!runningNode?.lastAction?.includes('종료 중');
+
+    const isMaxReached = selectedNode.current_iteration >= selectedNode.max_iterations;
+    const isDagLocked = selectedNode.is_locked;
+    const isExecutionDisabled = isEmbedding || isRunning || loading || isDagLocked || isStopping || (!isCompleted && isMaxReached);
+
     return (
       <div className={styles.headerRow}>
         <div className={styles.headerMain}>
@@ -335,9 +364,6 @@ export const EditorPanel: React.FC = () => {
 
           {/* Determine if stopping */}
           {(() => {
-            const runningNode = runningNodes.find(n => n.nodeId === selectedNode.node_id);
-            const isStopping = runningNode?.lastAction?.includes('종료 중');
-            
             return (
               <div className={styles.controls}>
                 {selectedNode.target_node_type === 'SAD_Module_List' && (
@@ -379,9 +405,11 @@ export const EditorPanel: React.FC = () => {
                       addLog('INFO', `Starting node execution`, selectedNode.target_node_type);
                       runNode(selectedNode.node_id);
                     }}
-                    disabled={isProcessing || isEmbedding || isRunning || loading || selectedNode.is_locked || isStopping}
+                    // isProcessing(글로벌 잠금)을 제거하여 병렬 노드 실행 허용
+                    // DAG 의존성 및 최대 반복 횟수 도달 시 처리
+                    disabled={isExecutionDisabled}
                   >
-                    {selectedNode.is_locked ? (
+                    {isDagLocked ? (
                       <Lock size={16} />
                     ) : isRunning ? (
                       <RotateCcw size={16} className="animate-spin" />
@@ -390,7 +418,7 @@ export const EditorPanel: React.FC = () => {
                     ) : (
                       <Play size={16} fill="currentColor" />
                     )}
-                    <span>{selectedNode.is_locked ? 'Locked' : (isRunning ? 'Running' : (isCompleted ? 'Regenerate' : 'Start'))}</span>
+                    <span>{isDagLocked ? 'Locked' : (isRunning ? 'Running' : (isCompleted ? 'Regenerate' : 'Start'))}</span>
                   </button>
 
                   {isRunning && (
@@ -416,12 +444,14 @@ export const EditorPanel: React.FC = () => {
                         await store.approveGenesisPrd();
                       } else if (selectedNode.target_node_type.startsWith('SAD_')) {
                         await store.approveSadNode(selectedNode.node_id);
+                      } else if (selectedNode.node_category === 'MODULE') {
+                        await store.handleHITLAction(selectedNode.node_id, 'APPROVE');
                       } else {
                         await store.approveGenesisNode(selectedNode.node_id);
                       }
                       goToNextNode();
                     }}
-                    disabled={isProcessing || loading}
+                    disabled={loading}
                   >
                     <span>Next Step</span>
                     <ChevronRight size={16} />
@@ -553,6 +583,15 @@ export const EditorPanel: React.FC = () => {
           </div>
         </div>
       </Dialog>
+      <AnimatePresence>
+        {isReviewOpen && selectedNode && (
+          <ReviewPopover 
+            nodeId={selectedNode.node_id}
+            iterationId={iterations.find(it => it.is_pass || it.iteration_id === selectedIterationId)?.iteration_id || ''}
+            onClose={() => setIsReviewOpen(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

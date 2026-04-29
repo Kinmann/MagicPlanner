@@ -12,6 +12,7 @@ import EngineStatusOverlay from "./components/layout/EngineStatusOverlay";
 import CriticalErrorModal from "./components/Project/CriticalErrorModal";
 import { Spinner } from "./components/ui/Spinner";
 import { ProjectInfoModal } from "./components/Project/ProjectInfoModal";
+import { GlobalModalContainer } from "./components/ui/GlobalModalContainer";
 import { useUIStore } from "./store/uiStore";
 
 import { useEngineStore } from "./store/engineStore";
@@ -195,6 +196,7 @@ function App() {
         errorInfo={lastError} 
       />
       <ProjectInfoModal />
+      <GlobalModalContainer />
     </div>
 
   );

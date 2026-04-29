@@ -6,11 +6,13 @@
 pub mod project;
 pub mod module;
 pub mod common;
+pub mod comment;
 
 // 재내보내기 (re-export) - 외부에서 crate::models::Project 형태로 접근 가능
 pub use project::*;
 pub use module::*;
 pub use common::*;
+pub use comment::*;
 
 use sqlx::FromRow;
 #[derive(serde::Serialize, serde::Deserialize, FromRow)]

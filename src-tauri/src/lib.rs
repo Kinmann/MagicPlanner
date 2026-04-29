@@ -172,6 +172,24 @@ pub fn run() {
                         FOREIGN KEY(node_id) REFERENCES document_node(node_id)
                     );
 
+                    -- 8. 노드 코멘트 (v2: 확정된 iteration에 대한 사용자 코멘트)
+                    CREATE TABLE IF NOT EXISTS node_comment (
+                        comment_id VARCHAR(36) PRIMARY KEY NOT NULL,
+                        project_id VARCHAR(36) NOT NULL,
+                        node_id VARCHAR(36) NOT NULL,
+                        iteration_id VARCHAR(36) NOT NULL,
+                        json_path TEXT NOT NULL,
+                        comment_text TEXT NOT NULL,
+                        author VARCHAR(100) DEFAULT 'User',
+                        is_resolved BOOLEAN NOT NULL DEFAULT 0,
+                        created_at TIMESTAMP NOT NULL,
+                        updated_at TIMESTAMP NOT NULL,
+                        is_deleted BOOLEAN NOT NULL DEFAULT 0,
+                        FOREIGN KEY(project_id) REFERENCES project(project_id),
+                        FOREIGN KEY(node_id) REFERENCES document_node(node_id),
+                        FOREIGN KEY(iteration_id) REFERENCES generation_iteration(iteration_id)
+                    );
+
                     -- 8. 벡터 임베딩 저장 (vec0 가상 테이블)
                     -- Phase 2: 거리 측정 방식을 cosine으로 명시 (Gemini 임베딩 최적화)
                     -- v2.1: Gemini-embedding-001/004의 3072 차원 대응을 위해 차원 상향
@@ -212,6 +230,10 @@ pub fn run() {
                 let _ = sqlx::query("ALTER TABLE document_node ADD COLUMN node_category VARCHAR(30) NOT NULL DEFAULT 'MODULE'").execute(&pool).await;
                 let _ = sqlx::query("ALTER TABLE document_node ADD COLUMN target_count INTEGER DEFAULT 0").execute(&pool).await;
                 
+                // 4. is_pass 데이터 표준화 (BOOLEAN -> 0/1 INTEGER)
+                let _ = sqlx::query("UPDATE generation_iteration SET is_pass = 1 WHERE is_pass = 'true' OR is_pass = '1' OR is_pass = 1").execute(&pool).await;
+                let _ = sqlx::query("UPDATE generation_iteration SET is_pass = 0 WHERE is_pass = 'false' OR is_pass = '0' OR is_pass = 0 OR is_pass IS NULL").execute(&pool).await;
+
                 // last_action 컬럼 추가 시도
                 match sqlx::query("ALTER TABLE document_node ADD COLUMN last_action TEXT").execute(&pool).await {
                     Ok(_) => println!(">>> Migration: last_action column added to document_node"),
@@ -280,6 +302,11 @@ pub fn run() {
             commands::refinement::validate_refinement_node,
             commands::refinement::finalize_refinement_update,
             commands::refinement::retry_patch_loop,
+            // v2: Comment 커맨드
+            commands::comment::get_node_comments,
+            commands::comment::create_comment,
+            commands::comment::update_comment,
+            commands::comment::delete_comment,
         ])
         .plugin(tauri_plugin_dialog::init())
         .run(tauri::generate_context!())

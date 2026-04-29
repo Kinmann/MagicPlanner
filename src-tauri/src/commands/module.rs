@@ -69,21 +69,62 @@ pub async fn create_local_modules(
         return Err("容뽩텈? 獄덂댖占???わ옙 10令덍?곤옙?占쏜졊?".to_string());
     }
 
-    // SAD 獄덂댖占?蘊깍옙占??蘊덌옙 ?占쏙옙 墉?겒??
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
+    // 1. 해당 프로젝트의 모든 모듈 관련 데이터 및 mock 노드 완전 삭제 (Aggressive Hard Delete)
+    // 1-1. 삭제 대상 노드 ID 목록 확보 (MODULE 카테고리 또는 module_id가 있거나 mock-으로 시작하는 노드)
+    let target_node_ids: Vec<String> = sqlx::query_scalar(
+        "SELECT node_id FROM document_node WHERE project_id = ? AND (node_category = 'MODULE' OR module_id IS NOT NULL OR node_id LIKE 'mock-%')"
+    )
+    .bind(&project_id)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if !target_node_ids.is_empty() {
+        // 이터레이션 삭제
+        sqlx::query("DELETE FROM generation_iteration WHERE node_id IN (SELECT node_id FROM document_node WHERE project_id = ? AND (node_category = 'MODULE' OR module_id IS NOT NULL OR node_id LIKE 'mock-%'))")
+            .bind(&project_id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+
+        // 임베딩 메타데이터 및 벡터 삭제
+        sqlx::query("DELETE FROM document_embeddings WHERE rowid IN (SELECT rowid FROM embedding_metadata WHERE node_id IN (SELECT node_id FROM document_node WHERE project_id = ? AND (node_category = 'MODULE' OR module_id IS NOT NULL OR node_id LIKE 'mock-%')))")
+            .bind(&project_id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+
+        sqlx::query("DELETE FROM embedding_metadata WHERE node_id IN (SELECT node_id FROM document_node WHERE project_id = ? AND (node_category = 'MODULE' OR module_id IS NOT NULL OR node_id LIKE 'mock-%'))")
+            .bind(&project_id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+
+        // 노드 삭제
+        sqlx::query("DELETE FROM document_node WHERE project_id = ? AND (node_category = 'MODULE' OR module_id IS NOT NULL OR node_id LIKE 'mock-%')")
+            .bind(&project_id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+    }
+
+    // 모듈 삭제
+    sqlx::query("DELETE FROM local_module WHERE project_id = ?")
+        .bind(&project_id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+
+    // SAD 모듈 상태 업데이트
     sqlx::query("UPDATE document_node SET node_state = 'COMPLETED', updated_at = ? WHERE project_id = ? AND target_node_type = 'SAD_Module'")
     .bind(&now).bind(&project_id)
-    .execute(&*pool).await.map_err(|e| e.to_string())?;
+    .execute(&mut *tx).await.map_err(|e| e.to_string())?;
 
-    // ?占쏙옙??틶??phase ?占쏙옙
+    // 프로젝트 단계 변경
     sqlx::query("UPDATE project SET pipeline_phase = 'MODULE_GENERATION', updated_at = ? WHERE project_id = ?")
     .bind(&now).bind(&project_id)
-    .execute(&*pool).await.map_err(|e| e.to_string())?;
+    .execute(&mut *tx).await.map_err(|e| e.to_string())?;
 
     let mut module_ids = Vec::new();
-    let node_types = vec!["PRD", "FSD", "User Flow", "IA", "ERD", "Wireframe", "API_Spec", "TC"];
+    let node_blueprints = vec![
+        ("PRD", "READY"),
+        ("FSD", "PENDING"),
+        ("ERD", "PENDING"),
+        ("API_Spec", "PENDING"),
+        ("User Flow", "PENDING"),
+        ("IA", "PENDING"),
+        ("Wireframe", "PENDING"),
+        ("TC", "PENDING"),
+    ];
 
     for (idx, module) in modules.iter().enumerate() {
-        // AI令덌옙 ?帝같占??ID令덌옙 ?占썲컧獄??燁묌뭘, ?占썲컧獄?UUID ??뽳옙 (??????옙)
         let module_id = module["module_id"].as_str()
             .map(|s| s.to_string())
             .unwrap_or_else(|| Uuid::new_v4().to_string());
@@ -92,7 +133,7 @@ pub async fn create_local_modules(
         let m_name = module["name"].as_str().unwrap_or(&default_name);
         let m_desc = module["description"].as_str().unwrap_or("");
         let m_resp = module["responsibility"].as_str().unwrap_or("");
-        let m_epics = module["mapped_epics"].as_str().unwrap_or(""); // 獄덌옙占?占썲컧獄?獄↑퀎占??容뷰눢占?
+        let m_epics = module["mapped_epics"].as_str().unwrap_or(""); 
         let m_deps = module["dependency_spec"].as_str().unwrap_or("[]");
         let priority = module["priority_order"].as_i64().unwrap_or(idx as i64) as i32;
 
@@ -101,27 +142,26 @@ pub async fn create_local_modules(
         )
         .bind(&module_id).bind(&project_id).bind(m_name).bind(m_desc).bind(m_resp).bind(m_epics).bind(m_deps)
         .bind(priority).bind(idx as i32).bind(&now).bind(&now)
-        .execute(&*pool).await.map_err(|e| e.to_string())?;
+        .execute(&mut *tx).await.map_err(|e| e.to_string())?;
 
-        // 令?獄덂댖占??8令??蘊덌옙 ??뽳옙
-        for node_type in &node_types {
+        for (node_type, initial_state) in &node_blueprints {
             let node_id = Uuid::new_v4().to_string();
-            let initial_state = if node_type == &"PRD" { "READY" } else { "PENDING" };
             sqlx::query(
                 "INSERT INTO document_node (node_id, project_id, module_id, target_node_type, node_category, node_state, current_iteration, max_iterations, threshold_score, current_best_score, created_at, updated_at, is_deleted) VALUES (?, ?, ?, ?, 'MODULE', ?, 0, 10, 85, 0, ?, ?, 0)"
             )
-            .bind(&node_id).bind(&project_id).bind(&module_id).bind(*node_type).bind(initial_state).bind(&now).bind(&now)
-            .execute(&*pool).await.map_err(|e| e.to_string())?;
+            .bind(&node_id).bind(&project_id).bind(&module_id).bind(*node_type).bind(*initial_state).bind(&now).bind(&now)
+            .execute(&mut *tx).await.map_err(|e| e.to_string())?;
         }
 
         module_ids.push(module_id);
     }
 
-    // 墉?縕믭옙耶?獄덂댖占???잞옙?帝같占?容뽴쮤덌옙)???帝같占??
     if let Some(first_id) = module_ids.first() {
         sqlx::query("UPDATE local_module SET module_state = 'ACTIVE' WHERE module_id = ?")
-        .bind(first_id).execute(&*pool).await.map_err(|e| e.to_string())?;
+        .bind(first_id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
     }
+
+    tx.commit().await.map_err(|e| e.to_string())?;
 
     let _ = app_handle.emit("nodes-updated", ());
     Ok(module_ids)

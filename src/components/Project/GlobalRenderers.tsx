@@ -3,9 +3,12 @@ import {
   Briefcase, TrendingUp, ShieldCheck, 
   Users, User, Shield, Zap,
   Box, FileCode, ListTodo, CheckCircle2, Layers,
-  Server, Database, Cpu, Globe, Monitor, Code2, Key
+  Server, Database, Cpu, Globe, Monitor, Code2, Key,
+  Activity, ArrowRight, AlertCircle, FileText,
+  ChevronRight, GitBranch, Terminal
 } from 'lucide-react';
 import SadSpecRenderer from './SadSpecRenderer';
+import { CommentableRow } from '../ui/CommentableRow';
 import styles from './GlobalRenderers.module.scss';
 
 export const renderJson = (val: any, indent = 0): React.ReactNode => {
@@ -361,7 +364,274 @@ export const ArchitectureSchemaRenderer = ({ content }: { content: any }) => {
   );
 };
 
-export const PrdBentoRenderer = ({ content, isIntegrated = false, stage }: { content: any, isIntegrated?: boolean, stage?: number }) => {
+export const ModulePrdRenderer = ({ content }: { content: any }) => {
+  const overview = content.overview || {};
+  const goals = content.goals || [];
+  const features = content.core_features || [];
+  const userStories = content.user_stories || [];
+  const constraints = content.constraints || [];
+
+  return (
+    <div className={styles.epicActorContainer}>
+      {/* 1. Project Overview */}
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>
+          <Briefcase size={20} className={styles.icon} />
+          1. Project Overview
+        </h2>
+        <div className={styles.epicList}>
+           <article className={styles.epicItem}>
+             <h3 className={styles.epicHeader}>
+               <span className={`${styles.epicTitle} ${styles.valueWrapper}`} style={{ color: 'var(--primary)', fontSize: '1.25rem' }}>{content.project_name}</span>
+             </h3>
+             <div className={styles.epicBody}>
+               <div className="flex flex-col gap-6">
+                 {overview.solution_vision && (
+                   <div>
+                     <h4 className={styles.criteriaTitle}><Zap size={14} className="opacity-50" /> Solution Vision</h4>
+                     <p className={`${styles.epicDesc} ${styles.valueWrapper}`} style={{ marginTop: '0.5rem' }}>{overview.solution_vision}</p>
+                   </div>
+                 )}
+                 {overview.target_audience && (
+                   <div>
+                     <h4 className={styles.criteriaTitle}><Users size={14} className="opacity-50" /> Target Audience</h4>
+                     <p className={`${styles.epicDesc} ${styles.valueWrapper}`} style={{ marginTop: '0.5rem' }}>{overview.target_audience}</p>
+                   </div>
+                 )}
+                 {overview.problem_statement && (
+                   <div>
+                     <h4 className={styles.criteriaTitle}><ListTodo size={14} className="opacity-50" /> Problem Statement</h4>
+                     <p className={`${styles.epicDesc} ${styles.valueWrapper}`} style={{ marginTop: '0.5rem' }}>{overview.problem_statement}</p>
+                   </div>
+                 )}
+               </div>
+             </div>
+           </article>
+        </div>
+      </section>
+
+      {/* 2. Product Goals */}
+      {goals.length > 0 && (
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>
+            <TrendingUp size={20} className={styles.icon} />
+            2. Product Goals
+          </h2>
+          <div className={styles.epicList}>
+            <article className={styles.epicItem}>
+              <div className={styles.epicBody}>
+                <ul className={styles.criteriaList}>
+                  {goals.map((goal: string, idx: number) => (
+                    <li key={idx} className={styles.criteriaItem}>
+                      <CheckCircle2 size={16} className={styles.checkIcon} />
+                      <span className={styles.valueWrapper}>{goal}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </article>
+          </div>
+        </section>
+      )}
+
+      {/* 3. Core Features */}
+      {features.length > 0 && (
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>
+            <Zap size={20} className={styles.icon} />
+            3. Core Features
+          </h2>
+          <div className={styles.epicList}>
+            {features.map((feature: any, idx: number) => (
+              <article key={idx} className={styles.epicItem}>
+                <h3 className={styles.epicHeader}>
+                  <span className={styles.epicId}>{feature.mapped_epic_id || `F-${idx+1}`} / {feature.req_id || 'REQ'}</span>
+                  <span className={`${styles.epicTitle} ${styles.valueWrapper}`}>{feature.feature_name}</span>
+                  <span className="ml-auto text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded border border-primary/20">{feature.priority}</span>
+                </h3>
+                <div className={styles.epicBody}>
+                  <p className={`${styles.epicDesc} ${styles.valueWrapper}`}>{feature.description}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* 4. User Stories */}
+      {userStories.length > 0 && (
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>
+            <Users size={20} className={styles.icon} />
+            4. User Stories
+          </h2>
+          <div className={styles.epicList}>
+             <article className={styles.epicItem}>
+               <div className={styles.epicBody}>
+                 <ul className={styles.criteriaList}>
+                   {userStories.map((story: string, idx: number) => (
+                     <li key={idx} className={styles.criteriaItem}>
+                       <User size={16} className="opacity-40" />
+                       <span className={styles.valueWrapper}>{story}</span>
+                     </li>
+                   ))}
+                 </ul>
+               </div>
+             </article>
+          </div>
+        </section>
+      )}
+
+      {/* 5. Global Constraints */}
+      {constraints.length > 0 && (
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>
+            <ShieldCheck size={20} className={styles.icon} />
+            5. Global Constraints
+          </h2>
+          <div className={styles.epicList}>
+             <article className={styles.epicItem}>
+               <div className={styles.epicBody}>
+                 <ul className={styles.criteriaList}>
+                   {constraints.map((c: string, idx: number) => (
+                     <li key={idx} className={styles.criteriaItem}>
+                       <Shield size={16} className="opacity-40" />
+                       <span className={styles.valueWrapper}>{c}</span>
+                     </li>
+                   ))}
+                 </ul>
+               </div>
+             </article>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+};
+
+export const ModuleFsdRenderer = ({ content, nodeId, currentIteration }: { content: any, nodeId?: string, currentIteration?: any }) => {
+  const features = content.features || [];
+
+  return (
+    <div className={styles.epicActorContainer}>
+      {/* 1. Functional Specifications */}
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>
+          <Layers size={20} className={styles.icon} />
+          1. Functional Specifications
+        </h2>
+        
+        <div className={styles.epicList}>
+          {features.map((feature: any, idx: number) => (
+            <CommentableRow key={idx} nodeId={nodeId || ''} jsonPath={`$.features[?(@.func_id=='${feature.func_id}')]`} currentIteration={currentIteration}>
+              <article className={styles.epicItem} style={{ width: '100%' }}>
+                <h3 className={styles.epicHeader}>
+                  <span className={styles.epicId}>[{feature.func_id || `F-${idx+1}`}]</span>
+                  <span className={`${styles.epicTitle} ${styles.valueWrapper}`}>
+                    {feature.summary || feature.feature_name}
+                  </span>
+                </h3>
+                
+                <div className={styles.epicBody}>
+                  <p className={`${styles.epicDesc} ${styles.valueWrapper}`}>
+                    {feature.mapped_req_id && (
+                      <span className={styles.reqBadge}>
+                        {feature.mapped_req_id}
+                      </span>
+                    )}
+                    {feature.description}
+                  </p>
+
+                  {/* 1. Conditions */}
+                  {(feature.pre_condition || feature.post_condition) && (
+                    <div className={styles.criteriaSection}>
+                      <h4 className={styles.criteriaTitle}>
+                        <ShieldCheck size={16} />
+                        Pre & Post Conditions:
+                      </h4>
+                      <ul className={styles.criteriaList}>
+                        {feature.pre_condition && (
+                          <li className={styles.criteriaItem}>
+                            <ArrowRight size={16} className={styles.checkIcon} />
+                            <span className={styles.valueWrapper}><strong>Pre-condition:</strong> {feature.pre_condition}</span>
+                          </li>
+                        )}
+                        {feature.post_condition && (
+                          <li className={styles.criteriaItem}>
+                            <CheckCircle2 size={16} className={styles.checkIcon} />
+                            <span className={styles.valueWrapper}><strong>Post-condition:</strong> {feature.post_condition}</span>
+                          </li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* 2. Main Flow */}
+                  {feature.flow && feature.flow.length > 0 && (
+                    <div className={styles.criteriaSection}>
+                      <h4 className={styles.criteriaTitle}>
+                        <Activity size={16} />
+                        Main Functional Flow:
+                      </h4>
+                      <ul className={styles.criteriaList}>
+                        {feature.flow.map((step: string, sIdx: number) => (
+                          <li key={sIdx} className={styles.criteriaItem}>
+                            <div className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] flex items-center justify-center font-bold border border-primary/20 mr-1 flex-shrink-0">
+                              {sIdx + 1}
+                            </div>
+                            <span className={styles.valueWrapper}>{step}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* 3. Exception Flow */}
+                  {feature.exception_flow && feature.exception_flow.length > 0 && (
+                    <div className={styles.criteriaSection}>
+                      <h4 className={styles.criteriaTitle}>
+                        <AlertCircle size={16} />
+                        Exception & Error Flows:
+                      </h4>
+                      <ul className={styles.criteriaList}>
+                        {feature.exception_flow.map((step: string, eIdx: number) => (
+                          <li key={eIdx} className={styles.criteriaItem}>
+                            <AlertCircle size={16} className="text-warning opacity-50" />
+                            <span className={styles.valueWrapper}>{step}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* 4. Data Requirements */}
+                  {feature.data_requirements && feature.data_requirements.length > 0 && (
+                    <div className={styles.criteriaSection}>
+                      <h4 className={styles.criteriaTitle}>
+                        <Database size={16} />
+                        Data Requirements:
+                      </h4>
+                      <ul className={styles.criteriaList}>
+                        {feature.data_requirements.map((req: string, rIdx: number) => (
+                          <li key={rIdx} className={styles.criteriaItem}>
+                            <Database size={16} className={styles.checkIcon} style={{ opacity: 0.5 }} />
+                            <span className={styles.valueWrapper}>{req}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </article>
+            </CommentableRow>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+};
+
+export const PrdBentoRenderer = ({ content, isIntegrated = false, stage, nodeId, currentIteration }: { content: any, isIntegrated?: boolean, stage?: number, nodeId?: string, currentIteration?: any }) => {
   if (!content) return <div className={styles.emptyState}>No content available</div>;
 
   // Use specialized renderer for Stage 1 (Business Strategy)
@@ -377,6 +647,11 @@ export const PrdBentoRenderer = ({ content, isIntegrated = false, stage }: { con
   // Use specialized renderer for Stage 3 (Architecture Schema)
   if (stage === 3 || (!stage && content.tech_stack && content.user_roles && !content.core_epics)) {
     return <ArchitectureSchemaRenderer content={content} />;
+  }
+
+  // Use specialized renderer for Module PRD (Stage 4 or legacy PrdSchema detection)
+  if (stage === 4 || (!stage && content.overview && content.core_features)) {
+    return <ModulePrdRenderer content={content} />;
   }
 
   const projectName = content.metadata?.project_name || content.project_name || 'Unnamed Project';
@@ -504,7 +779,232 @@ export const PrdBentoRenderer = ({ content, isIntegrated = false, stage }: { con
   );
 };
 
-export const SadGlobalRenderer = ({ content }: { content: any }) => {
+export const ModuleUserFlowRenderer = ({ content, nodeId, currentIteration }: { content: any, nodeId?: string, currentIteration?: any }) => {
+  if (!content) return null;
+  const nodes = content.nodes || [];
+  const edges = content.edges || [];
+
+  return (
+    <div className={styles.epicActorContainer}>
+      {/* 1. Step Details */}
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>
+          <Activity size={20} className={styles.icon} />
+          1. Sequence & Logic Details
+        </h2>
+        <div className={styles.epicList}>
+          {nodes.map((node: any, i: number) => (
+            <article key={i} className={styles.epicItem}>
+               <h3 className={styles.criteriaTitle} style={{ fontSize: '15px' }}>
+                 <span className={styles.epicId}>[{node.id}]</span>
+                 <span className={styles.valueWrapper}>{node.label}</span>
+                 <span className={`${styles.badge} ${styles['badge--primary']} ml-2`}>
+                   {node.node_type}
+                 </span>
+               </h3>
+               <div className={styles.epicBody}>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                      <h4 className={styles.criteriaTitle}>
+                        <ArrowRight size={14} className="opacity-50" /> 
+                        Action/Trigger
+                      </h4>
+                      <p className={styles.epicDesc} style={{ marginTop: '0.5rem' }}>{node.step}</p>
+                    </div>
+                    {node.system_response && (
+                      <div>
+                        <h4 className={styles.criteriaTitle}>
+                          <Terminal size={14} className="opacity-50" /> 
+                          System Response
+                        </h4>
+                        <p className={styles.epicDesc} style={{ marginTop: '0.5rem', borderColor: 'var(--accent)' }}>{node.system_response}</p>
+                      </div>
+                    )}
+                 </div>
+                 
+                 {node.mapped_func_ids && node.mapped_func_ids.length > 0 && (
+                   <div className="mt-2">
+                     <h4 className={styles.criteriaTitle}>
+                       <Code2 size={14} className="opacity-50" /> 
+                       Functional Dependencies
+                     </h4>
+                     <div className="flex flex-wrap gap-2 mt-2">
+                       {node.mapped_func_ids.map((func: string, j: number) => (
+                         <span key={j} className={`${styles.badge} ${styles['badge--primary']} text-[10px]`}>
+                           {func}
+                         </span>
+                       ))}
+                     </div>
+                   </div>
+                 )}
+               </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {/* 2. User Flow Architecture */}
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>
+          <GitBranch className={styles.icon} size={20} />
+          2. User Flow Mapping Architecture
+        </h2>
+        <div className={styles.epicList} style={{ gap: '2px' }}>
+          {nodes.map((node: any, i: number) => {
+            const outboundEdges = edges.filter((e: any) => e.from_id === node.id);
+            return (
+              <div key={i} className={styles.minimalRelRow}>
+                <div className={styles.relNames} style={{ minWidth: '380px' }}>
+                  <span className={styles.epicId}>[{node.id}]</span>
+                  <div className="flex flex-col">
+                    <span className={styles.textPrimary} style={{ fontWeight: 700 }}>{node.label}</span>
+                    <span style={{ fontSize: '10px', opacity: 0.5 }}>{node.actor} • {node.node_type}</span>
+                  </div>
+                  <ChevronRight size={14} className={styles.opacity40} />
+                </div>
+                <div className={styles.relMeta}>
+                  {outboundEdges.length > 0 ? (
+                    <div className="flex flex-wrap gap-3">
+                      {outboundEdges.map((edge: any, j: number) => {
+                        const targetNode = nodes.find((n: any) => n.id === edge.to_id);
+                        return (
+                          <div key={j} className="flex items-center gap-1">
+                            {edge.condition && (
+                              <span style={{ 
+                                fontSize: '10px', 
+                                background: 'rgba(255,255,255,0.05)',
+                                padding: '1px 4px',
+                                borderRadius: '3px',
+                                opacity: 0.6
+                              }}>{edge.condition}</span>
+                            )}
+                            <span style={{ 
+                              fontSize: '13px',
+                              color: 'var(--primary)',
+                              fontWeight: 700,
+                              fontFamily: 'monospace',
+                              opacity: 0.8
+                            }}>
+                              {targetNode ? targetNode.label : edge.to_id}
+                              {j < outboundEdges.length - 1 && <span style={{ marginLeft: '4px', opacity: 0.3 }}>,</span>}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <span className="text-[11px] opacity-30 italic">End of Flow</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+};
+
+export const ModuleErdRenderer = ({ content, nodeId, currentIteration }: { content: any, nodeId?: string, currentIteration?: any }) => {
+  if (!content) return null;
+  
+  // Normalize tables and columns
+  const entities = (content.tables || []).map((t: any) => ({
+    entity_name: t.table_name || t.name,
+    description: t.description || '',
+    attributes: (t.columns || []).map((c: any) => ({
+      name: c.name,
+      data_type: c.data_type,
+      is_primary_key: c.is_pk || c.is_primary_key,
+      is_nullable: c.is_nullable,
+      description: c.description
+    }))
+  }));
+
+  const relations = (content.relationships || []).map((rel: any) => ({
+    from_entity: rel.from_entity || rel.source_table,
+    to_entity: rel.to_entity || rel.target_table,
+    relationship_type: rel.relationship_type || rel.rel_type,
+    description: rel.description
+  }));
+
+  return (
+    <div className={styles.epicActorContainer}>
+      {/* 1. Core Entities / Tables */}
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>
+          <Database className={styles.icon} size={20} />
+          1. Core Entities
+        </h2>
+        <div className={styles.epicList}>
+          {entities.map((ent: any, i: number) => (
+            <article key={i} className={styles.epicItem}>
+              <h3 className={styles.erdEntityTitle}>
+                <Layers size={22} className="text-primary opacity-50" />
+                <span className={styles.valueWrapper}>{ent.entity_name}</span>
+              </h3>
+              <div className={styles.erdEntityBody}>
+                {ent.description && <p className={styles.epicDesc}>{ent.description}</p>}
+                
+                {ent.attributes && ent.attributes.length > 0 && (
+                  <div className={styles.criteriaSection}>
+                    <h4 className={styles.criteriaTitle} style={{ marginTop: '8px' }}>
+                      <ListTodo size={14} />
+                      Attributes
+                    </h4>
+                    <div className="flex flex-col gap-1 mt-2">
+                      {ent.attributes.map((attr: any, j: number) => (
+                        <div key={j} className={styles.attributeLine}>
+                          <div className={styles.attribute}>
+                            <span className={styles.name}>{attr.name}</span>
+                            <span className={styles.type}>({attr.data_type})</span>
+                            {attr.is_primary_key && <span className={styles.badge}>PK</span>}
+                            {!attr.is_primary_key && attr.is_nullable && <span className={`${styles.opacity40} ${styles.textXs}`}>NULL</span>}
+                            {!attr.is_primary_key && !attr.is_nullable && <span className={`${styles.opacity40} ${styles.textXs}`}>NOT NULL</span>}
+                          </div>
+                          {attr.description && (
+                            <span className={styles.desc}>- {attr.description}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {/* 2. Relationships Map */}
+      {relations.length > 0 && (
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>
+            <GitBranch className={styles.icon} size={20} />
+            2. Relationship Architecture
+          </h2>
+          <div className={styles.epicList} style={{ gap: '2px' }}>
+            {relations.map((rel: any, i: number) => (
+              <div key={i} className={styles.minimalRelRow}>
+                <div className={styles.relNames}>
+                  <span className={styles.textPrimary}>{rel.from_entity}</span>
+                  <ChevronRight size={14} className={styles.opacity40} />
+                  <span className={styles.textSecondary}>{rel.to_entity}</span>
+                </div>
+                <div className={styles.relMeta}>
+                  <span className={styles.relBadge}>{rel.relationship_type}</span>
+                  <span className={styles.relDescription}>{rel.description}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+};
+
+export const SadGlobalRenderer = ({ content, nodeId, currentIteration }: { content: any, nodeId?: string, currentIteration?: any }) => {
   const contexts = Array.isArray(content) ? content : (content.contexts || []);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -515,6 +1015,8 @@ export const SadGlobalRenderer = ({ content }: { content: any }) => {
               type={ctx.context_type}
               data={ctx.context_data_json}
               isRaw={false}
+              nodeId={nodeId}
+              currentIteration={currentIteration}
             />
           </div>
         </div>

@@ -221,6 +221,9 @@ pub async fn trigger_module_next_nodes(
     // 모듈 완료 동기화
     sync_module_completion_status(&*pool, Some(app_handle), module_id).await?;
 
+    // UI 이벤트 발행 (다음 노드 READY 상태 반영)
+    let _ = app_handle.emit("nodes-updated", ());
+
     Ok(())
 }
 
@@ -377,9 +380,9 @@ pub async fn is_node_locked(
 
     // 2. 모듈 내 의존성 맵 (PRD -> FSD -> Flow/ERD/IA -> Wireframe/API -> TC)
     let module_next_map = vec![
-        ("prd", vec!["fsd", "user_flow", "ia", "erd", "wireframe", "api_spec", "tc"]),
-        ("fsd", vec!["user_flow", "ia", "erd", "wireframe", "api_spec", "tc"]),
-        ("user_flow", vec!["ia", "wireframe", "tc"]),
+        ("prd", vec!["fsd", "user flow", "ia", "erd", "wireframe", "api_spec", "tc"]),
+        ("fsd", vec!["user flow", "ia", "erd", "wireframe", "api_spec", "tc"]),
+        ("user flow", vec!["ia", "wireframe", "tc"]),
         ("ia", vec!["wireframe", "tc"]),
         ("erd", vec!["api_spec", "tc"]),
         ("api_spec", vec!["tc"]),

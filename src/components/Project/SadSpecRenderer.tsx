@@ -9,18 +9,23 @@ import {
   Monitor, Server, Globe, Cpu, Key, User, ListTodo,
   Package, Code2, FolderOpen
 } from 'lucide-react';
+import WireframeRenderer from './Renderer/modules/WireframeRenderer';
+import TcRenderer from './Renderer/modules/TcRenderer';
+import { CommentableRow } from '../ui/CommentableRow';
 import styles from './SadSpecRenderer.module.scss';
 
 interface SadSpecRendererProps {
   type: string;
   data: any;
   isRaw?: boolean;
+  nodeId?: string;
+  currentIteration?: any;
 }
 
 /**
  * 1. ERD Renderer (sad_core_erd)
  */
-const ErdRenderer: React.FC<{ data: any }> = ({ data }) => {
+const ErdRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?: any }> = ({ data, nodeId, currentIteration }) => {
   const isModuleErd = !!data.tables;
   const entities = isModuleErd 
     ? (data.tables || []).map((t: any) => ({
@@ -53,35 +58,37 @@ const ErdRenderer: React.FC<{ data: any }> = ({ data }) => {
         </h2>
         <div className={styles.epicList}>
           {entities.map((ent: any, i: number) => (
-            <article key={i} className={styles.epicItem}>
-              <h3 className={styles.criteriaTitle} style={{ fontSize: '15px' }}>
-                <Layers size={18} className="text-primary opacity-50" />
-                <span className={styles.valueWrapper}>{ent.entity_name}</span>
-              </h3>
-              <div className={styles.epicBody}>
-                <p className={styles.epicDesc}>{ent.description}</p>
-                
-                {ent.attributes && ent.attributes.length > 0 && (
-                  <div className={styles.criteriaSection}>
-                    <h4 className={styles.criteriaTitle}>
-                      <ListTodo size={14} />
-                      {isModuleErd ? 'Columns' : 'Attributes'}
-                    </h4>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {ent.attributes.map((attr: any, j: number) => (
-                        <div key={j} className={styles.attribute}>
-                          <span className={styles.name}>{attr.name}</span>
-                          <span className={styles.type}>({attr.data_type})</span>
-                          {attr.is_primary_key && <span className={styles.badge}>PK</span>}
-                          {!attr.is_primary_key && attr.is_nullable && <span className={`${styles.opacity40} ${styles.textXs}`}>NULL</span>}
-                          {!attr.is_primary_key && !attr.is_nullable && <span className={`${styles.opacity40} ${styles.textXs}`}>NOT NULL</span>}
-                        </div>
-                      ))}
+            <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.tables[?(@.table_name=='${ent.entity_name}')]`} currentIteration={currentIteration}>
+              <article className={styles.epicItem} style={{ width: '100%' }}>
+                <h3 className={styles.criteriaTitle} style={{ fontSize: '15px' }}>
+                  <Layers size={18} className="text-primary opacity-50" />
+                  <span className={styles.valueWrapper}>{ent.entity_name}</span>
+                </h3>
+                <div className={styles.epicBody}>
+                  <p className={styles.epicDesc}>{ent.description}</p>
+                  
+                  {ent.attributes && ent.attributes.length > 0 && (
+                    <div className={styles.criteriaSection}>
+                      <h4 className={styles.criteriaTitle}>
+                        <ListTodo size={14} />
+                        {isModuleErd ? 'Columns' : 'Attributes'}
+                      </h4>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {ent.attributes.map((attr: any, j: number) => (
+                          <div key={j} className={styles.attribute}>
+                            <span className={styles.name}>{attr.name}</span>
+                            <span className={styles.type}>({attr.data_type})</span>
+                            {attr.is_primary_key && <span className={styles.badge}>PK</span>}
+                            {!attr.is_primary_key && attr.is_nullable && <span className={`${styles.opacity40} ${styles.textXs}`}>NULL</span>}
+                            {!attr.is_primary_key && !attr.is_nullable && <span className={`${styles.opacity40} ${styles.textXs}`}>NOT NULL</span>}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            </article>
+                  )}
+                </div>
+              </article>
+            </CommentableRow>
           ))}
         </div>
       </section>
@@ -117,7 +124,7 @@ const ErdRenderer: React.FC<{ data: any }> = ({ data }) => {
 /**
  * 2. RBAC Renderer (sad_auth_rbac)
  */
-const RbacRenderer: React.FC<{ data: any }> = ({ data }) => {
+const RbacRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?: any }> = ({ data, nodeId, currentIteration }) => {
   return (
     <div className={styles.epicActorContainer}>
       {/* 1. Authentication Strategy */}
@@ -158,32 +165,36 @@ const RbacRenderer: React.FC<{ data: any }> = ({ data }) => {
           {(data.roles || []).map((r: any, i: number) => {
             const isAdmin = r.role_name?.toUpperCase().includes('ADMIN') || r.role_id?.toUpperCase().includes('ADMIN');
             return (
-              <article key={i} className={styles.epicItem}>
-                <h3 className={styles.criteriaTitle} style={{ fontSize: '15px' }}>
-                  {isAdmin ? <ShieldCheck size={18} className="text-primary" /> : <User size={18} className="opacity-40" />}
-                  <span className={styles.valueWrapper}>{r.role_name}</span>
-                </h3>
-                <div className={styles.epicBody}>
-                  <p className={styles.epicDesc}>{r.description}</p>
-                  
-                  {r.permissions && r.permissions.length > 0 && (
-                    <div className={styles.criteriaSection}>
-                      <h4 className={styles.criteriaTitle}>
-                        <ListTodo size={14} />
-                        Permissions
-                      </h4>
-                      <ul className={styles.criteriaList}>
-                        {r.permissions.map((p: string, j: number) => (
-                          <li key={j} className={styles.criteriaItem}>
-                            <CheckCircle2 size={14} className={styles.checkIcon} />
-                            <span className={styles.valueWrapper}>{p}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              </article>
+              <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.roles[?(@.role_id=='${r.role_id || r.role_name}')]`} currentIteration={currentIteration}>
+                <article className={styles.epicItem} style={{ width: '100%' }}>
+                  <h3 className={styles.criteriaTitle} style={{ fontSize: '15px' }}>
+                    {isAdmin ? <ShieldCheck size={18} className="text-primary" /> : <User size={18} className="opacity-40" />}
+                    <span className={styles.valueWrapper}>{r.role_name}</span>
+                  </h3>
+                  <div className={styles.epicBody}>
+                    <p className={styles.epicDesc}>{r.description}</p>
+                    
+                    {r.permissions && r.permissions.length > 0 && (
+                      <div className={styles.criteriaSection}>
+                        <h4 className={styles.criteriaTitle}>
+                          <ListTodo size={14} />
+                          Permissions
+                        </h4>
+                        <ul className={styles.criteriaList}>
+                          {r.permissions.map((p: string, j: number) => (
+                            <CommentableRow key={j} nodeId={nodeId || ''} jsonPath={`$.roles[?(@.role_id=='${r.role_id || r.role_name}')].permissions[${j}]`} currentIteration={currentIteration}>
+                              <li className={styles.criteriaItem}>
+                                <CheckCircle2 size={14} className={styles.checkIcon} />
+                                <span className={styles.valueWrapper}>{p}</span>
+                              </li>
+                            </CommentableRow>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </article>
+              </CommentableRow>
             );
           })}
         </div>
@@ -195,7 +206,7 @@ const RbacRenderer: React.FC<{ data: any }> = ({ data }) => {
 /**
  * 3. Tech Stack Renderer (sad_tech_stack)
  */
-const TechStackRenderer: React.FC<{ data: any }> = ({ data }) => {
+const TechStackRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?: any }> = ({ data, nodeId, currentIteration }) => {
   const techItems = [
     { title: 'Frontend Stack', id: 'frontend', icon: <Monitor size={18} /> },
     { title: 'Backend Stack', id: 'backend', icon: <Server size={18} /> },
@@ -214,53 +225,57 @@ const TechStackRenderer: React.FC<{ data: any }> = ({ data }) => {
           Core Technology Stack
         </h2>
         <div className={styles.epicList}>
-          <article className={styles.epicItem}>
-            <div className={styles.epicBody}>
-              <div className="flex flex-col gap-6">
-                {techItems.map((item, idx) => {
-                  const val = data[item.id];
-                  if (!val) return null;
+          <CommentableRow nodeId={nodeId || ''} jsonPath="$.tech_stack" currentIteration={currentIteration}>
+            <article className={styles.epicItem} style={{ width: '100%' }}>
+              <div className={styles.epicBody}>
+                <div className="flex flex-col gap-6">
+                  {techItems.map((item, idx) => {
+                    const val = data[item.id];
+                    if (!val) return null;
 
-                  return (
-                    <div key={idx}>
-                      <h4 className={styles.criteriaTitle}>
-                        <span style={{ opacity: 0.5, display: 'flex', alignItems: 'center' }}>{item.icon}</span>
-                        {item.title}
-                      </h4>
-                      <div className={styles.epicDesc} style={{ 
-                        marginTop: '0.4rem', 
-                        display: 'flex', 
-                        flexDirection: 'column', 
-                        gap: '8px',
-                        paddingLeft: '14px'
-                      }}>
-                        {typeof val === 'object' ? (
-                          Object.entries(val).map(([k, v]: [string, any], kIdx) => (
-                            <div key={kIdx} className={styles.kvRow}>
-                              <Zap size={12} style={{ opacity: 0.3, flexShrink: 0, marginTop: '2px' }} />
-                              <span style={{ fontSize: '13px', opacity: 0.8, minWidth: '160px' }}>
-                                {k.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}:
-                              </span>
-                              <span className={`${styles.valueWrapper} text-primary`} style={{ fontSize: '13px', fontWeight: '700' }}>
-                                {String(v)}
-                              </span>
-                            </div>
-                          ))
-                        ) : (
-                          <div className={styles.kvRow}>
-                            <Zap size={12} style={{ opacity: 0.3, flexShrink: 0, marginTop: '2px' }} />
-                            <span className={`${styles.valueWrapper} text-primary`} style={{ fontSize: '14px', fontWeight: '700' }}>
-                              {val}
-                            </span>
+                    return (
+                      <CommentableRow key={idx} nodeId={nodeId || ''} jsonPath={`$.tech_stack.${item.id}`} currentIteration={currentIteration}>
+                        <div style={{ width: '100%' }}>
+                          <h4 className={styles.criteriaTitle}>
+                            <span style={{ opacity: 0.5, display: 'flex', alignItems: 'center' }}>{item.icon}</span>
+                            {item.title}
+                          </h4>
+                          <div className={styles.epicDesc} style={{ 
+                            marginTop: '0.4rem', 
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            gap: '8px',
+                            paddingLeft: '14px'
+                          }}>
+                            {typeof val === 'object' ? (
+                              Object.entries(val).map(([k, v]: [string, any], kIdx) => (
+                                <div key={kIdx} className={styles.kvRow}>
+                                  <Zap size={12} style={{ opacity: 0.3, flexShrink: 0, marginTop: '2px' }} />
+                                  <span style={{ fontSize: '13px', opacity: 0.8, minWidth: '160px' }}>
+                                    {k.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}:
+                                  </span>
+                                  <span className={`${styles.valueWrapper} text-primary`} style={{ fontSize: '13px', fontWeight: '700' }}>
+                                    {String(v)}
+                                  </span>
+                                </div>
+                              ))
+                            ) : (
+                              <div className={styles.kvRow}>
+                                <Zap size={12} style={{ opacity: 0.3, flexShrink: 0, marginTop: '2px' }} />
+                                <span className={`${styles.valueWrapper} text-primary`} style={{ fontSize: '14px', fontWeight: '700' }}>
+                                  {String(val)}
+                                </span>
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                        </div>
+                      </CommentableRow>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          </article>
+            </article>
+          </CommentableRow>
         </div>
       </section>
 
@@ -294,7 +309,7 @@ const TechStackRenderer: React.FC<{ data: any }> = ({ data }) => {
 /**
  * 4. Interface & Error Renderer (sad_interface_error)
  */
-const InterfaceRenderer: React.FC<{ data: any }> = ({ data }) => {
+const InterfaceRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?: any }> = ({ data, nodeId, currentIteration }) => {
   return (
     <div className={styles.epicActorContainer}>
       {/* 1. Interface Standards */}
@@ -339,18 +354,20 @@ const InterfaceRenderer: React.FC<{ data: any }> = ({ data }) => {
         </h2>
         <div className={styles.epicList}>
           {(data.error_codes || []).map((err: any, i: number) => (
-            <article key={i} className={styles.epicItem}>
-              <h3 className={styles.criteriaTitle} style={{ fontSize: '15px' }}>
-                <code className="text-primary opacity-70 font-mono text-[11px] bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20">{err.code}</code>
-                <span className={`${styles.badge} ${styles['badge--primary']} ml-2`}>
-                  {err.http_status}
-                </span>
-                <span className={`${styles.valueWrapper} ml-1`}>{err.message}</span>
-              </h3>
-              <div className={styles.epicBody}>
-                <p className={styles.epicDesc}>{err.description}</p>
-              </div>
-            </article>
+            <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.error_codes[?(@.code=="${err.code}")]`} currentIteration={currentIteration}>
+              <article className={styles.epicItem} style={{ width: '100%' }}>
+                <h3 className={styles.criteriaTitle} style={{ fontSize: '15px' }}>
+                  <code className="text-primary opacity-70 font-mono text-[11px] bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20">{err.code}</code>
+                  <span className={`${styles.badge} ${styles['badge--primary']} ml-2`}>
+                    {err.http_status}
+                  </span>
+                  <span className={`${styles.valueWrapper} ml-1`}>{err.message}</span>
+                </h3>
+                <div className={styles.epicBody}>
+                  <p className={styles.epicDesc}>{err.description}</p>
+                </div>
+              </article>
+            </CommentableRow>
           ))}
         </div>
       </section>
@@ -361,7 +378,7 @@ const InterfaceRenderer: React.FC<{ data: any }> = ({ data }) => {
 /**
  * 5. Module List Renderer (sad_module_list)
  */
-const ModuleListRenderer: React.FC<{ data: any }> = ({ data }) => {
+const ModuleListRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?: any }> = ({ data, nodeId, currentIteration }) => {
   const modules = data.modules || [];
   return (
     <div className={styles.epicActorContainer}>
@@ -373,7 +390,8 @@ const ModuleListRenderer: React.FC<{ data: any }> = ({ data }) => {
         
         <div className={styles.epicList}>
           {modules.map((mod: any, i: number) => (
-            <article key={i} className={styles.epicItem}>
+            <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.modules[?(@.module_id=="${mod.module_id}")]`} currentIteration={currentIteration}>
+              <article className={styles.epicItem} style={{ width: '100%' }}>
               <h3 className={styles.epicHeader}>
                 <span className={styles.epicId}>[{mod.module_id}]</span>
                 <span className={`${styles.epicTitle} ${styles.valueWrapper}`}>
@@ -396,7 +414,8 @@ const ModuleListRenderer: React.FC<{ data: any }> = ({ data }) => {
                   </div>
                 )}
               </div>
-            </article>
+              </article>
+            </CommentableRow>
           ))}
         </div>
       </section>
@@ -407,7 +426,7 @@ const ModuleListRenderer: React.FC<{ data: any }> = ({ data }) => {
 /**
  * 6. Non-Technical Renderer (sad_non_tech)
  */
-const NonTechRenderer: React.FC<{ data: any }> = ({ data }) => {
+const NonTechRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?: any }> = ({ data, nodeId, currentIteration }) => {
   const sections = [
     { label: 'Legal Constraints', items: data.legal_constraints, icon: Shield },
     { label: 'Compliance', items: data.compliance_requirements, icon: ShieldCheck },
@@ -422,7 +441,8 @@ const NonTechRenderer: React.FC<{ data: any }> = ({ data }) => {
         const Icon = s.icon;
         return (
           <section key={i} className={styles.section}>
-            <h2 className={styles.sectionTitle}>
+            <CommentableRow nodeId={nodeId || ''} jsonPath={`$.non_tech[?(@.label=="${s.label}")]`} currentIteration={currentIteration}>
+              <h2 className={styles.sectionTitle}>
               <Icon size={20} className={styles.icon} />
               {i + 1}. {s.label}
             </h2>
@@ -440,6 +460,7 @@ const NonTechRenderer: React.FC<{ data: any }> = ({ data }) => {
                  </div>
                </article>
             </div>
+            </CommentableRow>
           </section>
         );
       })}
@@ -450,7 +471,7 @@ const NonTechRenderer: React.FC<{ data: any }> = ({ data }) => {
 /**
  * 7. Epic Mapping Renderer (sad_epic_mapping)
  */
-const EpicMappingRenderer: React.FC<{ data: any }> = ({ data }) => {
+const EpicMappingRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?: any }> = ({ data, nodeId, currentIteration }) => {
   return (
     <div className={styles.epicActorContainer}>
       <section className={styles.section}>
@@ -460,6 +481,7 @@ const EpicMappingRenderer: React.FC<{ data: any }> = ({ data }) => {
         </h2>
         <div className={styles.epicList} style={{ gap: '2px' }}>
           {(data.mappings || []).map((m: any, i: number) => (
+            <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.mappings[?(@.epic_id=="${m.epic_id}")]`} currentIteration={currentIteration}>
             <div key={i} className={styles.minimalRelRow}>
               <div className={styles.relNames} style={{ minWidth: '380px' }}>
                 <span className={styles.epicId}>[{m.epic_id}]</span>
@@ -482,7 +504,8 @@ const EpicMappingRenderer: React.FC<{ data: any }> = ({ data }) => {
                   ))}
                 </div>
               </div>
-            </div>
+              </div>
+            </CommentableRow>
           ))}
         </div>
       </section>
@@ -493,7 +516,7 @@ const EpicMappingRenderer: React.FC<{ data: any }> = ({ data }) => {
 /**
  * 8. Module Dependencies Renderer (sad_module_deps)
  */
-const ModuleDepsRenderer: React.FC<{ data: any }> = ({ data }) => {
+const ModuleDepsRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?: any }> = ({ data, nodeId, currentIteration }) => {
   return (
     <div className={styles.epicActorContainer}>
       {/* 1. Dependency Chain */}
@@ -504,6 +527,7 @@ const ModuleDepsRenderer: React.FC<{ data: any }> = ({ data }) => {
         </h2>
         <div className={styles.epicList}>
           {(data.dependencies || []).map((dep: any, i: number) => (
+            <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.dependencies[?(@.from_module=="${dep.from_module}" && @.to_module=="${dep.to_module}")]`} currentIteration={currentIteration}>
             <article key={i} className={styles.epicItem}>
               <h3 className={styles.criteriaTitle} style={{ 
                 fontSize: '15px', 
@@ -530,6 +554,7 @@ const ModuleDepsRenderer: React.FC<{ data: any }> = ({ data }) => {
                 <p className={styles.epicDesc}>{dep.description}</p>
               </div>
             </article>
+            </CommentableRow>
           ))}
         </div>
       </section>
@@ -562,8 +587,234 @@ const ModuleDepsRenderer: React.FC<{ data: any }> = ({ data }) => {
 };
 
 /**
- * 9. Fallback Renderer (JSON)
+ * 9. API Spec Renderer (API_Spec)
  */
+const ApiSpecRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?: any }> = ({ data, nodeId, currentIteration }) => {
+  const endpoints = data.endpoints || [];
+
+  const parseSafe = (val: any) => {
+    if (typeof val !== 'string') return val;
+    try {
+      return JSON.parse(val);
+    } catch (e) {
+      return val;
+    }
+  };
+
+  return (
+    <div className={styles.epicActorContainer}>
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>
+          <Globe className={styles.icon} size={20} />
+          1. API Endpoints Specification
+        </h2>
+        <div className={styles.epicList}>
+          {endpoints.length === 0 && <div className={styles.emptyState}>No endpoints defined</div>}
+          {endpoints.map((ep: any, i: number) => {
+            const method = (ep.method || 'GET').toLowerCase();
+            const reqBody = parseSafe(ep.request_body);
+            const hasReqBody = reqBody && (typeof reqBody === 'object' ? Object.keys(reqBody).length > 0 : String(reqBody).length > 0);
+
+            return (
+              <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.endpoints[?(@.path=="${ep.path}" && @.method=="${ep.method}")]`} currentIteration={currentIteration}>
+                <article className={styles.epicItem} style={{ width: '100%' }}>
+                <h3 className={styles.epicHeader}>
+                  <span className={`${styles.methodBadge} ${styles['methodBadge--' + method]}`}>
+                    {ep.method || 'GET'}
+                  </span>
+                  <span className={styles.path}>{ep.path || '/'}</span>
+                </h3>
+                <div className={styles.epicBody}>
+                  {(ep.summary || ep.description) && (
+                    <p className={styles.epicDesc}>
+                      {ep.summary && <strong className="block mb-1 text-primary/80">{ep.summary}</strong>}
+                      {ep.description}
+                    </p>
+                  )}
+                  
+                  {hasReqBody && (
+                    <div className={styles.criteriaSection}>
+                      <h4 className={styles.criteriaTitle}>
+                        <Terminal size={14} /> Request Body
+                      </h4>
+                      <div className={styles.codeBlock}>
+                        <pre>{typeof reqBody === 'string' ? reqBody : JSON.stringify(reqBody, null, 2)}</pre>
+                      </div>
+                    </div>
+                  )}
+
+                  {ep.responses && ep.responses.length > 0 && (
+                    <div className={styles.criteriaSection}>
+                      <h4 className={styles.criteriaTitle}>
+                        <RefreshCw size={14} /> Responses
+                      </h4>
+                      <div className="flex flex-col gap-3">
+                        {ep.responses.map((res: any, j: number) => {
+                          const status = parseInt(res.status_code || '200');
+                          const isSuccess = status >= 200 && status < 300;
+                          const isError = status >= 400;
+                          const statusClass = isSuccess ? 'success' : isError ? 'error' : 'info';
+                          const resSchema = parseSafe(res.schema);
+                          const hasResSchema = resSchema && (typeof resSchema === 'object' ? Object.keys(resSchema).length > 0 : String(resSchema).length > 0);
+
+                          return (
+                            <CommentableRow key={j} nodeId={nodeId || ''} jsonPath={`$.endpoints[?(@.path=="${ep.path}" && @.method=="${ep.method}")].responses[?(@.status_code=="${res.status_code}")]`} currentIteration={currentIteration}>
+                              <div className={styles.responseRow} style={{ width: '100%' }}>
+                                <div className="flex items-center gap-3">
+                                  <span className={`${styles.statusBadge} ${styles['statusBadge--' + statusClass]}`}>
+                                    {res.status_code}
+                                  </span>
+                                  <span className="text-xs font-semibold opacity-80">{res.description}</span>
+                                </div>
+                                {hasResSchema && (
+                                  <div className={styles.codeBlock} style={{ marginTop: '8px' }}>
+                                    <pre>{typeof resSchema === 'string' ? resSchema : JSON.stringify(resSchema, null, 2)}</pre>
+                                  </div>
+                                )}
+                              </div>
+                            </CommentableRow>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                </article>
+              </CommentableRow>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+};
+
+/**
+ * 10. Information Architecture Renderer (IA)
+ */
+const IaRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?: any }> = ({ data, nodeId, currentIteration }) => {
+  const hierarchy = data.hierarchy || [];
+  const screenElements = data.screen_elements || [];
+
+  return (
+    <div className={styles.epicActorContainer}>
+      {/* 1. Information Architecture Hierarchy (Epic Mapping Style Reference) */}
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>
+          <GitBranch className={styles.icon} size={20} />
+          1. Information Architecture Hierarchy
+        </h2>
+        <div className={styles.epicList} style={{ gap: '2px' }}>
+          {hierarchy.length === 0 && <div className={styles.emptyState}>No hierarchy defined</div>}
+          {hierarchy.map((item: any, i: number) => {
+            const depth = item.depth || 1;
+            return (
+                <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.hierarchy[?(@.screen_id=="${item.screen_id}")]`} currentIteration={currentIteration}>
+                <div 
+                  className={styles.minimalRelRow}
+                  style={{ 
+                    marginLeft: `${(depth - 1) * 32}px`,
+                    borderLeft: depth > 1 ? '1px solid rgba(16, 185, 129, 0.15)' : 'none',
+                    paddingLeft: depth > 1 ? '16px' : '8px',
+                    width: '100%'
+                  }}
+                >
+                <div className={styles.relNames} style={{ minWidth: '380px' }}>
+                  <span className={styles.epicId}>[{item.screen_id}]</span>
+                  <span className={styles.textPrimary} style={{ fontWeight: 700 }}>{item.title}</span>
+                  <ChevronRight size={14} className={styles.opacity40} />
+                </div>
+                <div className={styles.relMeta}>
+                  <div className="flex items-center gap-4">
+                    {item.actor && (
+                      <span className={styles.badge} style={{ fontSize: '11px', fontWeight: 600 }}>
+                        {item.actor}
+                      </span>
+                    )}
+                    {item.path && (
+                      <span style={{ 
+                        fontSize: '13px', 
+                        fontFamily: 'monospace', 
+                        color: 'var(--primary)', 
+                        opacity: 0.6,
+                        fontWeight: 500
+                      }}>
+                        {item.path}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                </div>
+                </CommentableRow>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* 2. Screen Elements Specification (Interface & Error Style Reference) */}
+      {screenElements.length > 0 && (
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>
+            <Monitor className={styles.icon} size={20} />
+            2. Screen Elements Specification
+          </h2>
+          <div className={styles.epicList}>
+            {screenElements.map((screen: any, i: number) => (
+              <article key={i} className={styles.epicItem}>
+                <h3 className={styles.criteriaTitle} style={{ fontSize: '15px' }}>
+                  <code className="text-primary opacity-70 font-mono text-[11px] bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20">
+                    {screen.screen_id}
+                  </code>
+                  <span className={`${styles.valueWrapper} ml-2`} style={{ fontWeight: 700 }}>
+                    {screen.screen_name || screen.title || screen.name || 'Screen details'}
+                  </span>
+                </h3>
+                <div className={styles.epicBody}>
+                  <div className="flex flex-col gap-1.5">
+                    {screen.elements?.map((el: any, j: number) => {
+                      const elType = el.type || el.element_type || el.component_type || 'Element';
+                      return (
+                        <div key={j} className={styles.minimalRelRow} style={{ 
+                          padding: '8px 12px', 
+                          background: 'rgba(255,255,255,0.015)',
+                          border: '1px solid rgba(255,255,255,0.03)'
+                        }}>
+                          <div className="flex items-center gap-3" style={{ minWidth: '160px' }}>
+                            <span className={`${styles.badge} ${styles['badge--primary']}`} style={{ 
+                              fontSize: '9px', 
+                              textTransform: 'uppercase',
+                              minWidth: '70px',
+                              textAlign: 'center',
+                              fontWeight: 800,
+                              letterSpacing: '0.02em'
+                            }}>
+                              {elType}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between flex-1">
+                            <span className={styles.valueWrapper} style={{ fontWeight: 600, fontSize: '13px' }}>{el.label || el.name || 'Unnamed Element'}</span>
+                            {el.mapped_func_id && (
+                              <code className="opacity-40 text-[10px] font-mono bg-white/5 px-1 rounded">#{el.mapped_func_id}</code>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+};
+
+/**
+ * 11. Fallback Renderer (JSON)
+ */
+
 const FallbackRenderer: React.FC<{ data: any }> = ({ data }) => {
   return (
     <div className="bg-black p-4 rounded-lg border border-border">
@@ -574,54 +825,59 @@ const FallbackRenderer: React.FC<{ data: any }> = ({ data }) => {
   );
 };
 
-const SadSpecRenderer: React.FC<SadSpecRendererProps> = ({ type, data, isRaw }) => {
+const normalizeType = (type: string): string => {
+  return type.toLowerCase().replace(/ /g, '_').replace(/^sad_/, '').replace(/^modules\./, '');
+};
+
+const RENDERER_MAP: Record<string, React.FC<{ data: any, nodeId?: string, currentIteration?: any }>> = {
+  'core_erd': ErdRenderer,
+  'erd': ErdRenderer,
+  'auth_rbac': RbacRenderer,
+  'tech_stack': TechStackRenderer,
+  'interface_error': InterfaceRenderer,
+  'non_tech': NonTechRenderer,
+  'module_list': ModuleListRenderer,
+  'epic_mapping': EpicMappingRenderer,
+  'module_deps': ModuleDepsRenderer,
+  'api_spec': ApiSpecRenderer,
+  'ia': IaRenderer,
+  'wireframe': WireframeRenderer,
+  'tc': TcRenderer,
+};
+
+const SadSpecRenderer: React.FC<SadSpecRendererProps> = ({ type, data, isRaw, nodeId, currentIteration }) => {
   if (!data) return <div className="p-8 text-center opacity-40 italic">No data available</div>;
 
-  let workingData = data;
+  let parsedData = data;
   if (typeof data === 'string') {
     try {
-      workingData = JSON.parse(data);
+      parsedData = JSON.parse(data);
     } catch (e) {
       return <FallbackRenderer data={data} />;
     }
   }
 
-  if (isRaw) return <FallbackRenderer data={workingData} />;
+  if (isRaw) return <FallbackRenderer data={parsedData} />;
 
   switch (type) {
-    case 'sad_core_erd':
-    case 'SAD_Core_ERD':
-    case 'ERD':
-      return <ErdRenderer data={workingData} />;
-    case 'sad_auth_rbac':
-    case 'SAD_Auth_RBAC':
-      return <RbacRenderer data={workingData} />;
     case 'sad_tech_stack':
-    case 'SAD_Tech_Stack':
-      return <TechStackRenderer data={workingData} />;
+      return <TechStackRenderer data={parsedData} nodeId={nodeId} currentIteration={currentIteration} />;
     case 'sad_interface_error':
-    case 'SAD_Interface_Error':
-      return <InterfaceRenderer data={workingData} />;
-    case 'sad_non_tech':
-    case 'SAD_Non_Tech':
-      return <NonTechRenderer data={workingData} />;
+      return <InterfaceRenderer data={parsedData} nodeId={nodeId} currentIteration={currentIteration} />;
     case 'sad_module_list':
-    case 'SAD_Module_List':
-      return <ModuleListRenderer data={workingData} />;
-    case 'sad_epic_mapping':
-    case 'SAD_Epic_Mapping':
-      return <EpicMappingRenderer data={workingData} />;
-    case 'sad_module_deps':
-    case 'SAD_Module_Deps':
-      return <ModuleDepsRenderer data={workingData} />;
-    case 'PRD':
-      // PRD Renderer logic truncated for brevity but follow the same style pattern
-      return <FallbackRenderer data={workingData} />;
-    case 'API_Spec':
-      return <FallbackRenderer data={workingData} />;
-    default:
-      return <FallbackRenderer data={workingData} />;
+      return <ModuleListRenderer data={parsedData} nodeId={nodeId} currentIteration={currentIteration} />;
+    case 'sad_non_tech':
+      return <NonTechRenderer data={parsedData} nodeId={nodeId} currentIteration={currentIteration} />;
   }
+
+  const normalizedType = normalizeType(type);
+  const Renderer = RENDERER_MAP[normalizedType];
+
+  if (Renderer) {
+    return <Renderer data={parsedData} nodeId={nodeId} currentIteration={currentIteration} />;
+  }
+
+  return <FallbackRenderer data={parsedData} />;
 };
 
 export default SadSpecRenderer;

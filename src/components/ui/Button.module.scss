@@ -22,17 +22,18 @@
 
 // Variants
 .primary {
-  background: linear-gradient(135deg, v.$primary 0%, #059669 100%);
-  color: #061a14;
-  box-shadow: 0 0 12px rgba(16, 185, 129, 0.2);
+  background-color: rgba(16, 185, 129, 0.05);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: v.$primary;
 
   &:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 0 18px rgba(16, 185, 129, 0.35);
+    background-color: rgba(16, 185, 129, 0.12);
+    border-color: v.$primary;
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.15);
   }
 
   &:active:not(:disabled) {
-    transform: translateY(0);
+    background-color: rgba(16, 185, 129, 0.2);
   }
 }
 

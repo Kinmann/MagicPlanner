@@ -5,3 +5,4 @@ pub mod node;
 pub mod approval;
 pub mod pipeline;
 pub mod refinement;
+pub mod comment;

@@ -308,6 +308,31 @@
   }
 }
 
+.epicTags {
+  display: flex;
+  align-items: center;
+  gap: v.$space-4;
+  margin-top: calc(v.$space-2 * -1);
+  margin-bottom: v.$space-2;
+}
+
+.epicTag {
+  color: v.$primary;
+  font-family: v.$font-mono;
+  font-size: v.$text-sm;
+  font-weight: v.$font-weight-normal;
+}
+
+.reqBadge {
+  display: inline-block;
+  margin-right: v.$space-3_5;
+  font-family: v.$font-mono;
+  font-size: v.$text-xs;
+  color: v.$primary;
+  font-weight: v.$font-weight-bold;
+  vertical-align: middle;
+}
+
 .criteriaSection {
   display: flex;
   flex-direction: column;
@@ -329,6 +354,7 @@
   gap: v.$space-2_5;
   font-size: v.$text-sm;
   color: v.$text-muted;
+  padding-left: v.$space-6;
 }
 
 .criteriaItem {
@@ -348,5 +374,185 @@
     flex-shrink: 0;
     margin-top: 2px;
     transition: color 0.2s;
+  }
+}
+
+// ERD Specific Styles (copied from SadSpecRenderer for independence)
+.attribute {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 8px;
+  margin-left: -8px;
+  border-radius: v.$radius-sm;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: rgba(v.$primary, 0.05);
+    .name { color: rgba(v.$foreground, 0.9); }
+  }
+
+  .name { font-family: v.$font-mono; font-weight: 700; color: v.$primary; transition: color 0.2s; }
+  .type { font-size: 11px; opacity: 0.6; font-family: v.$font-mono; }
+  .badge { font-size: 9px; padding: 1px 4px; border-radius: 3px; background: v.$primary; color: v.$on-primary; font-weight: 800; }
+}
+
+.minimalRelRow {
+  display: flex;
+  align-items: center;
+  gap: v.$space-6;
+  padding: v.$space-2 v.$space-4;
+  border-radius: v.$radius-md;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  
+  &:hover {
+    background: rgba(v.$primary, 0.04);
+    border-color: rgba(v.$primary, 0.1);
+    .relNames { color: v.$foreground; }
+  }
+  
+  .relNames {
+    display: flex;
+    align-items: center;
+    gap: v.$space-3;
+    min-width: 280px;
+    font-weight: 700;
+    font-size: 14px;
+    color: rgba(v.$foreground, 0.8);
+    transition: color 0.2s;
+  }
+  
+  .relMeta {
+    display: flex;
+    align-items: center;
+    gap: v.$space-4;
+    flex: 1;
+  }
+  
+  .relBadge {
+    font-family: v.$font-mono;
+    font-size: 10px;
+    font-weight: 800;
+    color: v.$primary;
+    background: rgba(v.$primary, 0.1);
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(v.$primary, 0.2);
+    min-width: 40px;
+    text-align: center;
+  }
+  
+  .relDescription {
+    font-size: 13px;
+    color: v.$text-muted;
+    line-height: 1.5;
+  }
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: v.$background-container-high;
+  color: v.$foreground;
+  
+  &--secondary {
+    background: rgba(v.$error, 0.1);
+    color: v.$error;
+    border: 1px solid rgba(v.$error, 0.2);
+  }
+
+  &--primary {
+    background: rgba(v.$primary, 0.1);
+    color: v.$primary;
+    border: 1px solid rgba(v.$primary, 0.2);
+  }
+}
+
+.textPrimary { color: v.$primary; }
+.textSecondary { color: rgba(v.$foreground, 0.6); }
+.opacity40 { opacity: 0.4; }
+.textXs { font-size: v.$text-xs; }
+.textSm { font-size: v.$text-sm; }
+.textLg { font-size: v.$text-lg; }
+.fontNormal { font-weight: v.$font-weight-normal; }
+.fontMedium { font-weight: v.$font-weight-medium; }
+.fontBold { font-weight: v.$font-weight-bold; }
+
+// ERD UI Improvements
+.erdEntityTitle {
+  font-size: v.$text-lg;
+  font-weight: 900;
+  color: v.$foreground;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: -4px; // Tighter gap to body
+}
+
+.erdEntityBody {
+  gap: v.$space-2 !important;
+  padding-left: v.$space-7 !important; // Align with title text
+}
+
+.attributeListVertical {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.attributeRow {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  background: rgba(v.$background-container-high, 0.5);
+  border-radius: v.$radius-md;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: rgba(v.$primary, 0.05);
+    border-color: rgba(v.$primary, 0.1);
+    transform: translateX(4px);
+  }
+}
+
+.attributeHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  
+  .name { font-family: v.$font-mono; font-weight: 700; color: v.$primary; font-size: v.$text-sm; }
+  .type { font-size: v.$text-xs; opacity: 0.5; font-family: v.$font-mono; }
+  .badge { font-size: 9px; padding: 1px 4px; border-radius: 3px; background: v.$primary; color: v.$on-primary; font-weight: 800; }
+}
+
+.attributeDesc {
+  font-size: v.$text-sm;
+  color: v.$text-muted;
+  opacity: 0.7;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.attributeLine {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 0;
+  
+  &:hover {
+    .attribute { background: rgba(v.$primary, 0.05); }
+    .desc { opacity: 0.8 !important; }
+  }
+
+  .desc {
+    font-size: v.$text-sm;
+    font-family: v.$font-mono;
+    opacity: 0.6;
+    transition: opacity 0.2s;
   }
 }

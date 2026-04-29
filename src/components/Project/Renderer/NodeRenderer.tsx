@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useProjectStore } from '../../../store/projectStore';
 import { useUIStore } from '../../../store/uiStore';
+import { useCommentStore } from '../../../store/commentStore';
 import { useShallow } from 'zustand/react/shallow';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { PrdBentoRenderer, SadGlobalRenderer, renderJson } from '../GlobalRenderers';
+import { PrdBentoRenderer, SadGlobalRenderer, renderJson, ModuleFsdRenderer, ModuleErdRenderer, ModuleUserFlowRenderer } from '../GlobalRenderers';
 import SadSpecRenderer from '../SadSpecRenderer';
 import { Sparkles, RefreshCw, Copy, Check, FileJson } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -156,26 +157,18 @@ export const NodeRenderer: React.FC = () => {
   })));
 
   const [content, setContent] = useState<any>(null);
+  const [currentIteration, setCurrentIteration] = useState<any>(null);
   const [loadingContent, setLoadingContent] = useState(false);
-  const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const fetchComments = useCommentStore(state => state.fetchComments);
 
-  // Status message listener
+  // Fetch comments when node changes
   useEffect(() => {
-    const unlisten = listen<any>('pipeline-status', (event) => {
-      const payload = event.payload;
-      if (typeof payload === 'string') {
-        if (payload.includes('임베딩 중')) setStatusMsg(payload);
-        else if (payload.includes('임베딩 완료') || payload.includes('임베딩 실패')) setStatusMsg(null);
-      } else if (payload && typeof payload === 'object') {
-        const msg = payload.message || '';
-        const status = payload.status;
-        if (status === 'EMBEDDING_START' || msg.includes('임베딩 중')) setStatusMsg(msg);
-        else if (status === 'EMBEDDING_COMPLETE' || status === 'EMBEDDING_FAILED' || msg.includes('임베딩 완료')) setStatusMsg(null);
-      }
-    });
-    return () => { unlisten.then(fn => fn()); };
-  }, []);
+    if (selectedNodeId && !selectedNodeId.startsWith('phase-') && !selectedNodeId.startsWith('group-') && !selectedNodeId.startsWith('stage-') && !selectedNodeId.startsWith('module-')) {
+      fetchComments(selectedNodeId);
+    }
+  }, [selectedNodeId, fetchComments]);
+
 
   // Content Loader
   useEffect(() => {
@@ -217,6 +210,7 @@ export const NodeRenderer: React.FC = () => {
       try {
         const it = await invoke<any>('get_iteration_by_id', { iterationId: selectedIterationId });
         if (it) {
+          setCurrentIteration(it);
           const raw = it.content_json || it.generated_draft_json;
           if (raw) {
             const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -228,6 +222,7 @@ export const NodeRenderer: React.FC = () => {
       } catch (e) {
         console.error("Error loading iteration content:", e);
         setContent(null);
+        setCurrentIteration(null);
       } finally {
         setLoadingContent(false);
       }
@@ -323,20 +318,22 @@ export const NodeRenderer: React.FC = () => {
 
   const isPrd = node.target_node_type.includes('PRD') || node.target_node_type.startsWith('GPRD_');
   const isSad = node.target_node_type.includes('SAD') || node.target_node_type.startsWith('sad_');
+  const isFsd = node.target_node_type === 'FSD' || node.target_node_type.toLowerCase() === 'fsd';
+  const isErd = node.target_node_type === 'ERD';
+  const isUserFlow = node.target_node_type.toLowerCase().replace(/_/g, ' ') === 'user flow';
+  const isApiSpec = node.target_node_type === 'API_Spec';
+  const isIa = node.target_node_type === 'IA';
+  const isWireframe = node.target_node_type.toLowerCase().includes('wireframe');
+  const isTc = node.target_node_type.toLowerCase().includes('tc');
 
   // Determine stage for PRD
   let prdStage = 1;
   if (node.target_node_type === 'GPRD_Capability_Actor') prdStage = 2;
   if (node.target_node_type === 'GPRD_Architecture_Schema') prdStage = 3;
+  if (node.target_node_type === 'PRD') prdStage = 4;
 
   return (
     <div className={styles.container}>
-      {statusMsg && (
-        <div className="bg-primary/10 border border-primary/20 text-primary px-4 py-2 rounded-lg flex items-center gap-2 mb-4 text-sm">
-          <RefreshCw className="animate-spin" size={14} />
-          <span>{statusMsg}</span>
-        </div>
-      )}
 
       {isMock && (
         <div className={styles.mockBanner}>
@@ -348,13 +345,26 @@ export const NodeRenderer: React.FC = () => {
         <div className="p-12 flex justify-center opacity-50"><RefreshCw className="animate-spin" /></div>
       ) : content ? (
         <>
-          {isPrd && <PrdBentoRenderer content={content} isIntegrated={false} stage={prdStage} />}
-          {isSad && (
+          {isPrd && <PrdBentoRenderer content={content} isIntegrated={false} stage={prdStage} nodeId={selectedNodeId} currentIteration={currentIteration} />}
+          {isFsd && <ModuleFsdRenderer content={content} nodeId={selectedNodeId} currentIteration={currentIteration} />}
+          {isErd && (
             <div className="bg-surface-container border border-border rounded-xl p-6">
-              <SadSpecRenderer type={node.target_node_type} data={content} isRaw={false} />
+              <ModuleErdRenderer content={content} nodeId={selectedNodeId} currentIteration={currentIteration} />
             </div>
           )}
-          {!isPrd && !isSad && (
+          {isUserFlow && <ModuleUserFlowRenderer content={content} nodeId={selectedNodeId} currentIteration={currentIteration} />}
+          {(isSad || isApiSpec || isIa || isWireframe || isTc) && (
+            <div className="bg-surface-container border border-border rounded-xl p-6">
+              <SadSpecRenderer 
+                type={node.target_node_type} 
+                data={content} 
+                isRaw={false} 
+                nodeId={selectedNodeId} 
+                currentIteration={currentIteration}
+              />
+            </div>
+          )}
+          {!isPrd && !isSad && !isFsd && !isErd && !isUserFlow && !isApiSpec && !isIa && !isWireframe && !isTc && (
             <div className={styles.fallback}>
               <h1>{node.target_node_type}</h1>
               <p>This node type is currently being migrated to the new structured document view.</p>

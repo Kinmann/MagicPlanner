@@ -13,6 +13,7 @@ pub async fn generate_draft(
     client: &Client,
     api_key: &str,
     project_id: &str,
+    node_category: &str,
     node_type: &str,
     input_text: &str,
     previous_draft: &str,
@@ -61,8 +62,8 @@ pub async fn generate_draft(
         domain_prompt = domain_prompt.replace("{{PREVIOUS_DRAFT}}", previous_draft);
     }
 
-    // SAD 노드의 경우 전역 컨텍스트 로드
-    if node_type.starts_with("SAD_") {
+    // SAD 또는 MODULE 노드의 경우 전역 컨텍스트 로드
+    if node_category == "SAD" || node_category == "MODULE" {
         use sqlx::Row;
         let contexts = sqlx::query("SELECT context_type, context_data_json FROM global_context WHERE project_id = ? AND is_deleted = 0")
             .bind(project_id).fetch_all(pool).await.map_err(|e| PipelineError::Internal(e.to_string()))?;
@@ -107,8 +108,8 @@ pub async fn generate_draft(
             );
         }
 
-        // SAD 노드의 경우 사용자 프롬프트에 글로벌 컨텍스트 추가
-        if node_type.starts_with("SAD_") {
+        // SAD 또는 MODULE 노드의 경우 사용자 프롬프트에 글로벌 컨텍스트 추가
+        if node_category == "SAD" || node_category == "MODULE" {
             use sqlx::Row;
             let contexts = sqlx::query("SELECT context_type, context_data_json FROM global_context WHERE project_id = ? AND is_deleted = 0")
                 .bind(project_id).fetch_all(pool).await.map_err(|e| PipelineError::Internal(e.to_string()))?;
@@ -140,6 +141,7 @@ pub async fn evaluate_draft(
     client: &Client,
     api_key: &str,
     project_id: &str,
+    node_category: &str,
     node_type: &str,
     draft: &str,
     input_text: Option<String>,
@@ -186,7 +188,7 @@ pub async fn evaluate_draft(
         }
     }
 
-    if node_type.starts_with("SAD_") {
+    if node_category == "SAD" || node_category == "MODULE" {
         domain_rubric = domain_rubric.replace("{{GLOBAL_CONTEXT}}", global_context);
     }
 

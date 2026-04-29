@@ -3,13 +3,12 @@ use uuid::Uuid;
 use chrono::Utc;
 use tauri::{Manager, Emitter};
 use sqlx::{SqlitePool, Row};
-use serde_json::json;
 
 // ============================================================
 // models/ 모듈에서 구조체/열거형 재내보내기
 // ============================================================
 pub use crate::models::{
-    RagErrorInfo, DocumentNode, GenerationIteration, PipelineStatusPayload,
+    DocumentNode, GenerationIteration, PipelineStatusPayload,
 };
 
 // 서비스 함수 임포트
@@ -88,7 +87,7 @@ pub async fn approve_genesis_prd_node(
     app_handle: tauri::AppHandle,
     pool: tauri::State<'_, SqlitePool>,
     node_id: String,
-    api_key: Option<String>,
+    _api_key: Option<String>,
 ) -> Result<(), String> {
     println!(">>> Approving Genesis PRD node: {}", node_id);
     let now = Utc::now().to_rfc3339();
@@ -401,6 +400,10 @@ pub async fn unconfirm_iteration(
 
     sqlx::query("UPDATE global_context SET is_deleted = 1, updated_at = ? WHERE project_id = ? AND iteration_id = ?")
         .bind(&now).bind(&project_id).bind(&iteration_id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+
+    // [USER FEEDBACK] 확정 취소 시 해당 이터레이션의 코멘트 하드 삭제
+    sqlx::query("DELETE FROM node_comment WHERE iteration_id = ?")
+        .bind(&iteration_id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
 
     sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', updated_at = ? WHERE node_id = ?")
         .bind(&now).bind(&node.node_id).execute(&mut *tx).await.map_err(|e| e.to_string())?;

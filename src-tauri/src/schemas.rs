@@ -375,11 +375,11 @@ pub fn get_schema_for_node(node_type: &str) -> Option<serde_json::Value> {
     let schema_val = match node_type.to_lowercase().replace(" ", "_").as_str() {
         "prd" => schemars::schema_for!(PrdSchema),
         "fsd" => schemars::schema_for!(FsdSchema),
+        "erd" => schemars::schema_for!(ErdSchema),
+        "api_spec" => schemars::schema_for!(ApiSpecSchema),
         "user_flow" => schemars::schema_for!(UserFlowSchema),
         "ia" => schemars::schema_for!(IaSchema),
-        "erd" => schemars::schema_for!(ErdSchema),
         "wireframe" => schemars::schema_for!(WireframeSchema),
-        "api_spec" => schemars::schema_for!(ApiSpecSchema),
         "tc" => schemars::schema_for!(TcSchema),
         "evaluator" => schemars::schema_for!(EvaluationResult),
         // v2: Genesis PRD

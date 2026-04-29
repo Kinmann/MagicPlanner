@@ -53,14 +53,14 @@ const NODE_LABELS: Record<string, string> = {
   'SAD_Module_List': 'Node 1: Module list',
   'SAD_Epic_Mapping': 'Node 2: Epic Mapping',
   'SAD_Module_Deps': 'Node 3: Module dependencies',
-  '3-A': 'Node 1: PRD',
-  '3-B': 'Node 2: FSD',
-  '3-C': 'Node 3: ERD',
-  '3-D': 'Node 4: API_SPEC',
-  '3-E': 'Node 5: UserFlow',
-  '3-F': 'Node 6: IA',
-  '3-G': 'Node 7: Wireframe',
-  '3-H': 'Node 8: TC',
+  'PRD': 'Node 1: PRD',
+  'FSD': 'Node 2: FSD',
+  'ERD': 'Node 3: ERD',
+  'API_Spec': 'Node 4: API_Spec',
+  'User Flow': 'Node 5: User Flow',
+  'IA': 'Node 6: IA',
+  'Wireframe': 'Node 7: Wireframe',
+  'TC': 'Node 8: TC',
 };
 
 export const mapNodesToTree = (
@@ -124,7 +124,7 @@ export const mapNodesToTree = (
   if (modules.length > 0) {
     const modulesChildren: TreeItem[] = modules.map(m => {
       const moduleNodes = nodes.filter(n => n.module_id === m.module_id);
-      const moduleBlueprint = ['3-A', '3-B', '3-C', '3-D', '3-E', '3-F', '3-G', '3-H'];
+      const moduleBlueprint = ['PRD', 'FSD', 'ERD', 'API_Spec', 'User Flow', 'IA', 'Wireframe', 'TC'];
       
       const children: TreeItem[] = moduleBlueprint.map(type => {
         const node = moduleNodes.find(n => n.target_node_type === type);

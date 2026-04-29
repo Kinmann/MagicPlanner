@@ -1,0 +1,636 @@
+@import '../../styles/variables';
+
+.commentableRow {
+  position: relative;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: $radius-xl;
+  padding: $space-2;
+  margin: -$space-2;
+  border: 1px solid transparent;
+
+  &:hover {
+    background-color: rgba($primary, 0.04);
+    border-color: rgba($primary, 0.1);
+    box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.15);
+    
+    // 자식 요소 중 호버된 commentableRow가 없을 때만 트리거를 표시
+    &:not(:has(.commentableRow:hover)) > .commentTrigger {
+      opacity: 1;
+    }
+  }
+
+  &.active {
+    background-color: rgba($primary, 0.08);
+    border-color: rgba($primary, 0.2);
+    box-shadow: 0 8px 30px -8px rgba($primary, 0.15);
+  }
+
+  &.hasComments {
+    // 코멘트가 있는 경우 약간의 표시 (원하면 추가)
+  }
+}
+
+.contentWrapper {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.commentTrigger {
+  position: absolute;
+  right: $space-3;
+  top: $space-3;
+  opacity: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: $radius-full;
+  background-color: rgba($primary, 0.1);
+  border: 1px solid rgba($primary, 0.2);
+  color: $primary;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 10;
+
+  &:hover {
+    background-color: $primary;
+    color: $on-primary;
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba($primary, 0.3);
+  }
+
+  &.visible {
+    opacity: 1;
+  }
+
+  &.unconfirmed {
+    background-color: $surface-container-high;
+    color: $text-muted;
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+}
+
+.commentCount {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  font-size: 9px;
+  font-weight: 800;
+  background-color: $error;
+  color: white;
+  min-width: 14px;
+  height: 14px;
+  border-radius: $radius-full;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2px;
+  border: 1px solid $background;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+// Popover Styles (Antigravity Style)
+.popoverOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: $z-overlay;
+  background-color: transparent;
+}
+
+.popover {
+  position: absolute;
+  top: $space-2;
+  right: $space-2;
+  width: 320px;
+  background-color: #1c1c1f;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: $radius-lg;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  color: $foreground;
+  overflow: hidden;
+  padding: $space-4;
+}
+
+// Header is removed in UI but styles kept if needed for something else
+.popoverHeader {
+  display: none;
+}
+
+// jsonPath info can be removed if needed, keeping simple for now
+.jsonPathInfo {
+  display: none;
+}
+
+.commentList {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+  margin-bottom: $space-4;
+  display: flex;
+  flex-direction: column;
+  gap: $space-4;
+}
+
+.commentCard {
+  background-color: #1c1c1f;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: $radius-md;
+  padding: $space-3;
+  display: flex;
+  flex-direction: column;
+  gap: $space-2;
+  width: 100%; // Ensure it matches input width
+
+  .cardHeader {
+    display: flex;
+    align-items: center;
+    gap: $space-2;
+
+    .avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: $radius-full;
+      background-color: $primary;
+      color: $on-primary;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: $font-weight-bold;
+    }
+
+    .author {
+      font-size: $text-xs;
+      color: $text-muted;
+    }
+
+    .time {
+      font-size: $text-xs;
+      color: $text-muted;
+      margin-left: auto;
+    }
+  }
+
+  .cardBody {
+    font-size: $text-sm;
+    line-height: 1.5;
+    white-space: pre-wrap;
+
+    .editArea {
+      display: flex;
+      flex-direction: column;
+      gap: $space-2;
+
+      textarea {
+        width: 100%;
+        min-height: 40px;
+        background-color: #2d2d30;
+        border: 1px solid rgba($primary, 0.3);
+        border-radius: $radius-sm;
+        padding: $space-2;
+        color: $foreground;
+        font-size: $text-sm;
+        resize: none;
+        outline: none;
+      }
+
+      .editActions {
+        display: flex;
+        justify-content: flex-end;
+        gap: $space-1;
+
+        button {
+          width: 24px;
+          height: 24px;
+          border-radius: 4px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background-color: rgba(255, 255, 255, 0.05);
+          border: none;
+          color: $text-muted;
+          cursor: pointer;
+          transition: all 0.2s;
+
+          &:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: $foreground;
+          }
+
+          &.saveEdit:hover {
+            color: $primary;
+            background-color: rgba($primary, 0.1);
+          }
+        }
+      }
+    }
+  }
+
+  .cardActions {
+    display: flex;
+    justify-content: flex-end; // Move to the right end
+    margin-top: $space-1;
+    
+    button {
+      background: none;
+      border: none;
+      color: $text-muted;
+      cursor: pointer;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      transition: all 0.2s;
+
+      &:hover {
+        color: $foreground;
+        background-color: rgba(255, 255, 255, 0.05);
+      }
+
+      &.deleteBtn:hover {
+        color: $error;
+        background-color: rgba($error, 0.1);
+      }
+    }
+  }
+}
+
+.commentInputSection {
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+
+  textarea {
+    width: 100%;
+    height: 32px;
+    min-height: 32px; // One line size
+    line-height: 32px; // Center text vertically
+    padding: 0 $space-2_5;
+    color: $foreground;
+    font-size: $text-sm;
+    resize: none;
+    outline: none;
+    transition: all 0.2s;
+
+    &:focus {
+      border-color: rgba($primary, 0.5);
+      background-color: #2d2d30;
+    }
+
+    &::placeholder {
+      color: #71717a;
+    }
+  }
+
+  .inputActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: $space-2;
+
+    .cancelBtn {
+      padding: $space-1_5 $space-4;
+      background: transparent;
+      color: #94a3b8;
+      border: none;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: $radius-md;
+      
+      &:hover {
+        color: #fff;
+        background-color: rgba(255, 255, 255, 0.05);
+      }
+    }
+
+    .submitBtn {
+      padding: $space-1_5 $space-5;
+      background-color: #3f3f46;
+      color: #a1a1aa;
+      border: none;
+      border-radius: $radius-md;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+
+      &:hover:not(:disabled) {
+        background-color: #52525b;
+        color: #fff;
+      }
+
+      &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+    }
+  }
+}
+
+.errorModalOverlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: $z-modal + 100;
+}
+
+.errorModal {
+  width: 100%;
+  max-width: 400px;
+  background-color: $surface-container-high;
+  border: 1px solid $border-strong;
+  border-radius: $radius-2xl;
+  padding: $space-8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+}
+
+.deleteModalContent {
+  padding: $space-6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  
+  .iconWrapper {
+    width: 56px;
+    height: 56px;
+    border-radius: $radius-full;
+    background-color: rgba($error, 0.1);
+    color: $error;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: $space-4;
+  }
+  
+  .message {
+    font-size: $text-sm;
+    color: $foreground;
+    opacity: 0.8;
+    margin-bottom: $space-8;
+    line-height: 1.6;
+    
+    strong {
+      color: $error;
+      font-weight: $font-weight-bold;
+    }
+  }
+  
+  .actions {
+    display: flex;
+    gap: $space-3;
+    width: 100%;
+    
+    button {
+      flex: 1;
+    }
+  }
+}
+
+.reviewPopover {
+  padding: $space-5;
+  background-color: #1c1c1f;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.reviewContent {
+  display: flex;
+  flex-direction: column;
+  gap: $space-2;
+}
+
+.reviewHeader {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.reviewInputRow {
+  display: flex;
+  gap: $space-3;
+  align-items: flex-start;
+
+  textarea {
+    flex: 1;
+    height: 32px;
+    min-height: 32px;
+    background-color: #27272a;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: $radius-md;
+    padding: 0 $space-3;
+    color: $foreground;
+    font-size: 13px;
+    line-height: 32px;
+    resize: none;
+    outline: none;
+    transition: all 0.2s;
+
+    &:focus {
+      border-color: rgba($primary, 0.5);
+      background-color: #2d2d30;
+    }
+
+    &::placeholder {
+      color: #71717a;
+    }
+  }
+
+  .reviewSubmitBtn {
+    height: 32px;
+    padding: 0 $space-3;
+    background-color: rgba($info, 0.1);
+    border: 1px solid rgba($info, 0.3);
+    color: $info;
+    border-radius: $radius-md;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase; // Optional, to match 'DONE' feel
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &:hover:not(:disabled) {
+      background-color: rgba($info, 0.2);
+      border-color: $info;
+      box-shadow: 0 4px 12px rgba($info, 0.2);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+}
+
+.reviewCommentsSection {
+  margin-top: $space-2;
+}
+
+.expandToggle {
+  display: flex;
+  align-items: center;
+  gap: $space-1;
+  background: none;
+  border: none;
+  color: #a1a1aa;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: $space-3;
+
+  &:hover {
+    color: #fff;
+  }
+}
+
+.reviewList {
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+  overflow: hidden;
+}
+
+.reviewItem {
+  display: flex;
+  flex-direction: column;
+  gap: $space-1;
+  padding-left: $space-3;
+  border-left: 2px solid #3f3f46;
+  position: relative;
+
+  &:hover {
+    .reviewItemActions {
+      opacity: 1;
+    }
+  }
+
+  .itemContext {
+    font-size: 12px;
+    color: #a1a1aa;
+    font-weight: 500;
+    line-height: 1.5;
+    opacity: 0.8;
+  }
+
+  .itemBody {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: $space-2;
+  }
+
+  .itemText {
+    font-size: 13px;
+    line-height: 1.5;
+    color: #e4e4e7;
+    margin-top: 2px;
+    flex: 1;
+  }
+
+  .reviewItemActions {
+    display: flex;
+    gap: $space-1;
+    opacity: 0;
+    transition: opacity 0.2s;
+    margin-top: 2px;
+
+    button {
+      background: none;
+      border: none;
+      color: #71717a;
+      cursor: pointer;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      transition: all 0.2s;
+
+      &:hover {
+        color: #fff;
+        background-color: rgba(255, 255, 255, 0.05);
+      }
+
+      &.deleteBtn:hover {
+        color: $error;
+        background-color: rgba($error, 0.1);
+      }
+    }
+  }
+
+  .reviewEditArea {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: $space-2;
+
+    textarea {
+      width: 100%;
+      min-height: 40px;
+      background-color: #27272a;
+      border: 1px solid rgba($primary, 0.3);
+      border-radius: $radius-sm;
+      padding: $space-2;
+      color: #fff;
+      font-size: 13px;
+      resize: none;
+      outline: none;
+    }
+
+    .reviewEditActions {
+      display: flex;
+      justify-content: flex-end;
+      gap: $space-1;
+
+      button {
+        width: 24px;
+        height: 24px;
+        background: none;
+        border: none;
+        color: #71717a;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+
+        &:hover {
+          color: #fff;
+          background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        &.saveEdit:hover {
+          color: $primary;
+        }
+      }
+    }
+  }
+}
+
+.emptyList {
+  font-size: 12px;
+  color: #52525b;
+  font-style: italic;
+}

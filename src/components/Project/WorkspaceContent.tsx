@@ -180,13 +180,18 @@ const WorkspaceContent: React.FC<WorkspaceContentProps> = ({
                         }
                         
                         // Visual Renderers
+                        const nodeType = selectedNode.target_node_type.toLowerCase();
+                        const isModuleSpec = [
+                          'prd', 'fsd', 'ia', 'user flow', 'erd', 'wireframe', 'api_spec', 'tc'
+                        ].includes(nodeType.replace('modules.', ''));
+
                         if (selectedNode.target_node_type === 'genesis-prd' || selectedNode.target_node_type.startsWith('GPRD_')) {
-                          return <PrdBentoRenderer content={json} />;
+                          return <PrdBentoRenderer content={json} nodeId={selectedNode.node_id} currentIteration={selectedIteration} />;
                         } else if (selectedNode.target_node_type.includes('sad-global') || selectedNode.target_node_type.includes('SAD_Global')) {
-                          return <SadGlobalRenderer content={json} />;
+                          return <SadGlobalRenderer content={json} nodeId={selectedNode.node_id} currentIteration={selectedIteration} />;
                         } else if (selectedNode.target_node_type.includes('SAD_Module') || selectedNode.target_node_type.includes('sad-module')) {
-                          return <SadGlobalRenderer content={json} />;
-                        } else if (['PRD', 'FSD', 'IA', 'User Flow', 'ERD', 'Wireframe', 'API_Spec', 'TC'].includes(selectedNode.target_node_type)) {
+                          return <SadGlobalRenderer content={json} nodeId={selectedNode.node_id} currentIteration={selectedIteration} />;
+                        } else if (isModuleSpec) {
                           return (
                             <div className={styles.specRenderer}>
                               <div className={styles.specHeader}>
@@ -196,7 +201,7 @@ const WorkspaceContent: React.FC<WorkspaceContentProps> = ({
                                 </div>
                                 <span className="text-[10px] font-mono opacity-30">{selectedNode.target_node_type.toUpperCase()}.JSON</span>
                               </div>
-                              <SadSpecRenderer type={selectedNode.target_node_type} data={json} />
+                              <SadSpecRenderer type={selectedNode.target_node_type} data={json} nodeId={selectedNode.node_id} currentIteration={selectedIteration} />
                             </div>
                           );
                         }

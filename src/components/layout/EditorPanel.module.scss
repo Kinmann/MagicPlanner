@@ -7,6 +7,7 @@
   flex-direction: column;
   background-color: v.$background;
   overflow: hidden;
+  position: relative;
 }
 
 .tabs {
@@ -176,6 +177,72 @@
   border-bottom: 1px solid v.$border;
   background-color: v.$background;
   flex-shrink: 0;
+  justify-content: space-between;
+}
+
+.toolbarActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.reviewBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  background-color: rgba(v.$primary, 0.1);
+  border: 1px solid rgba(v.$primary, 0.2);
+  border-radius: 4px;
+  color: v.$primary;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  height: 22px;
+  margin-left: auto;
+
+  &:hover {
+    background-color: rgba(v.$primary, 0.2);
+    border-color: v.$primary;
+  }
+
+  svg {
+    opacity: 0.8;
+  }
+}
+
+.reviewBtnSep {
+  opacity: 0.5;
+  margin: 0 2px;
+}
+
+.reviewBtnCount {
+  font-weight: 700;
+  background-color: v.$primary;
+  color: v.$background;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  min-width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 2px;
+}
+
+.reviewBadge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  background-color: #ef4444;
+  border-radius: 50%;
+  border: 1.5px solid v.$background;
+  box-shadow: 0 0 4px rgba(239, 68, 68, 0.5);
 }
 
 .breadcrumb {
@@ -183,6 +250,7 @@
   align-items: center;
   font-size: 11px;
   color: v.$text-muted;
+  flex: 1;
 }
 
 .breadcrumbItem {

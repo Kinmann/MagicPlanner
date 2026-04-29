@@ -399,6 +399,8 @@ pub async fn store_document_embeddings(
         
         let rowid = result.last_insert_rowid();
         
+        println!(">>> [RAG] Inserting vector with size: {} for rowid: {}", embedding.len(), rowid);
+        
         // 3. vec0 테이블에 벡터 데이터 저장 (생성된 rowid 연동)
         sqlx::query("INSERT INTO document_embeddings (rowid, embedding) VALUES (?, ?)")
             .bind(rowid)

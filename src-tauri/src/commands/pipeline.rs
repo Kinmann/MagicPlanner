@@ -12,16 +12,14 @@ use std::sync::Arc;
 pub use crate::models::{
     NodeState, PipelineError, RagErrorInfo,
     Project, DocumentNode, GenerationIteration,
-    PipelineStatusPayload,
+    PipelineStatusPayload, LocalModule,
 };
 
 // 서비스 함수 임포트
 use crate::services::embedding::{store_document_embeddings};
-use crate::services::gemini::call_gemini;
-use crate::services::prd_merger::{get_full_approved_prd};
+use crate::services::prd_merger::get_approved_node_output;
 use crate::services::draft_generator::{generate_draft, evaluate_draft};
 use crate::services::dag_engine::{trigger_next_nodes, trigger_module_next_nodes, is_node_locked};
-use crate::utils::get_prompts_dir;
 use crate::commands::approval::actual_approve_genesis_prd;
 
 #[tauri::command]
@@ -112,7 +110,7 @@ pub async fn run_pipeline(
 
     let client = Client::new();
     let max_iters = node.max_iterations;
-    let threshold = node.threshold_score;
+    let _threshold = node.threshold_score;
     let mut current_best_content = String::new();
     let mut current_best_score = node.current_best_score;
     let mut final_iteration_count = node.current_iteration;
@@ -179,19 +177,57 @@ pub async fn run_pipeline(
             .execute(&*pool).await.map_err(|e| e.to_string())?;
 
         let input_text = if node.node_category == "SAD" {
-            let out_1a = crate::services::prd_merger::get_approved_node_output(&*pool, &project_id, "GPRD_Context_Goal").await;
-            let out_1b = crate::services::prd_merger::get_approved_node_output(&*pool, &project_id, "GPRD_Capability_Actor").await;
-            let out_1c = crate::services::prd_merger::get_approved_node_output(&*pool, &project_id, "GPRD_Architecture_Schema").await;
+            let out_1a = get_approved_node_output(&*pool, &project_id, "GPRD_Context_Goal").await;
+            let out_1b = get_approved_node_output(&*pool, &project_id, "GPRD_Capability_Actor").await;
+            let out_1c = get_approved_node_output(&*pool, &project_id, "GPRD_Architecture_Schema").await;
             
-            format!(
+            let mut base_input = format!(
                 "[GPRD_Context_Goal]\n{}\n\n[GPRD_Capability_Actor]\n{}\n\n[GPRD_Architecture_Schema]\n{}", 
                 out_1a, out_1b, out_1c
-            )
+            );
+
+            // SAD 모듈 분할 단계인 경우 선행 노드 결과를 Source Documents에 명시적 주입 (SSOT 강조)
+            if actual_node_type == "SAD_Epic_Mapping" || actual_node_type == "SAD_Module_Deps" {
+                let out_module_list = get_approved_node_output(&*pool, &project_id, "SAD_Module_List").await;
+                if !out_module_list.is_empty() {
+                    base_input = format!("[Approved Module List (SSOT)]\n{}\n\n{}", out_module_list, base_input);
+                }
+            }
+            if actual_node_type == "SAD_Module_Deps" {
+                let out_epic_mapping = get_approved_node_output(&*pool, &project_id, "SAD_Epic_Mapping").await;
+                if !out_epic_mapping.is_empty() {
+                    base_input = format!("[Approved Epic Mapping (SSOT)]\n{}\n\n{}", out_epic_mapping, base_input);
+                }
+            }
+
+            base_input
+        } else if node.node_category == "MODULE" {
+            // 모듈별 컨텍스트 주입
+            if let Some(mid) = &node.module_id {
+                let module_info = sqlx::query_as::<_, LocalModule>("SELECT * FROM local_module WHERE module_id = ?")
+                    .bind(mid)
+                    .fetch_optional(&*pool)
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .ok_or_else(|| format!("Module not found for ID: {}", mid))?;
+
+                format!(
+                    "[Module Name]\n{}\n\n[Core Responsibility]\n{}\n\n[Description]\n{}\n\n[Mapped Epics]\n{}\n\n[Dependencies]\n{}\n\n[Project Overview]\n{}",
+                    module_info.module_name,
+                    module_info.core_responsibility.as_deref().unwrap_or("N/A"),
+                    module_info.module_description.as_deref().unwrap_or("N/A"),
+                    module_info.mapped_epics.as_deref().unwrap_or("N/A"),
+                    module_info.dependency_spec.as_deref().unwrap_or("[]"),
+                    project.raw_input_text
+                )
+            } else {
+                project.raw_input_text.clone()
+            }
         } else {
             project.raw_input_text.clone()
         };
 
-        let draft_res = generate_draft(&app_handle, &pool, &client, &api_key, &project.project_id, &actual_node_type, &input_text, &previous_draft, &previous_feedback, i, node.target_count, vec![]).await;
+        let draft_res = generate_draft(&app_handle, &pool, &client, &api_key, &project.project_id, &node.node_category, &actual_node_type, &input_text, &previous_draft, &previous_feedback, i, node.target_count, vec![]).await;
         let draft = match draft_res {
             Ok(d) => d,
             Err(e) => {
@@ -236,7 +272,7 @@ pub async fn run_pipeline(
         }
 
         let empty_feedback = Vec::new(); // run_pipeline에서는 이전 피드백을 사용하여 생성을 유도하므로 별도 피드백은 비움
-        let eval_res = evaluate_draft(&app_handle, &pool, &client, &api_key, &project.project_id, &actual_node_type, &draft, input_text_for_eval, &global_ctx_str, "", &empty_feedback, i, vec![]).await;
+        let eval_res = evaluate_draft(&app_handle, &pool, &client, &api_key, &project.project_id, &node.node_category, &actual_node_type, &draft, input_text_for_eval, &global_ctx_str, "", &empty_feedback, i, vec![]).await;
         let eval = match eval_res {
             Ok(e) => e,
             Err(e) => {
@@ -275,7 +311,7 @@ pub async fn run_pipeline(
         .bind(i)
         .bind(&draft)
         .bind(eval.score)
-        .bind(is_passed)
+        .bind(if is_passed { 1 } else { 0 })
         .bind(errors_json)
         .bind(feedback_json)
         .bind(Utc::now().to_rfc3339())
@@ -539,6 +575,16 @@ pub async fn handle_hitl_action(
                     Some(key) if !key.trim().is_empty() => key,
                     _ => {
                         println!(">>> [RAG-BG] Failed to get API key");
+                        let _ = app_handle_clone.emit("pipeline-status", PipelineStatusPayload {
+                            message: "RAG 중단: API 키가 설정되지 않았습니다.".into(),
+                            node_id: node_id_clone.clone(),
+                            node_type: node_type_clone.clone(),
+                            project_id: project_id_clone.clone(),
+                            level: "ERROR".into(),
+                            status: "EMBEDDING_FAILED".into(),
+                            current_iteration: None,
+                            max_iterations: None,
+                        });
                         return;
                     }
                 };
@@ -634,6 +680,13 @@ pub async fn handle_hitl_action(
                             let _ = trigger_next_nodes(app_handle_clone, &project_id_clone, &node_type_clone).await;
                         }
                     }
+                } else {
+                    println!(">>> [RAG-BG] No iteration found for node: {}, triggering anyway", node_id_clone);
+                    if let Some(mid) = &module_id_clone {
+                        let _ = trigger_module_next_nodes(&app_handle_clone, mid, &node_type_clone).await;
+                    } else {
+                        let _ = trigger_next_nodes(app_handle_clone, &project_id_clone, &node_type_clone).await;
+                    }
                 }
             });
         }
@@ -696,26 +749,13 @@ pub async fn run_module_pipeline(
     node_type: String,
     api_key: String,
 ) -> Result<String, String> {
-    let client = Client::new();
+    // run_pipeline으로 통합 관리하기 위해 run_pipeline 호출로 위임
+    // 단, node_id를 정확히 식별하기 위해 조회가 필요함
     let node = sqlx::query_as::<_, DocumentNode>("SELECT * FROM document_node WHERE module_id = ? AND target_node_type = ? AND is_deleted = 0")
         .bind(&module_id).bind(&node_type).fetch_optional(&*pool).await.map_err(|e| e.to_string())?
         .ok_or_else(|| "Node not found".to_string())?;
 
-    let _guard = TaskGuard { tasks: active_tasks.0.clone(), node_id: node.node_id.clone() };
-    sqlx::query("UPDATE document_node SET node_state = 'IN_PROGRESS', updated_at = ? WHERE node_id = ?")
-        .bind(Utc::now().to_rfc3339()).bind(&node.node_id).execute(&*pool).await.map_err(|e| e.to_string())?;
-    let _ = app_handle.emit("nodes-updated", ());
-
-    let res = generate_draft(&app_handle, &pool, &client, &api_key, &project_id, &node_type, "Module context...", "", &vec![], 1, node.target_count, vec![]).await.map_err(|e| e.to_string())?;
-    
-    sqlx::query("INSERT INTO generation_iteration (iteration_id, node_id, iteration_number, generated_draft_json, calculated_score, is_pass, created_at, updated_at, is_deleted) VALUES (?, ?, 1, ?, 100, 1, '[]', '[]', ?, ?, 0)")
-        .bind(Uuid::new_v4().to_string()).bind(&node.node_id).bind(&res).bind(Utc::now().to_rfc3339()).bind(Utc::now().to_rfc3339()).execute(&*pool).await.map_err(|e| e.to_string())?;
-
-    sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', updated_at = ? WHERE node_id = ?")
-        .bind(Utc::now().to_rfc3339()).bind(&node.node_id).execute(&*pool).await.map_err(|e| e.to_string())?;
-    
-    let _ = app_handle.emit("nodes-updated", ());
-    Ok(res)
+    run_pipeline(app_handle, pool, active_tasks, project_id, node.node_id, api_key).await
 }
 
 #[tauri::command]
@@ -748,12 +788,4 @@ async fn is_node_stopped(pool: &SqlitePool, node_id: &str) -> bool {
     state.map_or(false, |(s,)| s == "PAUSED_STOPPED")
 }
 
-struct TaskGuard {
-    tasks: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
-    node_id: String,
-}
-impl Drop for TaskGuard {
-    fn drop(&mut self) {
-        if let Ok(mut t) = self.tasks.lock() { t.remove(&self.node_id); }
-    }
-}
+

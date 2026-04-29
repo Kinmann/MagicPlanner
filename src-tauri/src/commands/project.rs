@@ -3,7 +3,7 @@ use uuid::Uuid;
 use chrono::Utc;
 use tauri::{Emitter, State};
 use sqlx::{SqlitePool, Row};
-use serde_json::json;
+// use serde_json::json;
 
 // ============================================================
 // models/ 모듈에서 구조체/열거형 재내보내기

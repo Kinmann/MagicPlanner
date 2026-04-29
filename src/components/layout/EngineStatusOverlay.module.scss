@@ -4,13 +4,15 @@
   position: fixed;
   bottom: v.$space-6;
   right: v.$space-6;
-  width: 320px;
-  background: rgba(13, 13, 13, 0.8);
-  backdrop-filter: blur(20px);
-  border: 1px solid v.$border;
+  width: auto;
+  min-width: 320px;
+  max-width: 600px;
+  background: rgba(13, 13, 13, 0.85);
+  backdrop-filter: blur(25px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: v.$radius-xl;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-  padding: v.$space-5;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  padding: v.$space-4;
   z-index: 2000;
   display: flex;
   flex-direction: column;
@@ -53,54 +55,54 @@
 
 .item {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: v.$space-3;
+  flex-direction: row;
+  align-items: center;
+  gap: v.$space-3;
+  padding: v.$space-2 v.$space-4;
   background: rgba(255, 255, 255, 0.03);
   border-radius: v.$radius-lg;
   border: 1px solid rgba(255, 255, 255, 0.05);
+  white-space: nowrap;
 }
 
-.projectInfoLine {
+.projectInfo {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 2px;
   
-  svg {
-    color: #94a3b8;
+  .projectTag {
+    font-size: 10px;
+    font-weight: 900;
+    color: v.$primary;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .projectIcon {
+    color: v.$primary;
     opacity: 0.5;
   }
 }
 
-.projectTag {
-  font-size: 10px;
-  font-weight: 900;
-  color: #f8fafc;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  opacity: 1;
+.divider {
+  width: 1px;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.1);
 }
 
-.nodeInfo {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  
-  .nodeName { 
-    font-size: 11px; 
-    font-weight: 700; 
-    color: #94a3b8;
-    opacity: 0.8;
-  }
-  
-  .action { 
-    font-size: 16px; 
-    color: #f1f5f9;
-    font-weight: 800;
-    opacity: 1;
-    letter-spacing: -0.01em;
-  }
+.nodeName { 
+  font-size: 11px; 
+  font-weight: 700; 
+  color: #94a3b8;
+  opacity: 0.8;
+}
+
+.action { 
+  font-size: 13px; 
+  color: #f1f5f9;
+  font-weight: 700;
+  opacity: 1;
+  letter-spacing: -0.01em;
 }
 
 @keyframes slideIn {

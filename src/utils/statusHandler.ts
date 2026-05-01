@@ -1,5 +1,4 @@
 import { PipelineStatusPayload } from '../types/pipeline';
-import { LogEntry } from '../store/logStore';
 
 export const normalizePipelineStatus = (payload: any): PipelineStatusPayload | null => {
   if (!payload) return null;

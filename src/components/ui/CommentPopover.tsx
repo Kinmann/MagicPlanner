@@ -37,6 +37,25 @@ export const CommentPopover: React.FC<CommentPopoverProps> = ({
   const projectId = useUIStore.getState().currentProjectId;
   
   const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const adjustHeight = (element: HTMLTextAreaElement | null) => {
+    if (element) {
+      element.style.height = '0px'; 
+      element.style.height = `${element.scrollHeight}px`;
+    }
+  };
+
+  useEffect(() => {
+    adjustHeight(textareaRef.current);
+  }, [newComment]);
+
+  useEffect(() => {
+    if (editingId) {
+      adjustHeight(editTextareaRef.current);
+    }
+  }, [editingId, editingText]);
 
   useEffect(() => {
     // 새 코멘트 추가 시 하단으로 스크롤
@@ -128,9 +147,11 @@ export const CommentPopover: React.FC<CommentPopoverProps> = ({
                   {editingId === comment.comment_id ? (
                     <div className={styles.editArea}>
                       <textarea 
+                        ref={editTextareaRef}
                         value={editingText}
                         onChange={(e) => setEditingText(e.target.value)}
                         autoFocus
+                        rows={1}
                       />
                       <div className={styles.editActions}>
                         <button onClick={() => setEditingId(null)} className={styles.cancelEdit}>
@@ -172,12 +193,14 @@ export const CommentPopover: React.FC<CommentPopoverProps> = ({
 
         <div className={styles.commentInputSection}>
           <textarea 
+            ref={textareaRef}
             placeholder="Leave a comment"
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isLoading}
             autoFocus
+            rows={1}
           />
           <div className={styles.inputActions}>
             <button className={styles.cancelBtn} onClick={onClose}>

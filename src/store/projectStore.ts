@@ -252,9 +252,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   // Genesis Specific
   approveGenesisNode: async (nodeId) => {
+    const { currentProject } = get();
     const apiKey = useSettingsStore.getState().apiKey;
     try {
       await safeInvoke('approve_genesis_prd_node', { nodeId, apiKey });
+      if (currentProject) {
+        await safeInvoke('index_project_embeddings', { projectId: currentProject.project_id, apiKey });
+      }
     } catch (err: any) { set({ error: err.toString() }); }
   },
 

@@ -18,7 +18,7 @@ pub use crate::models::{
 // 서비스 함수 임포트
 use crate::services::embedding::{get_rag_context, check_node_intersection};
 use crate::services::gemini::call_gemini;
-use crate::services::prd_merger::{get_full_approved_prd};
+use crate::services::node_query::{get_approved_node_output};
 use crate::utils::get_prompts_dir;
 
 // EvaluationResult is now imported from crate::schemas
@@ -70,8 +70,11 @@ pub async fn route_architecture_target(
     let mut prompt = std::fs::read_to_string(prompts_dir.join("generator/architecture_router.txt"))
         .map_err(|e| format!("Failed to load architecture router prompt: {}", e))?;
 
-    // 1. 전체 아키텍처 맥락 조회 (God's Eye View를 위한 전역 컨텍스트)
-    let genesis_prd = get_full_approved_prd(&*pool, &project_id).await;
+    // 1. 전체 아키텍처 맥락 조회 (개별 노드 분리 주입)
+    let out_1a = get_approved_node_output(&*pool, &project_id, "GPRD_Context_Goal").await;
+    let out_1b = get_approved_node_output(&*pool, &project_id, "GPRD_Capability_Actor").await;
+    let out_1c = get_approved_node_output(&*pool, &project_id, "GPRD_Architecture_Schema").await;
+    let genesis_prd = format!("[Source Document: Genesis PRD Context]\n{}\n\n[Source Document: Genesis PRD Capability]\n{}\n\n[Source Document: Genesis PRD Architecture]\n{}", out_1a, out_1b, out_1c);
     
     let contexts = sqlx::query_as::<_, GlobalContext>(
         "SELECT * FROM global_context WHERE project_id = ? AND is_deleted = 0"

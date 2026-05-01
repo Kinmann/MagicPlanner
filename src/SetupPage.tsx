@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
 import { 
   Settings2, 
   Save, 
@@ -7,11 +6,7 @@ import {
   Shield, 
   Key, 
   Cpu, 
-  Sparkles, 
   Info,
-  ChevronRight,
-  ArrowLeft,
-  ShieldCheck,
   AlertCircle,
   RefreshCw,
   CheckCircle2

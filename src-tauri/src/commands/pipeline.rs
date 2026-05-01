@@ -17,7 +17,7 @@ pub use crate::models::{
 
 // 서비스 함수 임포트
 use crate::services::embedding::{store_document_embeddings};
-use crate::services::prd_merger::get_approved_node_output;
+use crate::services::node_query::{get_approved_node_output, get_approved_module_node_output};
 use crate::services::draft_generator::{generate_draft, evaluate_draft};
 use crate::services::dag_engine::{trigger_next_nodes, trigger_module_next_nodes, is_node_locked};
 use crate::commands::approval::actual_approve_genesis_prd;
@@ -176,6 +176,47 @@ pub async fn run_pipeline(
             .bind("초안 생성 중...").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
             .execute(&*pool).await.map_err(|e| e.to_string())?;
 
+        // [맥락 구축] 중앙 집중식 정제 로직
+        let mut global_ctx_str = String::new();
+        let mut module_ctx_str = String::new();
+
+        if node.node_category == "SAD" {
+            // SAD 노드인 경우 모든 전역 컨텍스트 로드 (기존 정책 유지)
+            let contexts = sqlx::query("SELECT context_type, context_data_json FROM global_context WHERE project_id = ? AND is_deleted = 0")
+                .bind(&project.project_id).fetch_all(&*pool).await.map_err(|e| e.to_string())?;
+            for row in contexts {
+                let t: String = row.get("context_type");
+                let d: String = row.get("context_data_json");
+                global_ctx_str.push_str(&format!("\n[{}]\n{}\n", t.to_lowercase(), d));
+            }
+        } else if node.node_category == "MODULE" {
+            // MODULE 노드인 경우 매핑 매트릭스에 따라 필터링
+            let required_keys = get_required_sad_keys(&actual_node_type);
+            if !required_keys.is_empty() {
+                let query = format!(
+                    "SELECT context_type, context_data_json FROM global_context WHERE project_id = ? AND context_type IN ({}) AND is_deleted = 0",
+                    required_keys.iter().map(|_| "?").collect::<Vec<_>>().join(", ")
+                );
+                let mut q = sqlx::query(&query).bind(&project.project_id);
+                for key in required_keys {
+                    q = q.bind(key);
+                }
+                let contexts = q.fetch_all(&*pool).await.map_err(|e| e.to_string())?;
+                for row in contexts {
+                    let t: String = row.get("context_type");
+                    let d: String = row.get("context_data_json");
+                    global_ctx_str.push_str(&format!("\n[{}]\n{}\n", t.to_lowercase(), d));
+                }
+            }
+
+            if let Some(mid) = &node.module_id {
+                let module_info = sqlx::query_as::<_, LocalModule>("SELECT * FROM local_module WHERE module_id = ?")
+                    .bind(mid).fetch_optional(&*pool).await.map_err(|e| e.to_string())?
+                    .ok_or_else(|| format!("Module not found for ID: {}", mid))?;
+                module_ctx_str = get_filtered_local_module_context(&actual_node_type, &module_info);
+            }
+        }
+
         let input_text = if node.node_category == "SAD" {
             let out_1a = get_approved_node_output(&*pool, &project_id, "GPRD_Context_Goal").await;
             let out_1b = get_approved_node_output(&*pool, &project_id, "GPRD_Capability_Actor").await;
@@ -186,7 +227,6 @@ pub async fn run_pipeline(
                 out_1a, out_1b, out_1c
             );
 
-            // SAD 모듈 분할 단계인 경우 선행 노드 결과를 Source Documents에 명시적 주입 (SSOT 강조)
             if actual_node_type == "SAD_Epic_Mapping" || actual_node_type == "SAD_Module_Deps" {
                 let out_module_list = get_approved_node_output(&*pool, &project_id, "SAD_Module_List").await;
                 if !out_module_list.is_empty() {
@@ -202,32 +242,85 @@ pub async fn run_pipeline(
 
             base_input
         } else if node.node_category == "MODULE" {
-            // 모듈별 컨텍스트 주입
-            if let Some(mid) = &node.module_id {
-                let module_info = sqlx::query_as::<_, LocalModule>("SELECT * FROM local_module WHERE module_id = ?")
-                    .bind(mid)
-                    .fetch_optional(&*pool)
-                    .await
-                    .map_err(|e| e.to_string())?
-                    .ok_or_else(|| format!("Module not found for ID: {}", mid))?;
-
-                format!(
-                    "[Module Name]\n{}\n\n[Core Responsibility]\n{}\n\n[Description]\n{}\n\n[Mapped Epics]\n{}\n\n[Dependencies]\n{}\n\n[Project Overview]\n{}",
-                    module_info.module_name,
-                    module_info.core_responsibility.as_deref().unwrap_or("N/A"),
-                    module_info.module_description.as_deref().unwrap_or("N/A"),
-                    module_info.mapped_epics.as_deref().unwrap_or("N/A"),
-                    module_info.dependency_spec.as_deref().unwrap_or("[]"),
-                    project.raw_input_text
-                )
+            // 정제된 모듈 컨텍스트와 프로젝트 개요 결합
+            let mut base_input = if !module_ctx_str.is_empty() {
+                format!("{}\n\n[Project Overview]\n{}", module_ctx_str, project.raw_input_text)
             } else {
                 project.raw_input_text.clone()
+            };
+
+            // 모듈별 선행 설계 문서 주입 (DAG 의존성 기반)
+            if let Some(mid) = &node.module_id {
+                match actual_node_type.as_str() {
+                    "FSD" => {
+                        let out_prd = get_approved_module_node_output(&*pool, mid, "PRD").await;
+                        if !out_prd.is_empty() && out_prd != "{}" {
+                            base_input = format!("[Source Module PRD]\n{}\n\n{}", out_prd, base_input);
+                        }
+                    },
+                    "User Flow" | "ERD" => {
+                        let out_fsd = get_approved_module_node_output(&*pool, mid, "FSD").await;
+                        if !out_fsd.is_empty() && out_fsd != "{}" {
+                            base_input = format!("[Source Module FSD]\n{}\n\n{}", out_fsd, base_input);
+                        }
+                    },
+                    "IA" => {
+                        let out_fsd = get_approved_module_node_output(&*pool, mid, "FSD").await;
+                        let out_flow = get_approved_module_node_output(&*pool, mid, "User Flow").await;
+                        if !out_fsd.is_empty() && out_fsd != "{}" {
+                            base_input = format!("[Source Module FSD]\n{}\n\n{}", out_fsd, base_input);
+                        }
+                        if !out_flow.is_empty() && out_flow != "{}" {
+                            base_input = format!("[Source Module User Flow]\n{}\n\n{}", out_flow, base_input);
+                        }
+                    },
+                    "Wireframe" => {
+                        let out_fsd = get_approved_module_node_output(&*pool, mid, "FSD").await;
+                        let out_flow = get_approved_module_node_output(&*pool, mid, "User Flow").await;
+                        let out_ia = get_approved_module_node_output(&*pool, mid, "IA").await;
+                        if !out_fsd.is_empty() && out_fsd != "{}" {
+                            base_input = format!("[Source Module FSD]\n{}\n\n{}", out_fsd, base_input);
+                        }
+                        if !out_flow.is_empty() && out_flow != "{}" {
+                            base_input = format!("[Source Module User Flow]\n{}\n\n{}", out_flow, base_input);
+                        }
+                        if !out_ia.is_empty() && out_ia != "{}" {
+                            base_input = format!("[Source Module IA]\n{}\n\n{}", out_ia, base_input);
+                        }
+                    },
+                    "API_Spec" => {
+                        let out_fsd = get_approved_module_node_output(&*pool, mid, "FSD").await;
+                        let out_erd = get_approved_module_node_output(&*pool, mid, "ERD").await;
+                        if !out_fsd.is_empty() && out_fsd != "{}" {
+                            base_input = format!("[Source Module FSD]\n{}\n\n{}", out_fsd, base_input);
+                        }
+                        if !out_erd.is_empty() && out_erd != "{}" {
+                            base_input = format!("[Source Module ERD]\n{}\n\n{}", out_erd, base_input);
+                        }
+                    },
+                    "TC" => {
+                        let out_prd = get_approved_module_node_output(&*pool, mid, "PRD").await;
+                        let out_fsd = get_approved_module_node_output(&*pool, mid, "FSD").await;
+                        let out_api = get_approved_module_node_output(&*pool, mid, "API_Spec").await;
+                        if !out_prd.is_empty() && out_prd != "{}" {
+                            base_input = format!("[Source Module PRD]\n{}\n\n{}", out_prd, base_input);
+                        }
+                        if !out_fsd.is_empty() && out_fsd != "{}" {
+                            base_input = format!("[Source Module FSD]\n{}\n\n{}", out_fsd, base_input);
+                        }
+                        if !out_api.is_empty() && out_api != "{}" {
+                            base_input = format!("[Source Module API Spec]\n{}\n\n{}", out_api, base_input);
+                        }
+                    },
+                    _ => {}
+                }
             }
+            base_input
         } else {
             project.raw_input_text.clone()
         };
 
-        let draft_res = generate_draft(&app_handle, &pool, &client, &api_key, &project.project_id, &node.node_category, &actual_node_type, &input_text, &previous_draft, &previous_feedback, i, node.target_count, vec![]).await;
+        let draft_res = generate_draft(&app_handle, &pool, &client, &api_key, &project.project_id, &node.node_category, &actual_node_type, &input_text, &global_ctx_str, &module_ctx_str, &previous_draft, &previous_feedback, i, node.target_count, vec![]).await;
         let draft = match draft_res {
             Ok(d) => d,
             Err(e) => {
@@ -258,21 +351,9 @@ pub async fn run_pipeline(
             .bind("초안 평가 중...").bind(Utc::now().to_rfc3339()).bind(&node.node_id)
             .execute(&*pool).await.map_err(|e| e.to_string())?;
 
-        let input_text_for_eval = Some(input_text.clone());
-        let mut global_ctx_str = String::new();
-        if node.node_category == "SAD" {
-            use sqlx::Row;
-            let contexts = sqlx::query("SELECT context_type, context_data_json FROM global_context WHERE project_id = ? AND is_deleted = 0")
-                .bind(&project.project_id).fetch_all(&*pool).await.map_err(|e| e.to_string())?;
-            for row in contexts {
-                let t: String = row.get("context_type");
-                let d: String = row.get("context_data_json");
-                global_ctx_str.push_str(&format!("\n[{}]\n{}\n", t.to_lowercase(), d));
-            }
-        }
-
         let empty_feedback = Vec::new(); // run_pipeline에서는 이전 피드백을 사용하여 생성을 유도하므로 별도 피드백은 비움
-        let eval_res = evaluate_draft(&app_handle, &pool, &client, &api_key, &project.project_id, &node.node_category, &actual_node_type, &draft, input_text_for_eval, &global_ctx_str, "", &empty_feedback, i, vec![]).await;
+        let input_text_for_eval = Some(input_text.clone());
+        let eval_res = evaluate_draft(&app_handle, &pool, &client, &api_key, &project.project_id, &node.node_category, &actual_node_type, &draft, input_text_for_eval, &global_ctx_str, &module_ctx_str, &empty_feedback, i, vec![]).await;
         let eval = match eval_res {
             Ok(e) => e,
             Err(e) => {
@@ -786,6 +867,37 @@ async fn is_node_stopped(pool: &SqlitePool, node_id: &str) -> bool {
     let state: Option<(String,)> = sqlx::query_as("SELECT node_state FROM document_node WHERE node_id = ?")
         .bind(node_id).fetch_optional(pool).await.unwrap_or(None);
     state.map_or(false, |(s,)| s == "PAUSED_STOPPED")
+}
+
+fn get_required_sad_keys(node_type: &str) -> Vec<&str> {
+    match node_type {
+        "PRD" => vec!["SAD_Auth_RBAC", "SAD_Core_ERD"],
+        "FSD" => vec!["SAD_Auth_RBAC", "SAD_Core_ERD", "SAD_Interface_Error", "SAD_Non_Tech_Constraint"],
+        "ERD" => vec!["SAD_Tech_Stack", "SAD_Core_ERD"],
+        "API_Spec" => vec!["SAD_Interface_Error", "SAD_Auth_RBAC"],
+        "TC" => vec!["SAD_Auth_RBAC", "SAD_Interface_Error", "SAD_Non_Tech_Constraint"],
+        "User Flow" => vec!["SAD_Auth_RBAC", "SAD_Interface_Error"],
+        "IA" => vec!["SAD_Auth_RBAC", "SAD_Core_ERD"],
+        "Wireframe" => vec!["SAD_Core_ERD", "SAD_Interface_Error", "SAD_Tech_Stack"],
+        _ => vec![],
+    }
+}
+
+fn get_filtered_local_module_context(node_type: &str, module: &LocalModule) -> String {
+    let mut ctx = format!("[Module Name]\n{}\n", module.module_name);
+    ctx.push_str(&format!("[Module Description]\n{}\n", module.module_description.as_deref().unwrap_or("N/A")));
+    
+    match node_type {
+        "PRD" | "FSD" | "User Flow" | "IA" | "Wireframe" | "ERD" | "API_Spec" | "TC" => {
+            ctx.push_str(&format!("[Core Responsibility]\n{}\n", module.core_responsibility.as_deref().unwrap_or("N/A")));
+            ctx.push_str(&format!("[Mapped Epics]\n{}\n", module.mapped_epics.as_deref().unwrap_or("N/A")));
+            ctx.push_str(&format!("[Dependencies]\n{}\n", module.dependency_spec.as_deref().unwrap_or("[]")));
+        },
+        _ => {
+            ctx.push_str(&format!("[Dependencies]\n{}\n", module.dependency_spec.as_deref().unwrap_or("[]")));
+        }
+    }
+    ctx
 }
 
 

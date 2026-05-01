@@ -37,10 +37,6 @@ const calculateFolderStatus = (items: TreeItem[]): 'Pending' | 'Active' | 'Compl
   return 'Pending';
 };
 
-const sortNodes = (nodes: DocumentNode[]) => {
-  return [...nodes].sort((a, b) => a.target_node_type.localeCompare(b.target_node_type));
-};
-
 const NODE_LABELS: Record<string, string> = {
   'GPRD_Context_Goal': 'Node 1: Context & Goal',
   'GPRD_Capability_Actor': 'Node 2: Epics & Actors',

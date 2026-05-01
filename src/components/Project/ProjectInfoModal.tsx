@@ -1,21 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Info, 
-  Cpu, 
   Database, 
-  Calendar, 
-  Terminal,
   ShieldCheck,
   Box,
-  Search,
   RefreshCw,
   Trash2,
   Sparkles,
   FileText,
   Layout,
   ChevronRight,
-  GitBranch,
-  ArrowRight
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import ReactMarkdown from 'react-markdown';

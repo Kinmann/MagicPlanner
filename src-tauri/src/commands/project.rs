@@ -14,7 +14,7 @@ pub use crate::models::{
 
 // 서비스 함수 임포트
 use crate::services::embedding::{call_gemini_embedding, store_document_embeddings};
-use crate::services::prd_merger::{get_full_approved_prd};
+// use crate::services::prd_merger::{get_full_approved_prd};
 
 // EvaluationResult is now imported from crate::schemas
 
@@ -299,22 +299,12 @@ pub async fn index_project_embeddings(
     .map_err(|e| e.to_string())?;
     
     let mut indexed_count = 0;
-    let mut has_genesis = false;
-    let mut genesis_node_id = None;
     
     for node in nodes {
-        if node.node_category == "GENESIS" {
-            has_genesis = true;
-            // 1-C(Architecture_Schema) 노드를 제네시스의 대표 노드로 활용하여 ID 확보, 만약 없다면 첫 번째 GENESIS 노드 활용
-            if genesis_node_id.is_none() || node.target_node_type == "GPRD_Architecture_Schema" {
-                genesis_node_id = Some(node.node_id.clone());
-            }
-            continue;
-        }
 
         // 현재 진행 상태 업데이트: 프론트엔드 통지용
         let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
-            message: format!("[{}] RAG 저장 진행 중..", node.target_node_type),
+            message: "RAG 저장 진행 중..".into(),
             node_id: node.node_id.clone(),
             node_type: node.target_node_type.clone(),
             project_id: project_id.clone(),
@@ -353,7 +343,7 @@ pub async fn index_project_embeddings(
             match embedding_res {
                 Ok(_) => {
                     let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
-                        message: format!("[{}] RAG 저장 완료", node.target_node_type),
+                        message: "RAG 저장 완료".into(),
                         node_id: node.node_id.clone(),
                         node_type: node.target_node_type.clone(),
                         project_id: project_id.clone(),
@@ -366,7 +356,7 @@ pub async fn index_project_embeddings(
                 },
                 Err(e) => {
                     let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
-                        message: format!("[{}] RAG 저장 실패", node.target_node_type),
+                        message: "RAG 저장 실패".into(),
                         node_id: node.node_id.clone(),
                         node_type: node.target_node_type.clone(),
                         project_id: project_id.clone(),
@@ -389,93 +379,6 @@ pub async fn index_project_embeddings(
         let _ = app_handle.emit("nodes-updated", ());
     }
 
-    // 3. GPRD 통합 문서 인덱싱 (개별 노드들과는 별개로 전역 맥락을 위해 처리)
-    if has_genesis {
-        let full_prd = get_full_approved_prd(&*pool, &project_id).await;
-        if full_prd != "{}" && !full_prd.is_empty() {
-            // 대표 ID가 여러 개일 수 있으나 하나를 지정하여 매핑하며 전체 문서 내용 로드
-            let rep_id = match genesis_node_id {
-                Some(id) => id,
-                None => {
-                    sqlx::query_scalar("SELECT node_id FROM document_node WHERE project_id = ? AND node_category = 'GENESIS' LIMIT 1")
-                        .bind(&project_id).fetch_one(&*pool).await.map_err(|e| e.to_string())?
-                }
-            };
-
-            // 현재 진행 상태 업데이트: 통합 PRD RAG 인덱싱 시작
-            let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
-                message: "통합 PRD RAG 저장 진행 중..".into(),
-                node_id: rep_id.clone(),
-                node_type: "Genesis_PRD".into(),
-                project_id: project_id.clone(),
-                level: "INFO".into(),
-                status: "EMBEDDING_START".into(),
-                current_iteration: None,
-                max_iterations: None,
-            });
-            let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-                .bind("통합 RAG 저장 중...")
-                .bind(Utc::now().to_rfc3339())
-                .bind(&rep_id)
-                .execute(&*pool)
-                .await;
-            let _ = app_handle.emit("nodes-updated", ());
-
-            // [주의] hardcoded "integrated-prd" 타입으로 지정하여 임베딩 시 iteration_id를 조회하여 소유권 매핑 (FK 제약 조건 충족)
-            let best_genesis_it: String = sqlx::query_scalar(
-                "SELECT iteration_id FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 ORDER BY is_pass DESC, calculated_score DESC LIMIT 1"
-            )
-            .bind(&rep_id)
-            .fetch_one(&*pool)
-            .await
-            .map_err(|e| format!("Genesis iteration lookup error: {}", e))?;
-
-            let embedding_res = store_document_embeddings(
-                &*pool, &*client, &api_key,
-                &project_id, None,
-                &rep_id, "Genesis_PRD",
-                &best_genesis_it, &full_prd,
-                100, // 통합본은 베스트 스코어로 임의 지정
-            ).await;
-
-            match embedding_res {
-                Ok(_) => {
-                    let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
-                        message: "통합 PRD RAG 저장 완료".into(),
-                        node_id: rep_id.clone(),
-                        node_type: "Genesis_PRD".into(),
-                        project_id: project_id.clone(),
-                        level: "SUCCESS".into(),
-                        status: "EMBEDDING_COMPLETE".into(),
-                        current_iteration: None,
-                        max_iterations: None,
-                    });
-                    indexed_count += 1;
-                },
-                Err(e) => {
-                    let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
-                        message: "통합 PRD RAG 저장 실패".into(),
-                        node_id: rep_id.clone(),
-                        node_type: "Genesis_PRD".into(),
-                        project_id: project_id.clone(),
-                        level: "ERROR".into(),
-                        status: "EMBEDDING_FAILED".into(),
-                        current_iteration: None,
-                        max_iterations: None,
-                    });
-                    println!(">>> [RAG-Index] Integrated PRD failed: {}", e);
-                }
-            }
-
-            // 상태 초기화
-            let _ = sqlx::query("UPDATE document_node SET last_action = NULL, updated_at = ? WHERE node_id = ?")
-                .bind(Utc::now().to_rfc3339())
-                .bind(&rep_id)
-                .execute(&*pool)
-                .await;
-            let _ = app_handle.emit("nodes-updated", ());
-        }
-    }
     
     Ok(indexed_count as i32)
 }

@@ -8,8 +8,7 @@ import {
   Layers, 
   GitCommit, 
   Users, 
-  LayoutDashboard,
-  Search
+  LayoutDashboard
 } from 'lucide-react';
 import { useProjectStore } from '../store/projectStore';
 import { useUIStore } from '../store/uiStore';
@@ -174,7 +173,7 @@ interface StatCardProps {
 const StatCard: React.FC<StatCardProps> = ({ icon, label, value, colorClass }) => (
   <div className={styles.statCard}>
     <div className={`${styles.statIconWrapper} ${styles[colorClass]}`}>
-      {React.cloneElement(icon as React.ReactElement, { size: 24 })}
+      {React.cloneElement(icon as React.ReactElement<any>, { size: 24 })}
     </div>
     <div className={styles.statInfo}>
       <p className={styles.statLabel}>{label}</p>

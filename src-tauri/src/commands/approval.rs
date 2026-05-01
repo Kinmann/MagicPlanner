@@ -13,7 +13,7 @@ pub use crate::models::{
 
 // 서비스 함수 임포트
 use crate::services::embedding::store_document_embeddings;
-use crate::services::prd_merger::{get_full_approved_prd};
+use crate::services::node_query::{get_approved_node_output};
 use crate::services::dag_engine::{trigger_next_nodes, is_node_locked};
 use crate::commands::module::create_local_modules;
 
@@ -134,7 +134,10 @@ pub async fn approve_genesis_prd(
     .await
     .map_err(|e| e.to_string())?;
 
-    let full_prd = get_full_approved_prd(&*pool, &project_id).await;
+    let out_1a = get_approved_node_output(&*pool, &project_id, "GPRD_Context_Goal").await;
+    let out_1b = get_approved_node_output(&*pool, &project_id, "GPRD_Capability_Actor").await;
+    let out_1c = get_approved_node_output(&*pool, &project_id, "GPRD_Architecture_Schema").await;
+    let full_prd = format!("[Genesis PRD - Context & Goal]\n{}\n\n[Genesis PRD - Capability & Actor]\n{}\n\n[Genesis PRD - Architecture Schema]\n{}", out_1a, out_1b, out_1c);
     
     let final_node = sqlx::query_as::<_, DocumentNode>(
         "SELECT * FROM document_node WHERE project_id = ? AND target_node_type IN ('GPRD_Architecture_Schema', 'Genesis_PRD') ORDER BY created_at DESC LIMIT 1"

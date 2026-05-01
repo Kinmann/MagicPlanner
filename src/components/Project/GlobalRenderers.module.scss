@@ -16,11 +16,6 @@
   overflow: hidden;
   transition: all 0.3s ease;
   
-  &:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
-    border-color: v.$primary;
-  }
   
   &.col12 { grid-column: span 12; }
   &.col6 { grid-column: span 6; }
@@ -68,9 +63,7 @@
   border-radius: v.$radius-md;
   transition: all 0.2s ease;
 
-  &:hover {
-    background: rgba(v.$primary, 0.03);
-  }
+
 
   h3 { font-size: 11px; font-weight: 800; color: v.$text-muted; text-transform: uppercase; margin-bottom: 4px; }
   p { font-size: 14px; color: v.$foreground; line-height: 1.5; }
@@ -109,12 +102,7 @@
   gap: 8px;
   transition: all 0.3s ease;
   
-  &:hover {
-    border-color: v.$primary;
-    background: v.$background-container-low;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-  }
+
 
   .personaHeader { display: flex; align-items: center; gap: 8px; }
   .name { font-weight: 800; font-size: 14px; }
@@ -142,9 +130,7 @@
   transition: all 0.2s ease;
   cursor: default;
 
-  &:hover {
-    background-color: rgba(v.$primary, 0.03);
-  }
+
 }
 
 .valueWrapper {
@@ -156,11 +142,7 @@
   transition: all 0.2s ease;
   cursor: text;
 
-  &:hover {
-    background-color: rgba(v.$primary, 0.1);
-    border-color: rgba(v.$primary, 0.2);
-    box-shadow: 0 0 8px rgba(v.$primary, 0.1);
-  }
+
 }
 
 .epicActorContainer {
@@ -209,10 +191,7 @@
   border-radius: v.$radius-lg;
   transition: all 0.2s ease;
 
-  &:hover {
-    background: rgba(v.$primary, 0.03);
-    .actorName { color: v.$primary; }
-  }
+
 
   .actorName {
     font-size: v.$text-base;
@@ -364,10 +343,7 @@
   line-height: 1.4;
   transition: color 0.2s;
   
-  &:hover {
-    color: v.$foreground;
-    .checkIcon { color: v.$primary; }
-  }
+
   
   .checkIcon {
     color: rgba(v.$primary, 0.5);
@@ -387,10 +363,7 @@
   border-radius: v.$radius-sm;
   transition: all 0.2s ease;
   
-  &:hover {
-    background: rgba(v.$primary, 0.05);
-    .name { color: rgba(v.$foreground, 0.9); }
-  }
+
 
   .name { font-family: v.$font-mono; font-weight: 700; color: v.$primary; transition: color 0.2s; }
   .type { font-size: 11px; opacity: 0.6; font-family: v.$font-mono; }
@@ -406,11 +379,7 @@
   transition: all 0.2s ease;
   border: 1px solid transparent;
   
-  &:hover {
-    background: rgba(v.$primary, 0.04);
-    border-color: rgba(v.$primary, 0.1);
-    .relNames { color: v.$foreground; }
-  }
+
   
   .relNames {
     display: flex;
@@ -513,11 +482,7 @@
   border: 1px solid rgba(255, 255, 255, 0.03);
   transition: all 0.2s ease;
 
-  &:hover {
-    background: rgba(v.$primary, 0.05);
-    border-color: rgba(v.$primary, 0.1);
-    transform: translateX(4px);
-  }
+
 }
 
 .attributeHeader {
@@ -544,10 +509,7 @@
   gap: 12px;
   padding: 2px 0;
   
-  &:hover {
-    .attribute { background: rgba(v.$primary, 0.05); }
-    .desc { opacity: 0.8 !important; }
-  }
+
 
   .desc {
     font-size: v.$text-sm;
@@ -555,4 +517,82 @@
     opacity: 0.6;
     transition: opacity 0.2s;
   }
+}
+
+// Utility classes to replace Tailwind
+.constraintsGrid {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-10;
+}
+
+.flexColGap6 {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-6;
+}
+
+.indent {
+  margin-left: v.$space-4;
+}
+
+.opacity50 {
+  opacity: 0.5;
+}
+
+.priorityBadge {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  background-color: rgba(v.$primary, 0.1);
+  color: v.$primary;
+  padding: v.$space-0_5 v.$space-2;
+  border-radius: v.$radius-sm;
+  border: 1px solid rgba(v.$primary, 0.2);
+}
+
+.flexWrapGap2 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: v.$space-2;
+}
+
+.flexWrapGap1 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: v.$space-1;
+}
+
+.marginT1 {
+  margin-top: v.$space-1;
+}
+
+.marginT2 {
+  margin-top: v.$space-2;
+}
+
+.stepBadge {
+  width: v.$space-5;
+  height: v.$space-5;
+  border-radius: v.$radius-full;
+  background-color: rgba(v.$primary, 0.1);
+  color: v.$primary;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  border: 1px solid rgba(v.$primary, 0.2);
+  margin-right: v.$space-1;
+  flex-shrink: 0;
+}
+
+.warningBadge {
+  font-size: 10px;
+  background-color: rgba(v.$warning, 0.1);
+  color: v.$warning;
+  padding: v.$space-0_5 v.$space-2;
+  border-radius: v.$radius-sm;
+  border: 1px solid rgba(v.$warning, 0.2);
+  font-weight: 700;
 }

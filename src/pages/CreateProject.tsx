@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FolderKanban, Plus, Type, FileText, LayoutTemplate, Send, ChevronRight, X, Sparkles, MousePointerClick, Bolt } from 'lucide-react';
+import { FolderKanban, Type, FileText, Send, ChevronRight, X, MousePointerClick, Bolt } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '../store/uiStore';
 import { invoke } from '@tauri-apps/api/core';

@@ -2,7 +2,7 @@ use reqwest::Client;
 use sqlx::SqlitePool;
 use crate::models::PipelineError;
 use crate::services::gemini::call_gemini;
-use crate::services::prd_merger::get_approved_node_output;
+use crate::services::node_query::get_approved_node_output;
 use crate::utils::get_prompts_dir;
 
 /// AI 초안을 생성합니다.
@@ -16,6 +16,8 @@ pub async fn generate_draft(
     node_category: &str,
     node_type: &str,
     input_text: &str,
+    global_context: &str,
+    module_context: &str,
     previous_draft: &str,
     previous_feedback: &Vec<String>,
     iteration: i32,
@@ -62,18 +64,9 @@ pub async fn generate_draft(
         domain_prompt = domain_prompt.replace("{{PREVIOUS_DRAFT}}", previous_draft);
     }
 
-    // SAD 또는 MODULE 노드의 경우 전역 컨텍스트 로드
+    // SAD 또는 MODULE 노드의 경우 외부에서 주입된 컨텍스트 사용
     if node_category == "SAD" || node_category == "MODULE" {
-        use sqlx::Row;
-        let contexts = sqlx::query("SELECT context_type, context_data_json FROM global_context WHERE project_id = ? AND is_deleted = 0")
-            .bind(project_id).fetch_all(pool).await.map_err(|e| PipelineError::Internal(e.to_string()))?;
-        let mut all_ctx = String::new();
-        for row in contexts {
-            let t: String = row.get("context_type");
-            let d: String = row.get("context_data_json");
-            all_ctx.push_str(&format!("\n[{}]\n{}\n", t.to_lowercase(), d));
-        }
-        domain_prompt = domain_prompt.replace("{{GLOBAL_CONTEXT}}", &all_ctx);
+        domain_prompt = domain_prompt.replace("{{GLOBAL_CONTEXT}}", global_context);
         domain_prompt = domain_prompt.replace("{{PREVIOUS_DRAFT}}", previous_draft);
         let feedback_text = if previous_feedback.is_empty() { "없음".to_string() } else { previous_feedback.join("\n") };
         domain_prompt = domain_prompt.replace("{{EVALUATOR_FEEDBACK}}", &feedback_text);
@@ -108,20 +101,12 @@ pub async fn generate_draft(
             );
         }
 
-        // SAD 또는 MODULE 노드의 경우 사용자 프롬프트에 글로벌 컨텍스트 추가
-        if node_category == "SAD" || node_category == "MODULE" {
-            use sqlx::Row;
-            let contexts = sqlx::query("SELECT context_type, context_data_json FROM global_context WHERE project_id = ? AND is_deleted = 0")
-                .bind(project_id).fetch_all(pool).await.map_err(|e| PipelineError::Internal(e.to_string()))?;
-            let mut all_ctx = String::new();
-            for row in contexts {
-                let t: String = row.get("context_type");
-                let d: String = row.get("context_data_json");
-                all_ctx.push_str(&format!("\n[{}]\n{}\n", t.to_lowercase(), d));
-            }
-            if !all_ctx.is_empty() {
-                up = format!("{}\n\n[Global Context]\n{}", up, all_ctx);
-            }
+        // 전역 컨텍스트 및 모듈 컨텍스트 추가
+        if !global_context.is_empty() {
+            up = format!("{}\n\n[Global Context]\n{}", up, global_context);
+        }
+        if !module_context.is_empty() {
+            up = format!("{}\n\n[Module Specification]\n{}", up, module_context);
         }
 
         if target_count > 0 {

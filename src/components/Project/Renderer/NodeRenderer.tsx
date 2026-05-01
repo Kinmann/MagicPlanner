@@ -1,14 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useProjectStore } from '../../../store/projectStore';
 import { useUIStore } from '../../../store/uiStore';
 import { useCommentStore } from '../../../store/commentStore';
 import { useShallow } from 'zustand/react/shallow';
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import { PrdBentoRenderer, SadGlobalRenderer, renderJson, ModuleFsdRenderer, ModuleErdRenderer, ModuleUserFlowRenderer } from '../GlobalRenderers';
+import { PrdBentoRenderer, renderJson, ModuleFsdRenderer, ModuleErdRenderer, ModuleUserFlowRenderer } from '../GlobalRenderers';
 import SadSpecRenderer from '../SadSpecRenderer';
-import { Sparkles, RefreshCw, Copy, Check, FileJson } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Sparkles, RefreshCw, Copy, Check } from 'lucide-react';
+import { motion } from 'framer-motion';
 import styles from './NodeRenderer.module.scss';
 import { DocumentNode } from '../../../types/project';
 

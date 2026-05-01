@@ -69,7 +69,7 @@
   min-width: 0;
   
   .itemName {
-    font-size: 13px;
+    font-size: v.$text-xs;
     color: v.$foreground;
     white-space: nowrap;
     overflow: hidden;

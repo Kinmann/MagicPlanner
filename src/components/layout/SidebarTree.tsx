@@ -13,11 +13,10 @@ import {
   PauseCircle,
   Sparkles
 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { useProjectStore } from '../../store/projectStore';
 import { useUIStore } from '../../store/uiStore';
 import { mapNodesToTree, TreeItem } from '../../utils/treeMapper';
-import { useShallow } from 'zustand/react/shallow';
-import { useLogStore } from '../../store/logStore';
 import styles from './SidebarTree.module.scss';
 
 export const SidebarTree: React.FC = () => {

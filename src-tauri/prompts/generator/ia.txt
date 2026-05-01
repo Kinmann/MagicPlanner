@@ -20,13 +20,18 @@
     - **mapped_func_id**: 해당 화면이 특정 기능과 1:1 대응될 경우 FSD의 `FUNC-{ID}`를 매핑. 
     - **최소 요건**: 모든 화면 노드는 `mapped_user_flow_id` 또는 `mapped_func_id` 중 최소 하나 이상의 상위 근거 ID를 가져야 함. (단, 단순 그룹핑용 L1 노드는 예외)
 
-### B. 다중 주체별 계층 분리 (Actor-based Separation)
+### C. 모듈 책임 경계 준수 (Module Boundary Governance)
+- **모듈 내 화면 한정**: `[Core Responsibility]`에 정의된 모듈의 책임과 무관한 외부 모듈의 화면(예: 관리자 모듈 작업 중 사용자 메인 화면 설계 등)을 생성하지 마십시오.
+- **인터페이스 접점 설계**: 타 모듈 화면으로의 이동이 필요한 경우, 직접적인 화면 설계 대신 `[Dependencies]`에 정의된 의존성에 따라 '외부 모듈 이동' 또는 '진입점'만을 명시하십시오.
+- **관심사 분리**: 본 모듈에 할당된 기능(`mapped_func_id`)을 수행하기 위한 필수 요소로만 IA를 구성하십시오.
+
+### D. 다중 주체별 계층 분리 (Actor-based Separation)
 - **진입점 분리**: 식별된 주체별(User, Admin 등) 진입 포털을 논리적으로 분리 설계.
 - **접근 권한 및 상태(RBAC & State)**:
     - 화면 단위별 접근 주체 및 최소 권한 레벨 명시.
     - 서비스 초기화 전(PENDING)과 정상 운영(READY) 등 시스템 상태에 따른 동적 메뉴 구조 변화 반영 필수.
 
-### C. 계층적 구조 설계 (Hierarchical Depth)
+### E. 계층적 구조 설계 (Hierarchical Depth)
 - **3단계 뎁스 구조화**:
     1. Depth 1 (L1): 최상위 메뉴/핵심 서비스 영역.
     2. Depth 2 (L2): L1 하위 개별 화면.
@@ -36,7 +41,7 @@
     - 장애나 수동 개입 시 화면 전체를 덮는 전역 인터럽트(Global Modal) 레이어 정의.
     - 대체 흐름(에러 화면, 인증 모달 등)도 누락 없이 IA 구조에 편입.
 
-### D. 기능 및 데이터 매핑 (Functional Component Mapping)
+### F. 기능 및 데이터 매핑 (Functional Component Mapping)
 - **기능 배치**: 각 화면(`SCR`)에 FSD의 `FUNC-{NNN}` 매핑하여 실행 가능한 동작 명세.
 - **데이터 노출**: FSD의 `data_requirements`를 참조하여 화면별 노출 데이터 리스트업.
 

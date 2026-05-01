@@ -31,7 +31,7 @@
     }
     
     tr:last-child td { border-bottom: none; }
-    tr:hover td { background: rgba(255, 255, 255, 0.02); }
+
   }
 }
 
@@ -59,10 +59,7 @@
   border-radius: v.$radius-sm;
   transition: all 0.2s ease;
   
-  &:hover {
-    background: rgba(v.$primary, 0.05);
-    .name { color: rgba(v.$foreground, 0.9); }
-  }
+
 
   .name { font-family: v.$font-mono; font-weight: 700; color: v.$primary; transition: color 0.2s; }
   .type { font-size: 11px; opacity: 0.6; font-family: v.$font-mono; }
@@ -89,12 +86,7 @@
   padding: v.$space-4;
   transition: all 0.3s ease;
 
-  &:hover {
-    border-color: v.$primary;
-    background: v.$background-container-low;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-  }
+
 
   .category { font-size: 10px; font-weight: 800; color: v.$primary; margin-bottom: 4px; }
   .name { font-size: 15px; font-weight: 800; color: v.$foreground; margin-bottom: 2px; }
@@ -111,11 +103,7 @@
   transition: all 0.2s ease;
   border: 1px solid transparent;
   
-  &:hover {
-    background: rgba(v.$primary, 0.04);
-    border-color: rgba(v.$primary, 0.1);
-    .relNames { color: v.$foreground; }
-  }
+
   
   .relNames {
     display: flex;
@@ -201,9 +189,7 @@
   transition: all 0.2s ease;
   cursor: default;
 
-  &:hover {
-    background-color: rgba(v.$primary, 0.03);
-  }
+
 }
 
 .valueWrapper {
@@ -215,11 +201,7 @@
   transition: all 0.2s ease;
   cursor: text;
 
-  &:hover {
-    background-color: rgba(v.$primary, 0.1);
-    border-color: rgba(v.$primary, 0.2);
-    box-shadow: 0 0 8px rgba(v.$primary, 0.1);
-  }
+
 }
 
 .badge {
@@ -241,6 +223,38 @@
     color: v.$primary;
     border: 1px solid rgba(v.$primary, 0.2);
   }
+
+  &--accent {
+    background: rgba(v.$accent, 0.1);
+    color: v.$accent;
+    border: 1px solid rgba(v.$accent, 0.2);
+  }
+}
+
+.reqBadge {
+  display: inline-block;
+  margin-right: v.$space-3_5;
+  font-family: v.$font-mono;
+  font-size: v.$text-xs;
+  color: v.$primary;
+  font-weight: v.$font-weight-bold;
+  vertical-align: middle;
+}
+
+.stepBadge {
+  width: v.$space-5;
+  height: v.$space-5;
+  border-radius: v.$radius-full;
+  background-color: rgba(v.$primary, 0.1);
+  color: v.$primary;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  border: 1px solid rgba(v.$primary, 0.2);
+  margin-right: v.$space-1;
+  flex-shrink: 0;
 }
 
 // Epic & Actor Styles for consistency
@@ -296,10 +310,7 @@
   border-radius: v.$radius-lg;
   transition: all 0.2s ease;
 
-  &:hover {
-    background: rgba(v.$primary, 0.03);
-    .actorName { color: v.$primary; }
-  }
+
 
   .actorName {
     font-size: 15px;
@@ -333,17 +344,18 @@
   gap: v.$space-2;
   
   .epicId {
-    font-size: 11px;
+    font-size: v.$text-xs;
     font-family: v.$font-mono;
-    color: v.$text-muted;
-    opacity: 0.5;
-    margin-right: 8px;
-    font-weight: 500;
+    color: v.$primary;
+    background: rgba(v.$primary, 0.1);
+    padding: 2px 8px;
+    border-radius: v.$radius-sm;
+    font-weight: 700;
   }
   
   .epicTitle {
     font-size: v.$text-lg;
-    font-weight: v.$font-weight-semibold;
+    font-weight: v.$font-weight-bold;
     color: v.$foreground;
   }
 }
@@ -398,17 +410,54 @@
   transition: color 0.2s;
   padding: v.$space-1 0;
   
-  &:hover {
-    color: v.$foreground;
-    .checkIcon { color: v.$primary; }
-  }
+
   
   .checkIcon {
     color: rgba(v.$primary, 0.5);
     flex-shrink: 0;
-    margin-top: 2px;
+    margin-top: 3px;
     transition: color 0.2s;
   }
+
+  .elementHeader {
+    display: flex;
+    align-items: center;
+    gap: v.$space-2;
+    margin-bottom: v.$space-1;
+    flex-wrap: wrap;
+  }
+
+  .elementLabel {
+    font-weight: 700;
+    color: v.$foreground;
+    font-size: 14px;
+  }
+
+  .elementDesc {
+    font-size: 13px;
+    color: v.$text-muted;
+    line-height: 1.5;
+    margin: 0;
+  }
+}
+
+.typeBadge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  font-family: v.$font-mono;
+  background: rgba(v.$accent, 0.2);
+  color: v.$foreground;
+  border: 1px solid v.$border-strong;
+  opacity: 0.9;
+
+  &.input { background: rgba(v.$info, 0.15); color: v.$info; border-color: rgba(v.$info, 0.3); }
+  &.button { background: rgba(v.$primary, 0.15); color: v.$primary; border-color: rgba(v.$primary, 0.3); }
+  &.link { background: rgba(v.$warning, 0.15); color: v.$warning; border-color: rgba(v.$warning, 0.3); }
+  &.text { background: rgba(v.$foreground, 0.1); color: v.$foreground; border-color: rgba(v.$foreground, 0.2); }
 }
 
 // API Spec Specific Styles
@@ -484,10 +533,7 @@
   border: 1px solid transparent;
   transition: all 0.2s ease;
   
-  &:hover {
-    background: rgba(v.$foreground, 0.04);
-    border-color: v.$border;
-  }
+
 }
 
 .statusBadge {
@@ -522,10 +568,7 @@
   transition: all 0.2s ease;
   border: 1px solid transparent;
   
-  &:hover {
-    background: rgba(v.$primary, 0.04);
-    border-color: rgba(v.$primary, 0.1);
-  }
+
 }
 
 .iaTreeRowRoot {
@@ -551,10 +594,5 @@
   transition: all 0.2s ease;
   cursor: default;
   
-  &:hover {
-    border-color: v.$primary;
-    background: rgba(v.$primary, 0.02);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  }
+
 }

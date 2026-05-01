@@ -98,13 +98,6 @@
       cursor: pointer;
       transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 
-      &:hover {
-        background: rgba(255, 255, 255, 0.08);
-        border-color: rgba(255, 255, 255, 0.2);
-        color: #f3f4f6;
-        transform: translateY(-1px);
-      }
-
       &.copied {
         background: rgba(16, 185, 129, 0.1);
         border-color: #10b981;
@@ -258,10 +251,7 @@
       color: v.$primary;
       transition: all 0.3s ease;
 
-      &:hover {
-        border-color: rgba(v.$primary, 0.4);
-        background: rgba(v.$primary, 0.05);
-      }
+
     }
   }
 

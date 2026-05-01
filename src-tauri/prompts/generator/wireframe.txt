@@ -15,15 +15,19 @@
 - **식별자 매핑**: 모든 화면 명세는 IA의 `SCR-{NNN}` 식별자와 1:1 일치 필수.
 - **화면 창조 금지**: IA에 없는 새로운 팝업, 모달, 페이지 등의 임의 창조 엄격 금지.
 
-### B. UI 컴포넌트와 기능 매핑 (Component-Function Mapping)
+### C. UI 컴포넌트와 기능 매핑 (Component-Function Mapping)
 - **인터랙션 요소**: 버튼, 폼, 링크 등 모든 액션 요소에 FSD의 `FUNC-{NNN}` 매핑 필수.
 - **기능 누락 방지**: 해당 `SCR`에 할당된 모든 `FUNC`는 최소 하나 이상의 UI 컴포넌트와 연결되어야 함.
 
-### C. 데이터 노출 무결성 (Data Exposure Integrity)
+### D. 모듈 책임 경계 준수 (Module Boundary Governance)
+- **책임 범위 내 UI 설계**: `[Core Responsibility]`에 정의된 본 모듈의 핵심 책임과 관련 없는 UI 블록이나 위젯을 배치하지 마십시오.
+- **데이터 노출 경계**: 타 모듈 소유의 데이터나 복잡한 비즈니스 로직이 시각화되어야 하는 경우, 상세 구현 대신 '외부 데이터 영역'으로 표시하고 `[Dependencies]`에 따른 데이터 연동 접점만을 명시하십시오.
+
+### E. 데이터 노출 무결성 (Data Exposure Integrity)
 - **노출 항목 통제**: 표시되는 모든 데이터 필드는 FSD의 `data_requirements` 범위 내에서만 정의.
 - **임의 데이터 금지**: FSD에 없는 더미 텍스트, 통계, 부가 정보 등의 임의 배치 금지.
 
-### E. 기술 스택 기반 UI 컴포넌트 선정 (Tech Stack Alignment)
+### F. 기술 스택 기반 UI 컴포넌트 선정 (Tech Stack Alignment)
 - 주입된 `sad_tech_stack`의 `frontend` 및 `framework` 정보를 확인하십시오.
 - 해당 기술 환경(예: React + Tailwind, Tauri 등)에 적합하고 구현 가능한 표준 UI 컴포넌트를 선정하십시오.
 - 글로벌 기술 스택에서 제공하는 라이브러리(UI Library)가 명시된 경우, 해당 라이브러리의 컴포넌트 명칭과 스타일 가이드를 최대한 반영하십시오.

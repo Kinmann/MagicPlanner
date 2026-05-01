@@ -330,7 +330,7 @@ export const EditorPanel: React.FC = () => {
     }
 
     const isRunning = selectedNode.node_state === 'IN_PROGRESS' || selectedNode.is_active;
-    const hasPassedIter = (selectedNode.current_best_score > 0) || iterations.some(it => it.is_pass);
+    const hasPassedIter = iterations.some(it => it.is_pass);
     const isCompleted = selectedNode.node_state === 'COMPLETED';
 
     const runningNode = runningNodes.find(n => n.nodeId === selectedNode.node_id);
@@ -494,7 +494,16 @@ export const EditorPanel: React.FC = () => {
                     {(node as any).is_virtual ? 
                       (node.node_id === 'phase-gprd' ? 'Genesis PRD' : 
                        node.node_id === 'phase-sad' ? 'System Architecture' : node.target_node_type) 
-                      : node.target_node_type}
+                      : (
+                        <>
+                          {node.target_node_type}
+                          {node.module_id && (
+                            <span className={styles.moduleName}>
+                              {modules.find(m => m.module_id === node.module_id)?.module_name}
+                            </span>
+                          )}
+                        </>
+                      )}
                   </span>
                   <div 
                     className={styles.closeTabBtn}

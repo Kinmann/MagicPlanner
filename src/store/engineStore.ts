@@ -154,9 +154,9 @@ export const useEngineStore = create<EngineState>((set, get) => ({
     get().syncRunningNodes();
 
     return () => {
-      unlistenNodes();
-      unlistenStatus();
-      unlistenError();
+      if (typeof unlistenNodes === 'function') unlistenNodes();
+      if (typeof unlistenStatus === 'function') unlistenStatus();
+      if (typeof unlistenError === 'function') unlistenError();
       (window as any).__engineEventListenersInitialized = false;
     };
   },

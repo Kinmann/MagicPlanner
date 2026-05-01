@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
-import { Terminal, Trash2, MousePointer2, Copy, Search } from 'lucide-react';
+import { Terminal, Trash2, MousePointer2, Copy } from 'lucide-react';
 import { useLogStore } from '../../store/logStore';
 import styles from './SystemLog.module.scss';
 

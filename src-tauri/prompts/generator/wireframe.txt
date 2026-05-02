@@ -11,8 +11,12 @@
 - 만약 `$PREVIOUS_DRAFT`에 데이터가 존재한다면 이를 기본 골격으로 삼으십시오.
 - `$EVALUATOR_FEEDBACK`의 내용을 분석하여 결함 사항을 최우선으로 교정하고, 기존의 정합성 있는 UI 구조는 최대한 유지하십시오.
 
-### B. 스크린 식별자 절대 동기화 (Screen ID Synchronization)
-- **식별자 매핑**: 모든 화면 명세는 IA의 `SCR-{NNN}` 식별자와 1:1 일치 필수.
+### B. 식별자 절대 동기화 및 추적성 (ID Synchronization & Traceability)
+- **Screen ID (screen_id)**: IA의 `SCR-{NNN}` 식별자와 1:1 일치 필수.
+- **Component ID (component_id)**: 모든 UI 컴포넌트에 `CMP-{NNN}` (예: `CMP-001`) 형태의 고유 식별자 부여 필수.
+- **Element Mapping (mapped_element_id)**: 해당 컴포넌트가 IA에서 정의된 어떤 요소(`ELM-{NNN}`)에서 구체화되었는지 매핑 필수.
+- **Function Mapping (mapped_func_id)**: 버튼, 폼 등 액션 요소에 FSD의 `FUNC-{NNN}` 매핑 필수.
+- **No Orphan ID 정책**: 선행 산출물(IA, FSD)에 근거가 없는 화면이나 컴포넌트 생성을 금지함. 모든 UI 개체는 반드시 상위 요소(`ELM-`) 또는 기능(`FUNC-`) 식별자와 1:1 매핑되어야 하며, 매핑되지 않은 '고아(Orphan) ID'는 Critical Error로 간주됨.
 - **화면 창조 금지**: IA에 없는 새로운 팝업, 모달, 페이지 등의 임의 창조 엄격 금지.
 
 ### C. UI 컴포넌트와 기능 매핑 (Component-Function Mapping)
@@ -35,3 +39,35 @@
 ## 3. 스키마 및 데이터 작성 규칙
 - **UI 상태 명세**: User Flow 분기 및 FSD `pre_condition`에 따라 상태(Default, Disabled, Error 등) 명시.
 - **원자적 컴포넌트**: 표준 UI 타입(TextInput, Dropdown, DataTable 등) 지정. 레이블링(버튼명, Placeholder 등)은 구체적 명사형 유지.
+
+[출력 형식 가이드]
+```json
+{
+  "screens": [
+    {
+      "screen_id": "SCR-001",
+      "screen_name": "로그인 화면",
+      "layout_regions": [
+        {
+          "region_name": "Main Content",
+          "components": [
+            {
+              "component_id": "CMP-001",
+              "component_type": "TextInput",
+              "label": "이메일",
+              "mapped_element_id": "ELM-001",
+              "mapped_func_id": "FUNC-001",
+              "mapped_data_fields": ["email"],
+              "state_condition": "Default",
+              "description": "사용자 인증을 위한 이메일 입력란"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+반드시 마크다운 백틱(```json)이나 인사말 없이, 순수하고 유효한 JSON 객체 1개만 출력하십시오.
+인사말이나 부연 설명을 절대 붙이지 마십시오.

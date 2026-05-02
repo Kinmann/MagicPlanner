@@ -1,22 +1,18 @@
 {
   "endpoints": [
     {
-      "method": "string (GET/POST/etc)",
+      "api_id": "string (API-NNN)",
+      "mapped_func_id": "string (FUNC-NNN)",
+      "method": "string (GET/POST/PUT/DELETE)",
       "path": "string",
       "summary": "string",
       "description": "string",
-      "request_body": {
-        "type": "object",
-        "properties": "object"
-      },
+      "request_body": "string (JSON Schema)",
       "responses": [
         {
           "status_code": "number",
           "description": "string",
-          "schema": {
-            "type": "object",
-            "properties": "object"
-          }
+          "schema": "string (JSON Schema)"
         }
       ]
     }

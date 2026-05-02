@@ -7,9 +7,11 @@
 
 ## 2. API 명세서 특화 작성 통제 원칙 (Domain Principles)
 
-### A. 식별자 맵핑 및 추적성 강제
-- **엔드포인트 맵핑**: 모든 API 엔드포인트는 반드시 선행 FSD에 정의된 `FUNC-XXX` 식별자를 `mapped_func_id` 필드에 1:1로 매핑하여 존재의 당위성을 입증해야 함.
+### A. 식별자 맵핑 및 추적성 강제 (Traceability & ID Generation)
+- **API 고유 식별자**: 모든 엔드포인트 객체는 `api_id` 필드에 `API-[0-9]{3}` (예: `API-001`) 형식의 고유 코드를 부여해야 함.
+- **기능 맵핑**: 모든 API 엔드포인트는 반드시 선행 FSD에 정의된 `FUNC-XXX` 식별자를 `mapped_func_id` 필드에 필수 매핑하여 존재의 당위성을 입증해야 함.
 - **물리 모델 동기화**: 요청/응답 페이로드의 필드명, 데이터 타입, `Nullable`, 길이 제한 등은 주입된 `ERD`의 테이블/컬럼 스키마와 100% 일치해야 함. 임의의 데이터 필드 창조를 엄격히 금지함.
+- **No Orphan ID 정책**: 선행 산출물(FSD, ERD)에 근거가 없는 엔드포인트 생성을 금지함. 모든 API는 반드시 상위 기능 식별자(`FUNC-XXX`)와 1:1 매핑되어야 하며, 매핑되지 않은 '고아(Orphan) ID'는 Critical Error로 간주됨.
 
 ### B. RESTful 아키텍처 제약 (RESTful Design Constraints)
 - **URI 설계**: 자원(Resource) 중심의 복수형 명사로 구성할 것. (예: `/api/v1/users`). ERD의 `table_name`을 차용함. URI 내에 동사(행위) 포함을 금지함.
@@ -37,6 +39,36 @@
 - **JSON 문자열 고수**: `request_body`와 `responses.schema` 필드는 반드시 **유효한 JSON 형식의 문자열**로 작성해야 함. (예: `"{ \"key\": \"value\" }"` 형식)
 
 ## 4. 스키마 매핑 주의사항 (Schema Mapping Notes)
-- `endpoints` 배열: `method`, `path`, `func_id`, `summary`, `description`, `headers`, `path_params`, `query_params`, `request_body`, `responses` 정보를 포함함.
+- `endpoints` 배열: `method`, `path`, `api_id`, `mapped_func_id`, `summary`, `description`, `headers`, `path_params`, `query_params`, `request_body`, `responses` 정보를 포함함.
 - `responses` 객체: 상태 코드(Key)별로 반환되는 페이로드 구조와 예시(`example`)를 구체적으로 기술할 것.
 - 모든 텍스트 서술은 공통 시스템 프롬프트의 '분석적이고 건조한 명사형 종결 문체' 규정을 엄격히 준수할 것.
+
+[출력 형식 가이드]
+```json
+{
+  "endpoints": [
+    {
+      "api_id": "API-001",
+      "mapped_func_id": "FUNC-001",
+      "method": "POST",
+      "path": "/api/v1/users",
+      "summary": "사용자 회원가입",
+      "description": "새로운 사용자를 등록하고 초기 프로필 정보를 생성함.",
+      "headers": "[{ \"name\": \"Content-Type\", \"value\": \"application/json\" }]",
+      "path_params": "[]",
+      "query_params": "[]",
+      "request_body": "{ \"email\": \"string\", \"password\": \"string\" }",
+      "responses": [
+        {
+          "status_code": 201,
+          "description": "회원가입 성공",
+          "schema": "{ \"status\": 201, \"message\": \"success\", \"data\": { \"user_id\": \"uuid\" } }"
+        }
+      ]
+    }
+  ]
+}
+```
+
+반드시 마크다운 백틱(```json)이나 인사말 없이, 순수하고 유효한 JSON 객체 1개만 출력하십시오.
+인사말이나 부연 설명을 절대 붙이지 마십시오.

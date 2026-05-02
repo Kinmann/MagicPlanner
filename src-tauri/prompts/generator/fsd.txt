@@ -11,8 +11,9 @@
 - `$EVALUATOR_FEEDBACK`의 내용을 분석하여 결함 사항을 최우선으로 교정하고, 기존의 정합성 있는 식별자(FUNC-XXX 등)와 매핑 구조는 최대한 유지하여 일관성을 확보하십시오.
 
 ### B. 절대적 추적성 보장 (Absolute Traceability)
-- **식별자 매핑**: PRD의 `REQ-{NNN}`을 1:1 또는 1:N으로 매핑 필수.
-- **FSD 식별자**: `FUNC-{NNN}` 형태 부여. `mapped_req_id` 필드 필수 포함.
+- **식별자 매핑**: PRD의 에픽(`EPIC-{NNN}`)을 1:1 또는 1:N으로 매핑 필수.
+- **FSD 식별자**: 모든 기능에 `FUNC-{NNN}` (예: `FUNC-001`) 형태의 고유 ID 부여 필수.
+- **매핑 필드**: `mapped_epic_id` 필드에 해당 기능을 유도한 PRD의 에픽 ID를 반드시 포함.
 
 ### B. 환각 제어 및 예외 처리 (Zero-Hallucination)
 - PRD에 없는 새로운 비즈니스 기능 창조 금지.

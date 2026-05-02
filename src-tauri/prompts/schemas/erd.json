@@ -1,9 +1,13 @@
 {
   "tables": [
     {
+      "table_id": "string (TBL-NNN)",
       "table_name": "string",
+      "mapped_func_id": "string (FUNC-NNN)",
+      "description": "string",
       "columns": [
         {
+          "column_id": "string (COL-NNN)",
           "name": "string",
           "type": "string",
           "is_pk": "boolean",
@@ -11,6 +15,7 @@
           "ref_table": "string",
           "is_unique": "boolean",
           "is_nullable": "boolean",
+          "mapped_func_id": "string (FUNC-NNN)",
           "description": "string"
         }
       ]

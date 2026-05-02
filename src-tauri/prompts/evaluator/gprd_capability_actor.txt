@@ -13,7 +13,10 @@ GENERATED_1B: {{GENERATED_1B}}
 ## [Domain Specific 평가 지표 - 배점 70점]
 
 **1. 참조 무결성 및 고립 데이터 방지 (15점)**
+- **[Critical Error 할당 조건]**
+    - **ID 패턴 불일치**: `role_id`가 `ROLE-[0-9]{3}`, `epic_id`가 `EPIC-[0-9]{3}` 형식을 준수하지 않음.
 - **[감점 트리거: 건당 -10점]** `core_epics` 내부의 `required_actors` 배열에 포함된 문자열 값이 `actors` 배열의 `role_name` 중 어느 것과도 일치하지 않는 경우.
+- **[감점 트리거: 건당 -5점]** `role_id` 또는 `epic_id`가 누락된 경우.
 
 **2. 선행 컨텍스트 위반 및 논리적 모순 (15점)**
 - **[감점 트리거: 건당 -15점]** 도출된 에픽이 {{APPROVED_1A}}의 `product_vision`, `target_market`과 무관하거나, `global_constraints`에 정면으로 위배되는 로직을 요구하는 경우.

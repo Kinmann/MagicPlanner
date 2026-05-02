@@ -21,8 +21,12 @@
     - **[-10점] 지연 상태(Loading) 누락:** 무거운 통신 작업 시 처리 상태(Processing)를 보여주는 전이 단계 생략.
     - **[-5점/건] 인터럽트 대응 누락:** 수동 개입(HITL) 발생 시 사용자 승인/반려 요구 인터럽트 동선 누락.
 
-### Metric G: FSD 기능 매핑의 포괄성 (Comprehensiveness of FSD Mapping)
+### Metric G: 추적성 및 FSD 기능 매핑 (Traceability & FSD Mapping)
 - **기본 점수: 15점**
+- **[Critical Error 할당 조건]**
+    - **No Orphan ID 위반**: 선행 FSD에 존재하지 않는 사용자 흐름(Node)을 생성하거나, `mapped_func_ids` 매핑이 누락된 경우.
+    - **ID 패턴 불일치**: 모든 노드의 `id`가 `FLOW-001` 형식의 정규식(`^FLOW-[0-9]{3}$`)을 준수하지 않음.
+    - **매핑 실재성 결여**: `mapped_func_ids` 배열 내의 ID가 선행 FSD에 존재하지 않거나 형식이 틀림 (`^FUNC-[0-9]{3}$`).
 - **[감점 트리거]**
     - **[-10점] 미매핑 기능 존재:** FSD 기능이 어떤 시나리오에도 포함되지 않아 사용자가 트리거할 수 없음.
     - **[-5점/건] 환각 액션:** User Flow에는 정의되었으나 FSD에 해당 액션 처리 근거 로직이 전무.

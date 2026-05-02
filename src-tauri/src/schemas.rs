@@ -80,14 +80,14 @@ pub struct FsdSchema {
 // 3. User Flow
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct UserFlowNode {
-    #[schemars(regex(pattern = "^[A-Z0-9-]+$"))]
+    #[schemars(regex(pattern = "^FLOW-[0-9]{3}$"))]
     pub id: String,
     pub node_type: String, // Action/Decision/Screen mapped from "type"
     pub actor: String,
     pub label: String,
     pub step: String,
     pub system_response: String,
-    pub mapped_func_ids: Vec<String>,
+    pub mapped_func_ids: Vec<String>, // We'll enforce pattern in generator/evaluator
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -108,9 +108,11 @@ pub struct UserFlowSchema {
 pub struct IaHierarchy {
     pub depth: i32,
     pub parent_id: Option<String>,
-    #[schemars(regex(pattern = "^[A-Z0-9-]+$"))]
+    #[schemars(regex(pattern = "^SCR-[0-9]{3}$"))]
     pub screen_id: String,
+    #[schemars(regex(pattern = "^FLOW-[0-9]{3}$"))]
     pub mapped_user_flow_id: Option<String>,
+    #[schemars(regex(pattern = "^FUNC-[0-9]{3}$"))]
     pub mapped_func_id: Option<String>,
     pub title: String,
     pub actor: String,
@@ -119,6 +121,8 @@ pub struct IaHierarchy {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct IaScreenElement {
+    #[schemars(regex(pattern = "^ELM-[0-9]{3}$"))]
+    pub element_id: String,
     pub component_type: String, // mapped from "type"
     pub label: String,
     #[schemars(regex(pattern = "^FUNC-[0-9]{3}$"))]
@@ -127,6 +131,7 @@ pub struct IaScreenElement {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct IaScreenElementWrap {
+    #[schemars(regex(pattern = "^SCR-[0-9]{3}$"))]
     pub screen_id: String,
     pub elements: Vec<IaScreenElement>,
 }
@@ -140,6 +145,8 @@ pub struct IaSchema {
 // 5. ERD
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ErdColumn {
+    #[schemars(regex(pattern = "^COL-[0-9]{3}$"))]
+    pub column_id: String,
     pub name: String,
     pub data_type: String, // mapped from "type"
     pub is_pk: bool,
@@ -148,12 +155,18 @@ pub struct ErdColumn {
     pub is_unique: bool,
     pub is_nullable: bool,
     pub description: String,
+    #[schemars(regex(pattern = "^FUNC-[0-9]{3}$"))]
+    pub mapped_func_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ErdTable {
+    #[schemars(regex(pattern = "^TBL-[0-9]{3}$"))]
+    pub table_id: String,
     pub table_name: String,
     pub columns: Vec<ErdColumn>,
+    #[schemars(regex(pattern = "^FUNC-[0-9]{3}$"))]
+    pub mapped_func_id: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -173,8 +186,12 @@ pub struct ErdSchema {
 // 6. Wireframe
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct WireframeComponent {
+    #[schemars(regex(pattern = "^CMP-[0-9]{3}$"))]
+    pub component_id: String,
     pub component_type: String,
     pub label: String,
+    #[schemars(regex(pattern = "^ELM-[0-9]{3}$"))]
+    pub mapped_element_id: String,
     #[schemars(regex(pattern = "^FUNC-[0-9]{3}$"))]
     pub mapped_func_id: String,
     pub mapped_data_fields: Vec<String>,
@@ -190,7 +207,7 @@ pub struct WireframeRegion {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct WireframeScreen {
-    #[schemars(regex(pattern = "^[A-Z0-9-]+$"))]
+    #[schemars(regex(pattern = "^SCR-[0-9]{3}$"))]
     pub screen_id: String,
     pub screen_name: String,
     pub layout_regions: Vec<WireframeRegion>,
@@ -211,11 +228,14 @@ pub struct ApiSpecResponse {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ApiSpecEndpoint {
+    #[schemars(regex(pattern = "^API-[0-9]{3}$"))]
+    pub api_id: String,
     pub method: String,
     pub path: String,
     pub summary: String,
     pub description: String,
-    pub mapped_func_id: Option<String>,
+    #[schemars(regex(pattern = "^FUNC-[0-9]{3}$"))]
+    pub mapped_func_id: String,
     pub headers: String,
     pub path_params: String,
     pub query_params: String,
@@ -438,6 +458,8 @@ pub struct GprdGlobalConstraints {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct GprdActor {
+    #[schemars(regex(pattern = "^ROLE-[0-9]{3}$"))]
+    pub role_id: String,
     pub role_name: String,
     pub description: String,
 }
@@ -445,6 +467,7 @@ pub struct GprdActor {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct GprdEpic {
+    #[schemars(regex(pattern = "^EPIC-[0-9]{3}$"))]
     pub epic_id: String,
     pub title: String,
     pub description: String,
@@ -493,8 +516,8 @@ pub struct GenesisPrdBusinessContext {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct GenesisPrdUserRole {
-    #[schemars(regex(pattern = "^ROLE-[A-Z0-9-]+$"))]
-    pub role_id: String, // pattern: "^ROLE-[A-Z0-9-]+$"
+    #[schemars(regex(pattern = "^ROLE-[0-9]{3}$"))]
+    pub role_id: String, // pattern: "^ROLE-[0-9]{3}$"
     pub role_name: String,
     pub permissions_level: String, // enum: ["GUEST", "USER", "ADMIN", "SYSTEM"]
 }
@@ -502,8 +525,8 @@ pub struct GenesisPrdUserRole {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct GenesisPrdEpic {
-    #[schemars(regex(pattern = "^EPIC-[A-Z0-9-]+$"))]
-    pub epic_id: String, // pattern: "^EPIC-[A-Z0-9-]+$"
+    #[schemars(regex(pattern = "^EPIC-[0-9]{3}$"))]
+    pub epic_id: String, // pattern: "^EPIC-[0-9]{3}$"
     pub title: String,
     pub description: String,
     /// Each element must match pattern: "^ROLE-[A-Z0-9-]+$"
@@ -599,6 +622,8 @@ pub struct GenesisPrdSchema {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct SadEntity {
+    #[schemars(regex(pattern = "^ENT-[0-9]{3}$"))]
+    pub entity_id: String,
     pub entity_name: String,
     pub description: String,
     pub attributes: Vec<SadEntityAttribute>,
@@ -715,6 +740,7 @@ pub struct SadModuleBatchSchema {
 #[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct SadModuleEntry {
+    #[schemars(regex(pattern = "^MOD-[0-9]{3}$"))]
     pub module_id: String,
     pub module_name: String,
     pub description: String,
@@ -731,9 +757,10 @@ pub struct SadModuleListSchema {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct SadEpicModuleMapping {
+    #[schemars(regex(pattern = "^EPIC-[0-9]{3}$"))]
     pub epic_id: String,
     pub epic_name: String,
-    pub mapped_modules: Vec<String>,
+    pub mapped_modules: Vec<String>, // Each should be MOD-XXX
 }
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -745,7 +772,9 @@ pub struct SadEpicMappingSchema {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct SadModuleDependency {
+    #[schemars(regex(pattern = "^MOD-[0-9]{3}$"))]
     pub from_module: String,
+    #[schemars(regex(pattern = "^MOD-[0-9]{3}$"))]
     pub to_module: String,
     pub dependency_type: String,
     pub description: String,

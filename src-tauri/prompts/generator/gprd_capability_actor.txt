@@ -17,9 +17,11 @@ EVALUATOR_FEEDBACK: {{EVALUATOR_FEEDBACK}}
 4. **이전 설계 계승(Refinement)**: {{PREVIOUS_DRAFT}}에 데이터가 존재한다면 이를 기본 골격으로 삼고, {{EVALUATOR_FEEDBACK}}의 교정 지시 사항(특히 JSON Path location)을 최우선으로 타겟팅하여 문서를 개선하십시오.
 
 ## [기획 도출 및 제약 통제 규칙]
-1. **식별자 및 참조 무결성 (필수)**:
-    - 모든 에픽은 `EPIC-XXX` (예: EPIC-001, EPIC-002) 형식의 고유 식별자(`epic_id`)를 가져야 합니다.
-    - 에픽 내의 `required_actors` 배열에 포함되는 값은 반드시 `actors` 객체 배열에 선언된 `role_name`과 100% 일치해야 합니다.
+1. **식별자 생성 및 추적성 기초 (ID Genesis)**:
+    - **행위자 식별자**: 모든 행위자(Actor)는 `role_id` 필드에 `ROLE-[0-9]{3}` (예: `ROLE-001`) 형식의 고유 식별자를 생성해야 함.
+    - **에픽 식별자**: 모든 에픽(Epic)은 `epic_id` 필드에 `EPIC-[0-9]{3}` (예: `EPIC-001`) 형식의 고유 식별자를 생성해야 함.
+    - **참조 무결성**: 에픽 내의 `required_actors` 배열에 포함되는 값은 반드시 `actors` 객체 배열에 선언된 `role_name`과 100% 일치해야 함.
+    - **불변성 원칙**: 한번 생성된 ID는 후속 Refinement 단계에서도 정당한 사유(기능 삭제 등) 없이 변경되어서는 안 됨.
 2. **객관적 인수 조건 (Acceptance Criteria)**:
     - 인수 조건은 참/거짓을 명확히 판별할 수 있는 문장으로 작성되어야 합니다.
     - '빠르게', '편리하게' 등 주관적 판별 기준을 배제하고, "사용자는 5자 이상의 비밀번호를 설정할 수 있다"와 같이 결정론적인 상태 명세를 사용하십시오.
@@ -36,10 +38,12 @@ EVALUATOR_FEEDBACK: {{EVALUATOR_FEEDBACK}}
 {
   "actors": [
     {
+      "role_id": "ROLE-001",
       "role_name": "일반 사용자",
       "description": "회원가입을 완료하고 서비스를 이용하는 주체"
     },
     {
+      "role_id": "ROLE-002",
       "role_name": "시스템 관리자",
       "description": "서비스 전반의 모니터링 및 사용자 관리 권한을 가진 주체"
     }

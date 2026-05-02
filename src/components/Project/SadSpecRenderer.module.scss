@@ -596,3 +596,37 @@
   
 
 }
+
+.idBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  background: v.$background-container-highest;
+  border: 1px solid v.$border-strong;
+  border-radius: v.$radius-sm;
+  font-size: 10px;
+  font-family: v.$font-mono;
+  font-weight: 700;
+  color: v.$primary;
+  line-height: 1;
+}
+
+.mappingBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  background: rgba(v.$primary, 0.05);
+  border: 1px solid rgba(v.$primary, 0.2);
+  border-radius: v.$radius-sm;
+  font-size: 10px;
+  font-family: v.$font-mono;
+  font-weight: 600;
+  color: v.$primary;
+  line-height: 1;
+  gap: 4px;
+  
+  &::before {
+    content: "🔗";
+    font-size: 8px;
+  }
+}

@@ -1,13 +1,13 @@
 {
   "nodes": [
     {
-      "id": "string (SCR-NNN)",
+      "id": "string (FLOW-NNN)",
       "type": "string (Action/Decision/Screen)",
       "actor": "string",
       "label": "string",
       "step": "string",
       "system_response": "string",
-      "mapped_func_ids": ["string"]
+      "mapped_func_ids": ["string (FUNC-NNN)"]
     }
   ],
   "edges": [

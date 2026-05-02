@@ -255,26 +255,31 @@ pub async fn apply_taint_cascade(
         }
     }
 
-    println!(">>> Impacted Modules: {:?}", impacted_modules);
+    println!(">>> Impacted Modules (BFS): {:?}", impacted_modules);
 
-    // 2. DB 업데이트: 영향받는 노드들을 STALE 상태로 전환
-    // module_id 및 target_node_type에 해당하는 모든 노드 처리
+    // 2. 산출물 코드(artifact ID) 기반 양방향 Taint Cascade
+    // 변경 노드 JSON에서 모든 artifact 코드 추출 ([A-Z]+-\d{3} 패턴)
+    let changed_artifact_ids = collect_artifact_ids_from_targets(&*pool, &project_id, &targets).await;
+    println!(">>> Artifact IDs from changed nodes: {:?}", changed_artifact_ids);
+
+    // 2-B. DB 업데이트: 영향받는 노드들을 STALE 상태로 전환
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
-    for mid in impacted_modules {
-        // [주의] 모듈 아이디가 여러 개일 수 있으므로 정확한 ID 조회 (삭제되지 않은 것만)
+    // 2-B-1. 모듈 의존성 기반 STALE 처리
+    for mid in &impacted_modules {
+        // module_id로 직접 매칭되는 document_node 처리
         let module_ids: Vec<String> = sqlx::query_scalar(
             "SELECT module_id FROM local_module WHERE project_id = ? AND module_id = ? AND is_deleted = 0"
         )
         .bind(&project_id)
-        .bind(&mid)
+        .bind(mid)
         .fetch_all(&mut *tx)
         .await
         .map_err(|e| e.to_string())?;
 
         for found_id in module_ids {
             sqlx::query(
-                "UPDATE document_node SET node_state = 'STALE', updated_at = ? WHERE module_id = ? AND project_id = ?"
+                "UPDATE document_node SET node_state = 'STALE', updated_at = ? WHERE module_id = ? AND project_id = ? AND node_state = 'COMPLETED'"
             )
             .bind(&now)
             .bind(&found_id)
@@ -283,29 +288,59 @@ pub async fn apply_taint_cascade(
             .await
             .map_err(|e| e.to_string())?;
         }
-        
-        // ?占쏜　??蘊덌옙(SAD_Global, SAD_Module, Genesis_PRD ?? 獄ㅶ쵟占?墉?겒??
-        let target_types = match mid.to_lowercase().as_str() {
-            "sad_non_tech" | "sad_tech_stack" | "sad_core_erd" | "sad_auth_rbac" | "sad_interface_error" | "sad_global" => 
-                vec!["SAD_Global".to_string()],
-            "sad_module_list" | "sad_epic_mapping" | "sad_module_deps" | "sad_module" => 
-                vec!["SAD_Module".to_string()],
-            "genesis_prd" | "prd" | "integrated-prd" => 
-                vec!["Genesis_PRD".to_string(), "GPRD_Architecture_Schema".to_string()],
-            _ => vec![mid.clone(), format!("SAD_{}", mid)],
-        };
 
-        for t_type in target_types {
-            sqlx::query(
-                "UPDATE document_node SET node_state = 'STALE', updated_at = ? WHERE project_id = ? AND (target_node_type = ? OR LOWER(target_node_type) = LOWER(?))"
-            )
-            .bind(&now)
-            .bind(&project_id)
-            .bind(&t_type)
-            .bind(&t_type)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| e.to_string())?;
+        // target_node_type으로 매칭되는 Global/SAD 노드 처리
+        sqlx::query(
+            "UPDATE document_node SET node_state = 'STALE', updated_at = ? \
+             WHERE project_id = ? AND node_state = 'COMPLETED' \
+             AND (target_node_type = ? OR LOWER(target_node_type) = LOWER(?) \
+                  OR LOWER(target_node_type) = LOWER(?) OR LOWER(target_node_type) = LOWER(?))"
+        )
+        .bind(&now)
+        .bind(&project_id)
+        .bind(mid)
+        .bind(mid)
+        .bind(format!("SAD_{}", mid))
+        .bind(mid.trim_start_matches("sad_"))
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    // 2-B-2. 산출물 코드 양방향 STALE 처리
+    // - 다운스트림: 변경 노드의 코드를 다른 노드가 참조하면 → STALE
+    // - 업스트림: 변경 노드가 참조하는 코드를 소유한 노드 → STALE
+    // 두 경우 모두 "코드 집합 교집합"으로 자연스럽게 커버됨
+    if !changed_artifact_ids.is_empty() {
+        let all_nodes: Vec<(String, String)> = sqlx::query_as(
+            "SELECT dn.node_id, COALESCE(gi.generated_draft_json, '') \
+             FROM document_node dn \
+             LEFT JOIN generation_iteration gi ON gi.node_id = dn.node_id AND gi.is_pass = 1 \
+             WHERE dn.project_id = ? AND dn.node_state = 'COMPLETED' AND dn.is_deleted = 0 \
+             GROUP BY dn.node_id"
+        )
+        .bind(&project_id)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        for (node_id_scan, draft_json) in all_nodes {
+            if targets.contains(&node_id_scan) || draft_json.is_empty() {
+                continue;
+            }
+            let other_ids = extract_artifact_ids(&draft_json);
+            // 교집합이 존재하면 → 양방향 중 하나에 해당 → STALE
+            if other_ids.intersection(&changed_artifact_ids).next().is_some() {
+                println!(">>> [Artifact Taint] Node {} shares artifact codes → marking STALE", node_id_scan);
+                sqlx::query(
+                    "UPDATE document_node SET node_state = 'STALE', updated_at = ? WHERE node_id = ?"
+                )
+                .bind(&now)
+                .bind(&node_id_scan)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| e.to_string())?;
+            }
         }
     }
 
@@ -325,6 +360,49 @@ pub async fn apply_taint_cascade(
     });
 
     Ok(())
+}
+
+
+/// 변경 대상 노드들의 최신 approved output JSON에서 모든 artifact 코드를 수집합니다.
+/// artifact 코드 패턴: [A-Z]{2,}-\d{3} (예: TBL-001, API-003, FUNC-007, SCR-002)
+async fn collect_artifact_ids_from_targets(
+    pool: &SqlitePool,
+    project_id: &str,
+    targets: &[String],
+) -> std::collections::HashSet<String> {
+    let mut result = std::collections::HashSet::new();
+    for target_ref in targets {
+        let json_opt: Option<String> = sqlx::query_scalar(
+            "SELECT gi.generated_draft_json FROM generation_iteration gi \
+             JOIN document_node dn ON dn.node_id = gi.node_id \
+             WHERE dn.project_id = ? AND (dn.target_node_type = ? OR dn.node_id = ?) \
+             AND gi.is_pass = 1 AND dn.is_deleted = 0 \
+             ORDER BY gi.iteration_number DESC LIMIT 1"
+        )
+        .bind(project_id)
+        .bind(target_ref)
+        .bind(target_ref)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or(None)
+        .flatten();
+
+        if let Some(json_str) = json_opt {
+            result.extend(extract_artifact_ids(&json_str));
+        }
+    }
+    result
+}
+
+/// JSON 문자열에서 artifact 코드 패턴([A-Z]{2,}-\d{3})을 모두 추출합니다.
+fn extract_artifact_ids(json_str: &str) -> std::collections::HashSet<String> {
+    use regex::Regex;
+    // 패턴: 대문자 2자 이상 + 하이픈 + 숫자 3자리
+    static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let re = RE.get_or_init(|| Regex::new(r"\b[A-Z]{2,}-\d{3}\b").unwrap());
+    re.find_iter(json_str)
+        .map(|m| m.as_str().to_string())
+        .collect()
 }
 
 

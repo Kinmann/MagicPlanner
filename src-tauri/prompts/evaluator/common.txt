@@ -20,12 +20,14 @@
 - **[15점 할당 조건]:** 모든 필수 Key 존재, 데이터 타입 일치, JSON 문법 완벽 준수. (부분 점수 없음)
 - **[0점 할당 조건]:** 단 한 건의 위반이라도 발견 시 즉시 0점 처리.
 
-### Metric B: 식별자 추적성 및 데이터 정합성 (Traceability & Mapping Integrity)
+### Metric B: 식별자 정합성 및 추적성 (ID Integrity & Full Traceability)
 - **기본 점수: 10점**
-- **[감점 트리거: 건당 -5점]:**
-    - **환각 (Hallucination):** 선행 문서에 없는 고유 식별자(ID), 테이블명을 창작한 경우.
-    - **누락 (Omission):** 선행 문서의 핵심 제약사항이나 식별자가 증발한 경우.
-    - **변형 (Mutation):** 선행 문서의 식별자 포맷을 임의 변경한 경우.
+- **[Critical Error 할당 조건]:** 아래 항목 중 하나라도 위반 시 `score`와 상관없이 `critical_errors`에 기록하고 위치(`location`)를 명시하십시오.
+    - **ID 패턴 불일치 (Regex Violation)**: 생성된 모든 고유 식별자(`MOD-`, `EPIC-`, `ROLE-`, `FUNC-`, `API-`, `ENT-`, `TBL-`, `COL-`, `SCR-`, `ELM-`, `CMP-`, `FLOW-`, `TC-`, `REQ-`)가 지정된 정규식 패턴 `^[A-Z]{2,4}-[0-9]{3}$`을 100% 준수하지 않은 경우.
+    - **매핑 실재성 결여 (Referential Integrity)**: `mapped_func_id`, `mapped_req_id`, `mapped_user_flow_id`, `mapped_element_id`, `mapped_api_id`, `mapped_data_fields` 등 모든 매핑 필드에 기입된 ID가 `$SOURCE_DOCUMENTS` 또는 `$GLOBAL_CONTEXT`에 실제로 존재하지 않는 '유령 ID'인 경우. (환각 판정)
+    - **고아 엔티티 발생 (Orphan Entity)**: 산출물 내의 핵심 엔티티(화면, API, 테이블, 테스트케이스 등) 중 단 하나라도 상위 노드 식별자(FUNC, REQ 등)로의 매핑 필드가 누락되거나 비어있는 경우. (No Orphan Policy 위반)
+    - **누락 (Omission)**: `$SOURCE_DOCUMENTS`에서 '필수'로 정의된 요구사항이나 기능이 하위 산출물에서 추적 가능한 식별자 없이 완전히 누락된 경우.
+    - **오매핑 (Logical Mismatch)**: 매핑된 상위 ID의 내용이 현재 생성된 노드의 내용과 논리적으로 상충하거나 무관한 경우.
 
 ### Metric C: 결정론적 로직 및 실현 타당성 (Determinism & Feasibility)
 - **기본 점수: 10점**

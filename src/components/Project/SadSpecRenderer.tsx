@@ -29,6 +29,8 @@ const ErdRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?: any
   const entities = isModuleErd 
     ? (data.tables || []).map((t: any) => ({
         entity_name: t.table_name,
+        table_id: t.table_id,
+        mapped_func_ids: t.mapped_func_ids || [],
         description: t.description || '',
         attributes: (t.columns || []).map((c: any) => ({
           name: c.name,
@@ -74,10 +76,19 @@ const ErdRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?: any
               <article className={styles.epicItem} style={{ width: '100%' }}>
                 <h3 className={styles.criteriaTitle} style={{ fontSize: '15px' }}>
                   <Layers size={18} className="text-primary opacity-50" />
+                  {ent.table_id && <span className={styles.idBadge} style={{ marginRight: '8px' }}>{ent.table_id}</span>}
                   <span className={styles.valueWrapper}>{ent.entity_name}</span>
                 </h3>
                 <div className={styles.epicBody}>
                   <p className={styles.epicDesc}>{ent.description}</p>
+                  
+                  {ent.mapped_func_ids && ent.mapped_func_ids.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-1 mb-2">
+                      {ent.mapped_func_ids.map((fid: string) => (
+                        <span key={fid} className={styles.mappingBadge}>{fid}</span>
+                      ))}
+                    </div>
+                  )}
                   
                   {ent.attributes && ent.attributes.length > 0 && (
                     <div className={styles.criteriaSection}>
@@ -196,6 +207,7 @@ const RbacRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?: an
                 <article className={styles.epicItem} style={{ width: '100%' }}>
                   <h3 className={styles.criteriaTitle} style={{ fontSize: '15px' }}>
                     {isAdmin ? <ShieldCheck size={18} className="text-primary" /> : <User size={18} className="opacity-40" />}
+                    {r.role_id && <span className={styles.idBadge} style={{ marginRight: '8px' }}>{r.role_id}</span>}
                     <span className={styles.valueWrapper}>{r.role_name}</span>
                   </h3>
                   <div className={styles.epicBody}>
@@ -388,7 +400,7 @@ const InterfaceRenderer: React.FC<{ data: any, nodeId?: string, currentIteration
             <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.error_codes[?(@.code=="${err.code}")]`} currentIteration={currentIteration}>
               <article className={styles.epicItem} style={{ width: '100%' }}>
                 <h3 className={styles.criteriaTitle} style={{ fontSize: '15px' }}>
-                  <code className="text-primary opacity-70 font-mono text-[11px] bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20">{err.code}</code>
+                  <span className={styles.idBadge}>{err.code}</span>
                   <span className={`${styles.badge} ${styles['badge--primary']} ml-2`}>
                     {err.http_status}
                   </span>
@@ -424,7 +436,7 @@ const ModuleListRenderer: React.FC<{ data: any, nodeId?: string, currentIteratio
             <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.modules[?(@.module_id=="${mod.module_id}")]`} currentIteration={currentIteration}>
               <article className={styles.epicItem} style={{ width: '100%' }}>
               <h3 className={styles.epicHeader}>
-                <span className={styles.epicId}>[{mod.module_id}]</span>
+                <span className={styles.idBadge}>{mod.module_id}</span>
                 <span className={`${styles.epicTitle} ${styles.valueWrapper}`}>
                   {mod.module_name}
                 </span>
@@ -515,22 +527,15 @@ const EpicMappingRenderer: React.FC<{ data: any, nodeId?: string, currentIterati
             <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.mappings[?(@.epic_id=="${m.epic_id}")]`} currentIteration={currentIteration}>
             <div key={i} className={styles.minimalRelRow}>
               <div className={styles.relNames} style={{ minWidth: '380px' }}>
-                <span className={styles.epicId}>[{m.epic_id}]</span>
+                <span className={styles.idBadge} style={{ marginRight: '8px' }}>{m.epic_id}</span>
                 <span className={styles.textPrimary} style={{ fontWeight: 700 }}>{m.epic_name}</span>
                 <ChevronRight size={14} className={styles.opacity40} />
               </div>
               <div className={styles.relMeta}>
                 <div className="flex flex-wrap gap-3">
                   {m.mapped_modules?.map((mod: string, j: number) => (
-                    <span key={j} style={{ 
-                      fontSize: '13px',
-                      color: 'var(--primary)',
-                      fontWeight: 700,
-                      fontFamily: 'monospace',
-                      opacity: 0.8
-                    }}>
+                    <span key={j} className={styles.mappingBadge}>
                       {mod}
-                      {j < m.mapped_modules.length - 1 && <span style={{ marginLeft: '4px', opacity: 0.3 }}>,</span>}
                     </span>
                   ))}
                 </div>
@@ -568,10 +573,8 @@ const ModuleDepsRenderer: React.FC<{ data: any, nodeId?: string, currentIteratio
                 justifyContent: 'space-between',
                 width: '100%'
               }}>
-                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '16px' }}>
-                  <code className="text-primary opacity-70 font-mono text-[11px] bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20" style={{ whiteSpace: 'nowrap' }}>
-                    {dep.from_module}
-                  </code>
+                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '8px' }}>
+                  <span className={styles.idBadge}>{dep.from_module}</span>
                   <ChevronRight size={14} className="opacity-40" style={{ flexShrink: 0 }} />
                   <span className={styles.valueWrapper} style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>
                     {dep.to_module}
@@ -650,10 +653,14 @@ const ApiSpecRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?:
               <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.endpoints[?(@.path=="${ep.path}" && @.method=="${ep.method}")]`} currentIteration={currentIteration}>
                 <article className={styles.epicItem} style={{ width: '100%' }}>
                 <h3 className={styles.epicHeader}>
+                  {ep.api_id && <span className={styles.idBadge} style={{ marginRight: '8px' }}>{ep.api_id}</span>}
                   <span className={`${styles.methodBadge} ${styles['methodBadge--' + method]}`}>
                     {ep.method || 'GET'}
                   </span>
                   <span className={styles.path}>{ep.path || '/'}</span>
+                  {ep.mapped_func_id && (
+                    <span className={styles.mappingBadge} style={{ marginLeft: 'auto' }}>{ep.mapped_func_id}</span>
+                  )}
                 </h3>
                 <div className={styles.epicBody}>
                   {(ep.summary || ep.description) && (
@@ -742,7 +749,7 @@ const IaRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?: any 
                 <article className={styles.epicItem} style={{ width: '100%' }}>
                   <h3 className={styles.epicHeader}>
                     <span className={`${styles.epicTitle} ${styles.valueWrapper}`}>
-                      <span className={styles.textPrimary} style={{ marginRight: '8px' }}>{screen.screen_id}</span>
+                      {screen.screen_id && <span className={styles.idBadge} style={{ marginRight: '8px' }}>{screen.screen_id}</span>}
                       {screen.screen_name && screen.screen_name !== 'Screen details' ? screen.screen_name : ''}
                     </span>
                   </h3>
@@ -774,13 +781,13 @@ const IaRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?: any 
                                 <CheckCircle2 size={14} className={styles.checkIcon} />
                                 <div className="flex-1">
                                   <div className={styles.elementHeader}>
-                                    {el.element_id && <span className={styles.reqBadge}>{el.element_id}</span>}
+                                    {el.element_id && <span className={styles.idBadge}>{el.element_id}</span>}
                                     <span className={`${styles.typeBadge} ${styles[elType.toLowerCase()] || ''}`}>
                                       {elType}
                                     </span>
                                     <span className={styles.elementLabel}>{elLabel}</span>
                                     {el.mapped_func_id && (
-                                      <code className="opacity-40 text-[10px] font-mono bg-white/5 px-1 rounded ml-auto">#{el.mapped_func_id}</code>
+                                      <span className={styles.mappingBadge} style={{ marginLeft: 'auto' }}>{el.mapped_func_id}</span>
                                     )}
                                   </div>
                                   {(el.description || el.desc) && (
@@ -823,7 +830,7 @@ const IaRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?: any 
                   }}
                 >
                 <div className={styles.relNames} style={{ minWidth: '380px' }}>
-                  <span className={styles.epicId}>{item.screen_id}</span>
+                  <span className={styles.idBadge} style={{ marginRight: '8px' }}>{item.screen_id}</span>
                   <span className={styles.textPrimary} style={{ fontWeight: 700 }}>{item.title}</span>
                   <ChevronRight size={14} className={styles.opacity40} />
                 </div>

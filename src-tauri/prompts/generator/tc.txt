@@ -23,7 +23,8 @@
 - **구체적 명세**: "적절한 값" 대신 "test@example.com 입력" 등 명확하고 기계적인 지시어 사용.
 
 ### D. 추적성 및 의존성 매핑 (Traceability & Dependency Mapping)
-- **식별자 교차 검증**: 모든 TC에 `REQ-{NNN}` 및 `FUNC-{NNN}` 매핑 필수. 고아(Orphan) TC 생성 금지.
+- **식별자 생성**: 모든 테스트 케이스에 `TC-{NNN}` (예: `TC-001`) 형태의 고유 ID 부여 필수.
+- **식별자 교차 검증**: 모든 TC에 `mapped_req_id` (`REQ-XXX`), `mapped_func_id` (`FUNC-XXX`) 및 `mapped_api_id` (`API-XXX`) 매핑 필수. 고아(Orphan) TC 생성 금지.
 
 ## 3. 스키마 및 데이터 작성 규칙
 - **예상 결과의 공학적 명세**:
@@ -31,3 +32,25 @@
     - DB 상태 전이 (예: 레코드 1건 Insert 확인)
     - 명시적 에러 메시지 서술
 - **Setup/Teardown**: 테스트 전후 데이터 오염 방지를 위한 사전 조건(`pre_conditions`) 명시.
+
+[출력 형식 가이드]
+```json
+{
+  "test_cases": [
+    {
+      "tc_id": "TC-001",
+      "mapped_req_id": "REQ-001",
+      "mapped_func_id": "FUNC-001",
+      "mapped_api_id": "API-001",
+      "tc_type": "Positive",
+      "title": "사용자 회원가입 성공 테스트",
+      "pre_conditions": ["DB에 해당 이메일이 존재하지 않아야 함"],
+      "test_steps": ["이메일과 비밀번호 입력", "회원가입 버튼 클릭"],
+      "expected_result": "HTTP 201 Created 응답 및 DB users 테이블에 레코드 생성 확인"
+    }
+  ]
+}
+```
+
+반드시 마크다운 백틱(```json)이나 인사말 없이, 순수하고 유효한 JSON 객체 1개만 출력하십시오.
+인사말이나 부연 설명을 절대 붙이지 마십시오.

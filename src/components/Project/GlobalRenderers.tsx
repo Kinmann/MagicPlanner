@@ -227,6 +227,7 @@ export const EpicActorRenderer = ({ content, nodeId, currentIteration }: { conte
                 <span className={`${styles.actorName} ${styles.valueWrapper}`}>
                   <User size={16} className={styles.icon} />
                   {role.role_name}
+                  {role.role_id}
                 </span>
                 <span className={`${styles.actorDesc} ${styles.valueWrapper}`}>{role.description}</span>
               </li>
@@ -247,7 +248,7 @@ export const EpicActorRenderer = ({ content, nodeId, currentIteration }: { conte
             <CommentableRow key={idx} nodeId={nodeId || ''} jsonPath={`$.core_epics[?(@.epic_id=='${epic.epic_id}')]`} currentIteration={currentIteration}>
               <article className={styles.epicItem}>
                 <h3 className={styles.epicHeader}>
-                  <span className={styles.epicId}>[{epic.epic_id}]</span>
+                  <span className={styles.idBadge}>{epic.epic_id}</span>
                   <span className={`${styles.epicTitle} ${styles.valueWrapper}`}>{epic.title}</span>
                 </h3>
                 
@@ -326,7 +327,8 @@ export const ArchitectureSchemaRenderer = ({ content, nodeId, currentIteration }
                     <div style={{ marginBottom: '1.5rem' }}>
                       <h4 className={styles.criteriaTitle}>
                         {role.permissions_level === 'ADMIN' ? <ShieldCheck size={14} className={styles.opacity50} /> : <User size={14} className={styles.opacity50} />}
-                        <span className={styles.valueWrapper}>{role.role_name}</span> <span style={{ opacity: 0.3, fontSize: '10px', marginLeft: '4px' }}>[{role.role_id}]</span>
+                        <span className={styles.valueWrapper}>{role.role_name}</span> 
+                        <span className={styles.idBadge} style={{ marginLeft: '8px' }}>{role.role_id}</span>
                       </h4>
                       <p className={`${styles.epicDesc} ${styles.valueWrapper}`} style={{ marginTop: '0.4rem' }}>
                         Permission Level: <span className="text-primary font-bold">{role.permissions_level}</span>
@@ -481,7 +483,12 @@ export const ModulePrdRenderer = ({ content, nodeId, currentIteration }: { conte
               <CommentableRow key={idx} nodeId={nodeId || ''} jsonPath={`$.core_features[?(@.feature_name=='${feature.feature_name}')]`} currentIteration={currentIteration}>
                 <article className={styles.epicItem}>
                   <h3 className={styles.epicHeader}>
-                    <span className={styles.epicId}>{feature.mapped_epic_id || `F-${idx+1}`} / {feature.req_id || 'REQ'}</span>
+                    <div className="flex items-center gap-2">
+                      <span className={styles.idBadge}>{feature.req_id}</span>
+                      {feature.mapped_epic_id && (
+                        <span className={styles.mappingBadge}>{feature.mapped_epic_id}</span>
+                      )}
+                    </div>
                     <span className={`${styles.epicTitle} ${styles.valueWrapper}`}>{feature.feature_name}</span>
                     <span className={styles.priorityBadge}>{feature.priority}</span>
                   </h3>
@@ -567,7 +574,7 @@ export const ModuleFsdRenderer = ({ content, nodeId, currentIteration }: { conte
             <CommentableRow key={idx} nodeId={nodeId || ''} jsonPath={`$.features[?(@.func_id=='${feature.func_id}')]`} currentIteration={currentIteration}>
               <article className={styles.epicItem} style={{ width: '100%' }}>
                 <h3 className={styles.epicHeader}>
-                  <span className={styles.epicId}>[{feature.func_id || `F-${idx+1}`}]</span>
+                  <span className={styles.idBadge}>{feature.func_id}</span>
                   <span className={`${styles.epicTitle} ${styles.valueWrapper}`}>
                     {feature.summary || feature.feature_name}
                   </span>
@@ -576,7 +583,7 @@ export const ModuleFsdRenderer = ({ content, nodeId, currentIteration }: { conte
                 <div className={styles.epicBody}>
                   <p className={`${styles.epicDesc} ${styles.valueWrapper}`}>
                     {feature.mapped_req_id && (
-                      <span className={styles.reqBadge}>
+                      <span className={styles.mappingBadge} style={{ marginRight: '8px' }}>
                         {feature.mapped_req_id}
                       </span>
                     )}
@@ -817,7 +824,7 @@ export const PrdBentoRenderer = ({ content, isIntegrated = false, stage, nodeId,
                   </div>
                   <div>
                     <h3 className={`font-bold text-sm ${styles.valueWrapper}`}>{epic.title}</h3>
-                    <span className="text-[10px] font-mono opacity-40">{epic.epic_id}</span>
+                    <span className={styles.idBadge}>{epic.epic_id}</span>
                   </div>
                 </div>
                 <p className={`text-xs opacity-60 line-clamp-3 leading-relaxed ${styles.valueWrapper}`}>{epic.description}</p>
@@ -848,7 +855,7 @@ export const ModuleUserFlowRenderer = ({ content, nodeId, currentIteration }: { 
             <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.nodes[?(@.id=='${node.id}')]`} currentIteration={currentIteration}>
               <article className={styles.epicItem}>
                  <h3 className={styles.criteriaTitle} style={{ fontSize: '15px' }}>
-                   <span className={styles.epicId}>[{node.id}]</span>
+                   <span className={styles.idBadge} style={{ marginRight: '8px' }}>{node.id}</span>
                     <span className={styles.valueWrapper}>{node.label}</span>
                    <span className={`${styles.badge} ${styles['badge--primary']} ml-2`}>
                      {node.node_type}
@@ -892,7 +899,7 @@ export const ModuleUserFlowRenderer = ({ content, nodeId, currentIteration }: { 
                             </h4>
                             <div className="flex flex-wrap gap-2 mt-2">
                               {node.mapped_func_ids.map((func: string, j: number) => (
-                                <span key={j} className={`${styles.badge} ${styles['badge--primary']} text-[10px]`}>
+                                <span key={j} className={styles.mappingBadge}>
                                   {func}
                                 </span>
                               ))}
@@ -921,7 +928,7 @@ export const ModuleUserFlowRenderer = ({ content, nodeId, currentIteration }: { 
               <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.nodes[?(@.id=='${node.id}')]`} currentIteration={currentIteration}>
                 <div className={styles.minimalRelRow}>
                   <div className={styles.relNames} style={{ minWidth: '380px' }}>
-                    <span className={styles.epicId}>[{node.id}]</span>
+                    <span className={styles.idBadge} style={{ marginRight: '8px' }}>{node.id}</span>
                     <div className="flex flex-col">
                       <span className={styles.textPrimary} style={{ fontWeight: 700 }}>{node.label}</span>
                       <span style={{ fontSize: '10px', opacity: 0.5 }}>{node.actor} • {node.node_type}</span>
@@ -980,6 +987,8 @@ export const ModuleErdRenderer = ({ content, nodeId, currentIteration }: { conte
   // Normalize tables and columns
   const entities = (content.tables || []).map((t: any) => ({
     entity_name: t.table_name || t.name,
+    table_id: t.table_id,
+    mapped_func_ids: t.mapped_func_ids || [],
     description: t.description || '',
     attributes: (t.columns || []).map((c: any) => ({
       name: c.name,
@@ -1011,6 +1020,7 @@ export const ModuleErdRenderer = ({ content, nodeId, currentIteration }: { conte
               <article className={styles.epicItem}>
                 <h3 className={styles.erdEntityTitle}>
                   <Layers size={22} className="text-primary opacity-50" />
+                  {ent.table_id && <span className={styles.idBadge} style={{ marginRight: '8px' }}>{ent.table_id}</span>}
                   <span className={styles.valueWrapper}>{ent.entity_name}</span>
                 </h3>
                 <div className={styles.erdEntityBody}>
@@ -1018,6 +1028,14 @@ export const ModuleErdRenderer = ({ content, nodeId, currentIteration }: { conte
                     <CommentableRow nodeId={nodeId || ''} jsonPath={`$.tables[?(@.table_name=='${ent.entity_name}')].description`} currentIteration={currentIteration}>
                       <p className={styles.epicDesc}>{ent.description}</p>
                     </CommentableRow>
+                  )}
+                  
+                  {ent.mapped_func_ids && ent.mapped_func_ids.length > 0 && (
+                    <div className={styles.epicTags} style={{ marginTop: '8px', paddingLeft: '28px' }}>
+                      {ent.mapped_func_ids.map((fid: string) => (
+                        <span key={fid} className={styles.mappingBadge}>{fid}</span>
+                      ))}
+                    </div>
                   )}
                   
                   {ent.attributes && ent.attributes.length > 0 && (

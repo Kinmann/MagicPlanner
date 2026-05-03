@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import os from 'node:os';
 
-const dbPath = path.join(os.homedir(), 'AppData', 'Roaming', 'com.gamedex02.tmp-app', 'magic_planner.db');
+const dbPath = path.join(os.homedir(), 'AppData', 'Roaming', 'com.gamedex02.magicplanner', 'magic_planner.db');
 console.log('Opening DB at:', dbPath);
 
 const db = new DatabaseSync(dbPath);

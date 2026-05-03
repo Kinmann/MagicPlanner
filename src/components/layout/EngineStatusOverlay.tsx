@@ -1,6 +1,7 @@
 import React from "react";
 import { Activity, Layers } from "lucide-react";
 import { useEngineStore } from "../../store/engineStore";
+import { useRefinementStore } from "../../store/refinementStore";
 import styles from "./EngineStatusOverlay.module.scss";
 
 const NODE_TYPE_LABELS: Record<string, string> = {
@@ -25,8 +26,9 @@ const NODE_TYPE_LABELS: Record<string, string> = {
 
 const EngineStatusOverlay: React.FC = () => {
   const runningNodes = useEngineStore(state => state.runningNodes);
+  const { mode } = useRefinementStore();
 
-  if (runningNodes.length === 0) return null;
+  if (runningNodes.length === 0 || mode === 'REFINEMENT') return null;
 
   return (
     <div className={styles.overlay}>

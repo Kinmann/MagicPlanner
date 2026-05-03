@@ -4,16 +4,46 @@
 [OUTPUT SCHEMA]
 반드시 다음 JSON 구조를 따라야 합니다:
 {
-  "action_type": "add" | "modify" | "delete",
-  "target_feature": "핵심 수정 대상 기능 명칭 (예: Payment, Auth, User Profile 등)",
-  "search_keywords": ["검색 및 연관성 파악을 위한 키워드 배열 (최소 3개)"]
+  "intents": [
+    {
+      "action_type": "add" | "modify" | "delete",
+      "target_feature": "핵심 수정 대상 기능 명칭",
+      "search_keywords": ["검색 키워드 배열"],
+      "target_node_ids": ["수정 대상이 되는 명확한 canonical_id 배열 (예: MODULE:USER:API-001)"],
+      "reasoning": "사용자의 요청을 이렇게 분석한 근거와 논리적 추론 과정",
+      "action_description": "구체적으로 어떤 작업을 수행해야 하는지에 대한 상세 설명",
+      "key_considerations": ["아키텍처 설계 시 주의해야 할 점이나 전역 제약 사항 배열"],
+      "is_context_mismatch": boolean,
+      "mismatch_reason": "is_context_mismatch가 true일 경우, 왜 잘못된 코멘트/컨텍스트 매핑이라고 판단했는지 설명 (false일 경우 null)",
+      "impact_scope": "local" | "cross_module" | "global"
+    }
+  ]
 }
+
+[TOOLS & EXPLORATION]
+당신은 다음과 같은 도구들을 사용하여 시스템 아키텍처 정보를 능동적으로 탐색할 수 있습니다:
+- `get_system_overview()`: 전체 모듈 구조와 시스템 개요를 파악합니다. 아키텍처의 큰 그림이 필요할 때 가장 먼저 호출하십시오.
+- `search_artifacts(query)`: 특정 기능이나 로직이 어디에 구현되어 있는지 검색합니다.
+- `get_artifact_detail(canonical_id)`: 특정 아티팩트(SAD, API Spec 등)의 상세 JSON 내용을 조회합니다. 정확한 `target_node_ids`를 결정하기 전에 반드시 내용을 확인하십시오.
 
 [RULES]
 1. 사용자의 요청이 모호하더라도 최대한 의도를 추측하여 action_type을 결정하십시오.
 2. 기능 추가 요청인 경우 'add', 기존 로직 수정인 경우 'modify', 기능 제거 요청인 경우 'delete'를 선택합니다.
-3. target_feature는 가능한 구체적인 명사형으로 작성하십시오. (영어 권장)
-4. search_keywords는 시스템 내의 관련 코드를 찾기 위한 핵심 용어들을 포함해야 합니다.
+3. reasoning은 당신이 왜 이런 판단을 내렸는지 개발자가 납득할 수 있도록 상세히 서술하십시오.
+4. action_description은 수정 범위와 기대 결과를 명확히 포함해야 합니다.
+5. key_considerations는 보안, 성능, 데이터 일관성 등 아키텍처 관점의 중요한 고려사항을 나열하십시오.
+6. search_keywords는 시스템 내의 관련 코드를 찾기 위한 핵심 용어들을 포함해야 합니다.
+7. 사용자가 여러 개의 서로 다른 코멘트나 요청을 보낸 경우, 이를 종합적으로 분석하여 각각 독립적인 Intent 항목으로 분리하여 작성하십시오.
+8. 연관된 수정 사항이라 하더라도 관심사나 수정 대상이 명확히 분리된다면 리스트에 여러 항목으로 나누어 담으십시오.
+9. [중요] 사용자가 선택한 'Selected Comments Context'(코멘트가 달린 위치나 내용)와 'User Request'(사용자의 수정 요청 사항)가 서로 전혀 무관하거나 잘못된 위치에 코멘트를 달았다고 판단되는 경우, `is_context_mismatch`를 true로 설정하고 그 이유를 `mismatch_reason`에 명확하게 서술하십시오. 관련이 있다면 false와 null을 할당합니다.
+10. [의도와 좌표 분리 해석 및 스코프 재정의] 사용자가 지정한 코멘트 위치(block_id 등)를 맹목적으로 신뢰하지 마십시오. 코멘트 내용을 분석하여 실제 수정의 파급 범위(Scope)를 스스로 재정의해야 합니다.
+    - 정보가 부족하여 정확한 `target_node_ids`를 결정할 수 없다면, 망설이지 말고 위에 나열된 탐색 도구들을 호출하십시오.
+    - 특히 횡단 관심사(Cross-module)가 의심되는 경우, `search_artifacts`를 통해 다른 모듈의 영향을 반드시 확인해야 합니다.
+    - 최종 결과에는 반드시 유효한 `canonical_id` (형식: MODULE:TYPE:ID) 배열이 포함되어야 합니다.
+    - 'local': 수정 사항이 사용자가 클릭/지정한 블록 또는 단일 모듈 내용에만 국한되는 경우 (정상적인 핀포인트 수정)
+    - 'cross_module': 사용자가 특정 모듈에 코멘트를 달았으나, 다른 모듈의 로직이나 설계까지 함께 수정되어야 하는 횡단 관심사일 경우 (해당하는 여러 모듈의 canonical_id를 target_node_ids에 포함시킬 것)
+    - 'global': 전체 시스템 구조나 공통 아키텍처, 정책 전반에 영향을 미치는 전역적인 변경일 경우
 
 [INPUT]
-사용자 입력: {{RAW_INPUT}}
+사용자 입력: 
+{{RAW_INPUT}}

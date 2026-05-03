@@ -11,8 +11,8 @@ import Spinner from '../components/ui/Spinner';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
-import IncrementUpdateModal from '../components/Project/IncrementUpdateModal';
 import { useUIStore } from '../store/uiStore';
+import { useRefinementStore } from '../store/refinementStore';
 import styles from './PromptView.module.scss';
 
 interface PromptViewProps {
@@ -20,7 +20,8 @@ interface PromptViewProps {
 }
 
 const PromptView: React.FC<PromptViewProps> = ({ projectId }) => {
-  const { setViewingPromptProject } = useUIStore();
+  const { setViewingPromptProject, toggleRightPanel } = useUIStore();
+  const { setMode } = useRefinementStore();
   const onBack = () => setViewingPromptProject(null);
   
   const [project, setProject] = useState<Project | null>(null);
@@ -34,7 +35,6 @@ const PromptView: React.FC<PromptViewProps> = ({ projectId }) => {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
   const [apiKey, setApiKey] = useState<string>("");
-  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -234,7 +234,13 @@ const PromptView: React.FC<PromptViewProps> = ({ projectId }) => {
               {indexing ? <RefreshCw className="spin" size={14} /> : <Database size={14} />}
               {project.needs_indexing ? 'Index Context' : 'Context Up-to-date'}
             </button>
-            <button className={styles.refineBtn} onClick={() => setIsUpdateModalOpen(true)}>
+            <button 
+              className={styles.refineBtn} 
+              onClick={() => {
+                setMode('REFINEMENT');
+                toggleRightPanel(true);
+              }}
+            >
               <Sparkles size={14} /> Refine Architecture
             </button>
             <button className={styles.deleteBtn} onClick={handleDeleteProject}>
@@ -244,11 +250,6 @@ const PromptView: React.FC<PromptViewProps> = ({ projectId }) => {
         </aside>
       </div>
 
-      <IncrementUpdateModal
-        isOpen={isUpdateModalOpen}
-        onClose={() => setIsUpdateModalOpen(false)}
-        projectId={projectId}
-      />
     </div>
   );
 };

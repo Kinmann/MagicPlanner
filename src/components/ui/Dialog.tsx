@@ -10,7 +10,7 @@ export interface DialogProps {
   subtitle?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
   headerClass?: string;
   customHeader?: React.ReactNode;
 }
@@ -42,7 +42,7 @@ export const Dialog: React.FC<DialogProps> = ({
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className={`${styles.content} ${styles[size]}`}
+              className={`${styles.content} ${size === '2xl' ? styles.xxl : styles[size]}`}
             >
               {customHeader ? (
                 <header className={`${styles.header} ${headerClass}`}>

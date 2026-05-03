@@ -22,7 +22,7 @@ import { Dialog } from '../ui/Dialog';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import IncrementUpdateModal from '../Project/IncrementUpdateModal';
+import { useRefinementStore } from '../../store/refinementStore';
 import styles from './ProjectInfoModal.module.scss';
 
 export const ProjectInfoModal: React.FC = () => {
@@ -44,7 +44,9 @@ export const ProjectInfoModal: React.FC = () => {
   const [nodes, setNodes] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false); // Legacy - keeping for state if needed briefly
+  const { setMode } = useRefinementStore();
+  const { toggleRightPanel } = useUIStore();
 
   // Initialize selected project when modal opens
   useEffect(() => {
@@ -123,7 +125,7 @@ export const ProjectInfoModal: React.FC = () => {
       isOpen={isProjectInfoOpen} 
       onClose={() => toggleProjectInfo(false)}
       title="Project Information"
-      size="xl"
+      size="2xl"
     >
       <div className={styles.container}>
         <div className={styles.mainLayout}>
@@ -157,8 +159,8 @@ export const ProjectInfoModal: React.FC = () => {
             </div>
             <div className={styles.promptViewer}>
               {loading ? (
-                <div className={styles.viewerPlaceholder}>
-                  <RefreshCw size={24} className="animate-spin opacity-20" />
+                <div className={styles.loadingWrapper}>
+                  <RefreshCw size={24} className={styles.spinner} />
                 </div>
               ) : selectedProject ? (
                 <div className={styles.markdownBody}>
@@ -168,7 +170,7 @@ export const ProjectInfoModal: React.FC = () => {
                 </div>
               ) : (
                 <div className={styles.viewerPlaceholder}>
-                  <Info size={24} className="opacity-20 mb-2" />
+                  <Info size={24} className={styles.placeholderIcon} />
                   <p>프로젝트를 선택하세요.</p>
                 </div>
               )}
@@ -229,7 +231,14 @@ export const ProjectInfoModal: React.FC = () => {
                     <span>{selectedProject.needs_indexing ? 'Index Context' : 'Context Indexed'}</span>
                   </button>
                   
-                  <button className={styles.actionBtn} onClick={() => setIsUpdateModalOpen(true)}>
+                   <button 
+                    className={styles.actionBtn} 
+                    onClick={() => {
+                      setMode('REFINEMENT');
+                      toggleRightPanel(true);
+                      toggleProjectInfo(false);
+                    }}
+                  >
                     <Sparkles size={14} />
                     <span>Refine Architecture</span>
                   </button>
@@ -244,7 +253,7 @@ export const ProjectInfoModal: React.FC = () => {
               </div>
             ) : (
               <div className={styles.metaPlaceholder}>
-                <ShieldCheck size={48} className="opacity-10 mb-4" />
+                <ShieldCheck size={48} className={styles.placeholderIconLarge} />
                 <p>Select a project to manage</p>
               </div>
             )}
@@ -252,11 +261,6 @@ export const ProjectInfoModal: React.FC = () => {
         </div>
       </div>
 
-      <IncrementUpdateModal
-        isOpen={isUpdateModalOpen}
-        onClose={() => setIsUpdateModalOpen(false)}
-        projectId={selectedProject?.project_id}
-      />
     </Dialog>
   );
 };

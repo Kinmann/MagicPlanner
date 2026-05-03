@@ -333,6 +333,29 @@
     cursor: not-allowed;
     box-shadow: none;
   }
+
+  &[data-state='STALE'] {
+    background-color: rgba(245, 158, 11, 0.05);
+    border-color: rgba(245, 158, 11, 0.3);
+    color: #f59e0b;
+    
+    &:hover:not(:disabled) {
+      background-color: rgba(245, 158, 11, 0.1);
+      border-color: #f59e0b;
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.2);
+    }
+  }
+
+  &[data-state='REFINING'] {
+    background-color: rgba(139, 92, 246, 0.05);
+    border-color: rgba(139, 92, 246, 0.3);
+    color: #8b5cf6;
+    
+    &:hover:not(:disabled) {
+      background-color: rgba(139, 92, 246, 0.1);
+      border-color: #8b5cf6;
+    }
+  }
 }
 
 .stopBtn {

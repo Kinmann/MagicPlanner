@@ -12,7 +12,9 @@ import {
   Lock,
   Sparkles,
   Square,
-  Layers
+  Layers,
+  Zap,
+  Loader2
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -329,16 +331,16 @@ export const EditorPanel: React.FC = () => {
       );
     }
 
-    const isRunning = selectedNode.node_state === 'IN_PROGRESS' || selectedNode.is_active;
+    const isRunning = selectedNode.node_state === 'IN_PROGRESS' || selectedNode.node_state === 'REFINING' || selectedNode.is_active;
     const hasPassedIter = iterations.some(it => it.is_pass);
-    const isCompleted = selectedNode.node_state === 'COMPLETED';
+    const isCompleted = selectedNode.node_state === 'COMPLETED' || selectedNode.node_state === 'STALE';
 
     const runningNode = runningNodes.find(n => n.nodeId === selectedNode.node_id);
     const isStopping = !!runningNode?.lastAction?.includes('종료 중');
 
     const isMaxReached = selectedNode.current_iteration >= selectedNode.max_iterations;
     const isDagLocked = selectedNode.is_locked;
-    const isExecutionDisabled = isEmbedding || isRunning || loading || isDagLocked || isStopping || (!isCompleted && isMaxReached);
+    const isExecutionDisabled = isEmbedding || isRunning || loading || (isDagLocked && selectedNode.node_state !== 'STALE') || isStopping || (!isCompleted && isMaxReached && selectedNode.node_state !== 'STALE');
 
     return (
       <div className={styles.headerRow}>
@@ -399,8 +401,13 @@ export const EditorPanel: React.FC = () => {
                     // isProcessing(글로벌 잠금)을 제거하여 병렬 노드 실행 허용
                     // DAG 의존성 및 최대 반복 횟수 도달 시 처리
                     disabled={isExecutionDisabled}
+                    data-state={selectedNode.node_state}
                   >
-                    {isDagLocked ? (
+                    {selectedNode.node_state === 'REFINING' ? (
+                      <Loader2 size={16} className="animate-spin text-primary" />
+                    ) : selectedNode.node_state === 'STALE' ? (
+                      <Zap size={16} className="text-amber-400 fill-amber-400" />
+                    ) : isDagLocked ? (
                       <Lock size={16} />
                     ) : isRunning ? (
                       <RotateCcw size={16} className="animate-spin" />
@@ -409,7 +416,13 @@ export const EditorPanel: React.FC = () => {
                     ) : (
                       <Play size={16} fill="currentColor" />
                     )}
-                    <span>{isDagLocked ? 'Locked' : (isRunning ? 'Running' : (isCompleted ? 'Regenerate' : 'Start'))}</span>
+                    <span>
+                      {selectedNode.node_state === 'REFINING' ? 'Refining...' :
+                       selectedNode.node_state === 'STALE' ? 'Update' :
+                       isDagLocked ? 'Locked' : 
+                       isRunning ? 'Running' : 
+                       isCompleted ? 'Regenerate' : 'Start'}
+                    </span>
                   </button>
 
                   {isRunning && (

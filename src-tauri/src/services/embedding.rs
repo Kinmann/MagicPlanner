@@ -1,5 +1,7 @@
 use reqwest::Client;
 use sqlx::{SqlitePool, Row};
+use regex::Regex;
+use std::collections::HashSet;
 // ============================================================
 // RAG Utilities
 // ============================================================
@@ -474,6 +476,31 @@ pub async fn get_rag_context(
     Ok(context)
 }
 
+pub fn extract_artifact_ids(json_str: &str) -> HashSet<String> {
+    // 패턴: 계층적 구조(module:type:id) 또는 단순 ID(ID-001) 지원
+    static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let re = RE.get_or_init(|| Regex::new(r"(?i)\b(?:[A-Z0-9_]+:[A-Z0-9_]+:)?[A-Z]{2,}-\w+\b").unwrap());
+    re.find_iter(json_str)
+        .map(|m| m.as_str().to_uppercase())
+        .collect()
+}
+
+/// 노드 컨텍스트(모듈, 타입)를 바탕으로 단순 ID를 Canonical ID로 변환하여 추출 (대문자 정규화)
+pub fn extract_canonical_ids(json_str: &str, module_id: &str, node_type: &str) -> HashSet<String> {
+    let raw_ids = extract_artifact_ids(json_str);
+    let mid_up = module_id.to_uppercase();
+    let type_up = node_type.to_uppercase();
+
+    raw_ids.into_iter().map(|id| {
+        if id.contains(':') {
+            id.to_uppercase() // 이미 계층적 포맷인 경우 대문자로 정규화
+        } else {
+            // 단순 ID인 경우 현재 컨텍스트 결합 후 대문자화
+            format!("{}:{}:{}", mid_up, type_up, id.to_uppercase())
+        }
+    }).collect()
+}
+
 pub async fn check_node_intersection(
     pool: &SqlitePool,
     client: &Client,
@@ -482,13 +509,42 @@ pub async fn check_node_intersection(
     node_id: &str,
     query_text: &str,
 ) -> Result<f64, String> {
-    // 1. 의도(Intent) 벡터화
+    // 1. 아티팩트 코드 기반 연관도 체크 (1순위)
+    let query_codes = extract_artifact_ids(query_text);
+    
+    // 노드 데이터 로드 (코드 추출을 위해)
+    let node_data: Option<String> = sqlx::query_scalar(
+        "SELECT gi.generated_draft_json FROM generation_iteration gi \
+         JOIN document_node dn ON dn.node_id = gi.node_id \
+         WHERE dn.node_id = ? AND dn.project_id = ? AND gi.is_pass = 1 LIMIT 1"
+    )
+    .bind(node_id)
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if let Some(json_str) = node_data {
+        let node_codes = extract_artifact_ids(&json_str);
+        let intersection: Vec<_> = query_codes.intersection(&node_codes).collect();
+        
+        if !intersection.is_empty() {
+            // 코드가 하나라도 일치하면 100% 연관된 것으로 간주 (조기 반환)
+            println!(">>> [Artifact-Match] Node: {}, Matches: {:?}", node_id, intersection);
+            return Ok(1.0);
+        }
+    }
+
+    // 2. 연관된 코드가 없는 경우에만 임베딩 유사도 체크 (2순위 Fallback)
+    println!(">>> [Embedding-Fallback] Starting for node: {}", node_id);
+    
+    // 의도(Intent) 벡터화
     let query_vector = call_gemini_embedding(client, api_key, query_text, "RETRIEVAL_QUERY").await
         .map_err(|e| format!("Intersection query embedding error: {}", e))?;
     let query_json = serde_json::to_string(&query_vector).unwrap_or_default();
 
-    // 2. 해당 노드에 속한 조각들 중 가장 높은 유사도 검색
-    let row = sqlx::query(
+    // 해당 노드에 속한 조각들 중 가장 높은 유사도 검색
+    let embedding_row = sqlx::query(
         "SELECT v.distance 
          FROM document_embeddings v
          JOIN embedding_metadata m ON v.rowid = m.rowid
@@ -502,13 +558,15 @@ pub async fn check_node_intersection(
     .await
     .map_err(|e| format!("Intersection search error: {}", e))?;
 
-    if let Some(r) = row {
+    let embedding_similarity = if let Some(r) = embedding_row {
         let dist: f64 = r.get(0);
-        let similarity = 1.0 - dist;
-        println!(">>> [RAG-Intersection] Node: {}, Similarity: {:.4}", node_id, similarity);
-        Ok(similarity)
+        1.0 - dist
     } else {
-        println!(">>> [RAG-Intersection] Node: {}, No embeddings found", node_id);
-        Ok(0.0)
-    }
+        0.0
+    };
+
+    println!(">>> [RAG-Intersection] Node: {}, EmbedSim: {:.4}", 
+        node_id, embedding_similarity);
+
+    Ok(embedding_similarity)
 }

@@ -37,10 +37,11 @@
 }
 
 // Sizes
-.sm { max-width: 400px; }
-.md { max-width: 600px; }
-.lg { max-width: 800px; }
-.xl { max-width: 1000px; }
+.sm { width: 400px; max-width: 95vw; }
+.md { width: 600px; max-width: 95vw; }
+.lg { width: 800px; max-width: 95vw; }
+.xl { width: 1000px; max-width: 95vw; }
+.xxl { width: 1200px; max-width: 95vw; }
 
 .header {
   padding: 20px 24px;

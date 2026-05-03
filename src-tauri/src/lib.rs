@@ -304,9 +304,11 @@ pub fn run() {
             commands::refinement::retry_patch_loop,
             // v2: Comment 커맨드
             commands::comment::get_node_comments,
+            commands::comment::get_project_comments,
             commands::comment::create_comment,
             commands::comment::update_comment,
             commands::comment::delete_comment,
+            commands::refinement::migrate_canonical_ids_command,
         ])
         .plugin(tauri_plugin_dialog::init())
         .run(tauri::generate_context!())

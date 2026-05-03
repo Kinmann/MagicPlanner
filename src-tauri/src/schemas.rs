@@ -800,11 +800,34 @@ pub enum ActionType {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
 #[serde(rename_all = "snake_case")]
-pub struct IntentSchema {
+pub enum ImpactScope {
+    Local,
+    CrossModule,
+    Global,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct IntentItem {
     pub action_type: ActionType,
     pub target_feature: String,
     pub search_keywords: Vec<String>,
+    pub target_node_ids: Vec<String>,
+    // Diagnostic Metadata (For UI display, filtered out in downstream prompts)
+    pub reasoning: String,
+    pub action_description: String,
+    pub key_considerations: Vec<String>,
+    pub is_context_mismatch: bool,
+    pub mismatch_reason: Option<String>,
+    pub impact_scope: ImpactScope,
 }
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct IntentSchema {
+    pub intents: Vec<IntentItem>,
+}
+
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]

@@ -83,7 +83,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId }) => {
         {/* 1. Sidebar */}
         {isSidebarOpen && (
           <>
-            <Panel id="sidebar" defaultSize={`${sidebarWidth}%`} minSize="15%" maxSize="35%">
+            <Panel id="sidebar" defaultSize={`${sidebarWidth}%`} minSize="15%" maxSize="60%">
               <SidebarTree />
             </Panel>
             <ResizeHandle />
@@ -91,7 +91,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId }) => {
         )}
         
         {/* 2. Center Area (Editor / Log) */}
-        <Panel id="center" minSize="40%">
+        <Panel id="center" minSize="20%">
           <PanelGroup 
             orientation="vertical"
             onLayoutChange={(layout: any) => {
@@ -106,14 +106,14 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId }) => {
               }
             }}
           >
-            <Panel id="editor" defaultSize={`${100 - logPanelHeight}%`} minSize="50%">
+            <Panel id="editor" defaultSize={`${100 - logPanelHeight}%`} minSize="20%">
               <EditorPanel />
             </Panel>
 
             <ResizeHandle direction="vertical" />
 
             {/* Bottom System Log */}
-            <Panel id="log" defaultSize={`${logPanelHeight}%`} minSize="10%" maxSize="40%">
+            <Panel id="log" defaultSize={`${logPanelHeight}%`} minSize="10%" maxSize="80%">
               <SystemLog />
             </Panel>
           </PanelGroup>
@@ -123,7 +123,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ projectId }) => {
         {isRightPanelOpen && (
           <>
             <ResizeHandle />
-            <Panel id="meta" defaultSize={`${metaPanelWidth}%`} minSize="15%" maxSize="30%">
+            <Panel id="meta" defaultSize={`${metaPanelWidth}%`} minSize="15%" maxSize="60%">
               <RightPanel />
             </Panel>
           </>

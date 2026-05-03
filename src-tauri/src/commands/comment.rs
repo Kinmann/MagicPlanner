@@ -120,3 +120,42 @@ pub async fn delete_comment(
     
     Ok(())
 }
+
+#[derive(serde::Serialize, sqlx::FromRow)]
+pub struct EnrichedComment {
+    pub comment_id: String,
+    pub node_id: String,
+    pub json_path: String,
+    pub comment_text: String,
+    pub node_type: String,
+    pub node_category: String,
+    pub module_name: Option<String>,
+    pub created_at: String,
+}
+
+#[tauri::command]
+pub async fn get_project_comments(
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+    project_id: String
+) -> Result<Vec<EnrichedComment>, String> {
+    sqlx::query_as::<_, EnrichedComment>(
+        "SELECT 
+            c.comment_id, 
+            c.node_id, 
+            c.json_path, 
+            c.comment_text, 
+            n.target_node_type as node_type,
+            n.node_category,
+            m.module_name,
+            c.created_at
+         FROM node_comment c
+         JOIN document_node n ON c.node_id = n.node_id
+         LEFT JOIN local_module m ON n.module_id = m.module_id
+         WHERE c.project_id = ? AND c.is_deleted = 0
+         ORDER BY c.created_at DESC"
+    )
+    .bind(project_id)
+    .fetch_all(&*pool)
+    .await
+    .map_err(|e| e.to_string())
+}

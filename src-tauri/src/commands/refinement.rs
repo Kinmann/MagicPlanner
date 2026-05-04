@@ -618,7 +618,10 @@ pub async fn apply_taint_cascade(
         let node_state: String = sqlx::query_scalar("SELECT node_state FROM document_node WHERE node_id = ?")
             .bind(&node_id).fetch_one(&*pool).await.map_err(|e| e.to_string())?;
         if node_state == "COMPLETED" { stale_count += 1; }
-        else { impact_count += 1; }
+        
+        // 블록 ID와 경로의 총합을 영향받은 블록 수로 계산
+        impact_count += (impact.block_ids.len() + impact.block_paths.len()) as i32;
+        
         final_impacts.push(impact);
     }
 

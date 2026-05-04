@@ -441,7 +441,7 @@ const CascadeAnalysisMessage = ({ data }: any) => {
               </p>
               <p className="text-xs">
                 <span className="text-gray-500">• </span>
-                <strong className="text-amber-500">Impacted Pending Nodes</strong>: {data.impact_count}
+                <strong className="text-amber-500">Impacted Blocks</strong>: {data.impact_count}
               </p>
             </div>
             <p className={styles.chatDesc} style={{ opacity: 0.6, fontStyle: 'italic', marginTop: '8px' }}>

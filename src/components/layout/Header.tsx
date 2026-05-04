@@ -1,6 +1,5 @@
 import React from 'react';
 import { 
-  Box, 
   Minus, 
   Square, 
   X, 
@@ -33,7 +32,7 @@ export const Header: React.FC = () => {
       <div className={styles.leftSection} data-tauri-drag-region>
         {currentView !== 'DASHBOARD' && (
           <div className={styles.logoWrapper} data-tauri-drag-region>
-            <Box size={14} className="text-[#10b981]" />
+            <img src="/logo.png" alt="Logo" className={styles.logoImage} data-tauri-drag-region />
             <span className={styles.logoText} data-tauri-drag-region>
               {currentProject?.project_name || 'Magic Planner Hub'}
             </span>

@@ -95,6 +95,9 @@ export const useEngineStore = create<EngineState>((set, get) => ({
 
     // 2. 파이프라인 상세 상태 메시지 처리
     const unlistenStatus = await safeListen<any>('pipeline-status', (event) => {
+      // is_silent 플래그가 있는 경우 글로벌 액션 상태 업데이트에서 제외
+      if (event.payload.is_silent) return;
+
       const status = normalizePipelineStatus(event.payload);
       if (!status) return;
 

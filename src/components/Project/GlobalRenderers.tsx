@@ -222,7 +222,7 @@ export const EpicActorRenderer = ({ content, nodeId, currentIteration }: { conte
         </h2>
         <ul className={styles.actorList}>
           {roles.map((role: any, idx: number) => (
-            <CommentableRow key={idx} nodeId={nodeId || ''} jsonPath={`$.user_roles[${idx}]`} currentIteration={currentIteration}>
+            <CommentableRow key={idx} nodeId={nodeId || ''} jsonPath={`$.user_roles[${idx}]`} currentIteration={currentIteration} blockId={role.role_id}>
               <li className={styles.actorItem}>
                 <span className={`${styles.actorName} ${styles.valueWrapper}`}>
                   <User size={16} className={styles.icon} />
@@ -245,7 +245,7 @@ export const EpicActorRenderer = ({ content, nodeId, currentIteration }: { conte
         
         <div className={styles.epicList}>
           {epics.map((epic: any, idx: number) => (
-            <CommentableRow key={idx} nodeId={nodeId || ''} jsonPath={`$.core_epics[?(@.epic_id=='${epic.epic_id}')]`} currentIteration={currentIteration}>
+            <CommentableRow key={idx} nodeId={nodeId || ''} jsonPath={`$.core_epics[?(@.epic_id=='${epic.epic_id}')]`} currentIteration={currentIteration} blockId={epic.epic_id}>
               <article className={styles.epicItem}>
                 <h3 className={styles.epicHeader}>
                   <span className={styles.idBadge}>{epic.epic_id}</span>
@@ -322,20 +322,20 @@ export const ArchitectureSchemaRenderer = ({ content, nodeId, currentIteration }
           <article className={styles.epicItem}>
             <div className={styles.epicBody}>
               <div className={styles.flexColGap6}>
-                {roles.map((role: any, idx: number) => (
-                  <CommentableRow key={idx} nodeId={nodeId || ''} jsonPath={`$.user_roles[${idx}]`} currentIteration={currentIteration}>
-                    <div style={{ marginBottom: '1.5rem' }}>
-                      <h4 className={styles.criteriaTitle}>
-                        {role.permissions_level === 'ADMIN' ? <ShieldCheck size={14} className={styles.opacity50} /> : <User size={14} className={styles.opacity50} />}
-                        <span className={styles.valueWrapper}>{role.role_name}</span> 
-                        <span className={styles.idBadge} style={{ marginLeft: '8px' }}>{role.role_id}</span>
-                      </h4>
-                      <p className={`${styles.epicDesc} ${styles.valueWrapper}`} style={{ marginTop: '0.4rem' }}>
-                        Permission Level: <span className="text-primary font-bold">{role.permissions_level}</span>
-                      </p>
-                    </div>
-                  </CommentableRow>
-                ))}
+                  {roles.map((role: any, idx: number) => (
+                    <CommentableRow key={idx} nodeId={nodeId || ''} jsonPath={`$.user_roles[${idx}]`} currentIteration={currentIteration} blockId={role.role_id}>
+                      <div style={{ marginBottom: '1.5rem' }}>
+                        <h4 className={styles.criteriaTitle}>
+                          {role.permissions_level === 'ADMIN' ? <ShieldCheck size={14} className={styles.opacity50} /> : <User size={14} className={styles.opacity50} />}
+                          <span className={styles.valueWrapper}>{role.role_name}</span> 
+                          <span className={styles.idBadge} style={{ marginLeft: '8px' }}>{role.role_id}</span>
+                        </h4>
+                        <p className={`${styles.epicDesc} ${styles.valueWrapper}`} style={{ marginTop: '0.4rem' }}>
+                          Permission Level: <span className="text-primary font-bold">{role.permissions_level}</span>
+                        </p>
+                      </div>
+                    </CommentableRow>
+                  ))}
               </div>
             </div>
           </article>
@@ -353,37 +353,37 @@ export const ArchitectureSchemaRenderer = ({ content, nodeId, currentIteration }
           <article className={styles.epicItem}>
             <div className={styles.epicBody}>
               <div className={styles.flexColGap6}>
-                {techItems.map((item, idx) => (
-                  <CommentableRow key={idx} nodeId={nodeId || ''} jsonPath={`$.tech_stack.${item.key}`} currentIteration={currentIteration}>
-                    <div style={{ marginBottom: '1.5rem' }}>
-                      <h4 className={styles.criteriaTitle}>
-                        <span style={{ opacity: 0.5, display: 'flex', alignItems: 'center' }}>{item.icon}</span>
-                        {item.title}
-                      </h4>
-                      <div className={styles.epicDesc} style={{ 
-                        marginTop: '0.4rem', 
-                        display: 'flex', 
-                        flexDirection: 'column', 
-                        gap: '8px',
-                        paddingLeft: '14px'
-                      }}>
-                        {Object.entries(item.data || {}).map(([key, val]: [string, any], kIdx) => (
-                          <CommentableRow key={kIdx} nodeId={nodeId || ''} jsonPath={`$.tech_stack.${item.key}.${key}`} currentIteration={currentIteration}>
-                            <div className={styles.kvRow}>
-                              <Zap size={12} style={{ opacity: 0.3, flexShrink: 0, marginTop: '2px' }} />
-                              <span style={{ fontSize: '13px', opacity: 0.8, minWidth: '160px' }}>
-                                {key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}:
-                              </span>
-                              <span className={`${styles.valueWrapper} text-primary`} style={{ fontSize: '13px', fontWeight: '700' }}>
-                                {typeof val === 'object' ? JSON.stringify(val) : String(val)}
-                              </span>
-                            </div>
-                          </CommentableRow>
-                        ))}
+                  {techItems.map((item, idx) => (
+                    <CommentableRow key={idx} nodeId={nodeId || ''} jsonPath={`$.tech_stack.${item.key}`} currentIteration={currentIteration} blockId={item.key}>
+                      <div style={{ marginBottom: '1.5rem' }}>
+                        <h4 className={styles.criteriaTitle}>
+                          <span style={{ opacity: 0.5, display: 'flex', alignItems: 'center' }}>{item.icon}</span>
+                          {item.title}
+                        </h4>
+                        <div className={styles.epicDesc} style={{ 
+                          marginTop: '0.4rem', 
+                          display: 'flex', 
+                          flexDirection: 'column', 
+                          gap: '8px',
+                          paddingLeft: '14px'
+                        }}>
+                          {Object.entries(item.data || {}).map(([key, val]: [string, any], kIdx) => (
+                            <CommentableRow key={kIdx} nodeId={nodeId || ''} jsonPath={`$.tech_stack.${item.key}.${key}`} currentIteration={currentIteration} blockId={key}>
+                              <div className={styles.kvRow}>
+                                <Zap size={12} style={{ opacity: 0.3, flexShrink: 0, marginTop: '2px' }} />
+                                <span style={{ fontSize: '13px', opacity: 0.8, minWidth: '160px' }}>
+                                  {key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}:
+                                </span>
+                                <span className={`${styles.valueWrapper} text-primary`} style={{ fontSize: '13px', fontWeight: '700' }}>
+                                  {typeof val === 'object' ? JSON.stringify(val) : String(val)}
+                                </span>
+                              </div>
+                            </CommentableRow>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  </CommentableRow>
-                ))}
+                    </CommentableRow>
+                  ))}
               </div>
             </div>
           </article>
@@ -480,7 +480,7 @@ export const ModulePrdRenderer = ({ content, nodeId, currentIteration }: { conte
           </h2>
           <div className={styles.epicList}>
             {features.map((feature: any, idx: number) => (
-              <CommentableRow key={idx} nodeId={nodeId || ''} jsonPath={`$.core_features[?(@.feature_name=='${feature.feature_name}')]`} currentIteration={currentIteration}>
+              <CommentableRow key={idx} nodeId={nodeId || ''} jsonPath={`$.core_features[?(@.feature_name=='${feature.feature_name}')]`} currentIteration={currentIteration} blockId={feature.req_id}>
                 <article className={styles.epicItem}>
                   <h3 className={styles.epicHeader}>
                     <div className="flex items-center gap-2">
@@ -571,7 +571,7 @@ export const ModuleFsdRenderer = ({ content, nodeId, currentIteration }: { conte
         
         <div className={styles.epicList}>
           {features.map((feature: any, idx: number) => (
-            <CommentableRow key={idx} nodeId={nodeId || ''} jsonPath={`$.features[?(@.func_id=='${feature.func_id}')]`} currentIteration={currentIteration}>
+            <CommentableRow key={idx} nodeId={nodeId || ''} jsonPath={`$.features[?(@.func_id=='${feature.func_id}')]`} currentIteration={currentIteration} blockId={feature.func_id}>
               <article className={styles.epicItem} style={{ width: '100%' }}>
                 <h3 className={styles.epicHeader}>
                   <span className={styles.idBadge}>{feature.func_id}</span>

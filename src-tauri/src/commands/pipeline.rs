@@ -170,6 +170,7 @@ pub async fn run_pipeline(
             node_id: node.node_id.clone(),
             project_id: project.project_id.clone(),
             status: "IN_PROGRESS".into(),
+            is_silent: None,
         });
         
         sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
@@ -345,6 +346,7 @@ pub async fn run_pipeline(
             node_id: node.node_id.clone(),
             project_id: project.project_id.clone(),
             status: "IN_PROGRESS".into(),
+            is_silent: None,
         });
         
         sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
@@ -431,6 +433,7 @@ pub async fn run_pipeline(
             node_id: node.node_id.clone(),
             project_id: project.project_id.clone(),
             status: "ITERATION_COMPLETED".into(),
+            is_silent: None,
         });
         
         // 다음 반복을 위한 피드백 구성 (이전 초안 피드백 업데이트)
@@ -455,7 +458,8 @@ pub async fn run_pipeline(
             current_iteration: Some(final_iteration_count),
             max_iterations: Some(max_iters),
             node_type: actual_node_type.clone(),
-            level: "WARN".into()
+            level: "WARN".into(),
+            is_silent: None,
         });
         return Ok(current_best_content);
     }
@@ -528,6 +532,7 @@ pub async fn run_pipeline(
                     status: "EMBEDDING_START".into(),
                     current_iteration: None,
                     max_iterations: None,
+            is_silent: None,
                 });
                 sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
                     .bind("RAG 저장 중...")
@@ -557,6 +562,7 @@ pub async fn run_pipeline(
                             status: "EMBEDDING_COMPLETE".into(),
                             current_iteration: None,
                             max_iterations: None,
+            is_silent: None,
                         });
                     },
                     Err(e) => {
@@ -579,6 +585,7 @@ pub async fn run_pipeline(
                             status: "EMBEDDING_FAILED".into(),
                             current_iteration: None,
                             max_iterations: None,
+            is_silent: None,
                         });
                     }
                 }
@@ -665,6 +672,7 @@ pub async fn handle_hitl_action(
                             status: "EMBEDDING_FAILED".into(),
                             current_iteration: None,
                             max_iterations: None,
+            is_silent: None,
                         });
                         return;
                     }
@@ -690,6 +698,7 @@ pub async fn handle_hitl_action(
                             status: "EMBEDDING_START".into(),
                             current_iteration: None,
                             max_iterations: None,
+            is_silent: None,
                         });
                         let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
                             .bind("RAG 저장 중...")
@@ -718,6 +727,7 @@ pub async fn handle_hitl_action(
                                     status: "EMBEDDING_COMPLETE".into(),
                                     current_iteration: None,
                                     max_iterations: None,
+            is_silent: None,
                                 });
                             },
                             Err(e) => {
@@ -741,6 +751,7 @@ pub async fn handle_hitl_action(
                                     status: "EMBEDDING_FAILED".into(),
                                     current_iteration: None,
                                     max_iterations: None,
+            is_silent: None,
                                 });
                             }
                         }

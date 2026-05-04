@@ -23,7 +23,7 @@ const WireframeRenderer: React.FC<WireframeRendererProps> = ({ data, nodeId, cur
         <div className={styles.epicList}>
           {screens.length === 0 && <div className={styles.emptyState}>No screens defined</div>}
           {screens.map((screen: any, i: number) => (
-            <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.screens[${i}]`} currentIteration={currentIteration}>
+            <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.screens[${i}]`} currentIteration={currentIteration} blockId={screen.screen_id}>
               <article className={styles.epicItem} style={{ width: '100%' }}>
                 {/* Screen Header - GPRD Epic Style */}
                 <h3 className={styles.epicHeader}>
@@ -45,7 +45,7 @@ const WireframeRenderer: React.FC<WireframeRendererProps> = ({ data, nodeId, cur
                         
                         <ul className={styles.criteriaList}>
                           {(region.components || []).map((comp: any, k: number) => (
-                            <CommentableRow key={k} nodeId={nodeId || ''} jsonPath={`$.screens[${i}].layout_regions[${j}].components[${k}]`} currentIteration={currentIteration}>
+                            <CommentableRow key={k} nodeId={nodeId || ''} jsonPath={`$.screens[${i}].layout_regions[${j}].components[${k}]`} currentIteration={currentIteration} blockId={comp.component_id}>
                               <li className={styles.criteriaItem}>
                                 <CheckCircle2 size={16} className={styles.checkIcon} />
                                 <div className="flex-1">

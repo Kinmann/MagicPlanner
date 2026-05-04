@@ -183,8 +183,23 @@ pub async fn delete_project(
 ) -> Result<(), String> {
     println!(">>> Hard deleting project and all associated data: {}", project_id);
     
-    // 1. 벡터 데이터베이스 및 임베딩 메타데이터 삭제 (virtual table인 document_embeddings 데이터 포함)
-    // rowid가 embedding_metadata와 연결되어 있으므로 서브쿼리 사용 하여 삭제 수행
+    // 1. 최하위 의존성 테이블부터 삭제 (외래 키 제약 조건 준수)
+    
+    // 1-A. 최종 문서 삭제
+    sqlx::query("DELETE FROM final_document WHERE node_id IN (SELECT node_id FROM document_node WHERE project_id = ?)")
+        .bind(&project_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| format!("Failed to delete final documents: {}", e))?;
+
+    // 1-B. 노드 코멘트 삭제
+    sqlx::query("DELETE FROM node_comment WHERE project_id = ?")
+        .bind(&project_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| format!("Failed to delete node comments: {}", e))?;
+
+    // 1-C. 벡터 데이터베이스 및 임베딩 메타데이터 삭제
     sqlx::query("DELETE FROM document_embeddings WHERE rowid IN (SELECT rowid FROM embedding_metadata WHERE project_id = ?)")
         .bind(&project_id)
         .execute(&*pool)
@@ -197,33 +212,39 @@ pub async fn delete_project(
         .await
         .map_err(|e| format!("Failed to delete embedding metadata: {}", e))?;
 
-    // 2. ?占쏙옙 囹뜹쐦?껇ァ??歷ｏ옙?占쏜쬃?? ??占?- ?蘊덌옙 ?葯모쬃?납劑칳??邀썲윜劑샃 ?占쏙옙
-    sqlx::query("DELETE FROM generation_iteration WHERE node_id IN (SELECT node_id FROM document_node WHERE project_id = ?)")
-        .bind(&project_id)
-        .execute(&*pool)
-        .await
-        .map_err(|e| format!("Failed to delete generation iterations: {}", e))?;
-
-    // 3. 나머지 관련 데이터 삭제(노드, 모듈, 전역 컨텍스트)
-    sqlx::query("DELETE FROM document_node WHERE project_id = ?")
-        .bind(&project_id)
-        .execute(&*pool)
-        .await
-        .map_err(|e| format!("Failed to delete document nodes: {}", e))?;
-
-    sqlx::query("DELETE FROM local_module WHERE project_id = ?")
-        .bind(&project_id)
-        .execute(&*pool)
-        .await
-        .map_err(|e| format!("Failed to delete local modules: {}", e))?;
-
+    // 1-D. 전역 컨텍스트 삭제 (generation_iteration을 참조할 수 있으므로 먼저 삭제)
     sqlx::query("DELETE FROM global_context WHERE project_id = ?")
         .bind(&project_id)
         .execute(&*pool)
         .await
         .map_err(|e| format!("Failed to delete global contexts: {}", e))?;
 
-    // 4. 마지막으로 프로젝트 기본 정보 삭제 (Hard Delete)
+    // 2. 중간 계층 삭제
+    
+    // 2-A. 생성 반복 삭제 (이제 참조하는 테이블이 없으므로 안전하게 삭제 가능)
+    sqlx::query("DELETE FROM generation_iteration WHERE node_id IN (SELECT node_id FROM document_node WHERE project_id = ?)")
+        .bind(&project_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| format!("Failed to delete generation iterations: {}", e))?;
+
+    // 2-B. 문서 노드 삭제
+    sqlx::query("DELETE FROM document_node WHERE project_id = ?")
+        .bind(&project_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| format!("Failed to delete document nodes: {}", e))?;
+
+    // 3. 상위 계층 삭제
+    
+    // 3-A. 로컬 모듈 삭제
+    sqlx::query("DELETE FROM local_module WHERE project_id = ?")
+        .bind(&project_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| format!("Failed to delete local modules: {}", e))?;
+
+    // 3-B. 프로젝트 기본 정보 삭제 (Hard Delete)
     sqlx::query("DELETE FROM project WHERE project_id = ?")
         .bind(&project_id)
         .execute(&*pool)
@@ -312,6 +333,7 @@ pub async fn index_project_embeddings(
             status: "EMBEDDING_START".into(),
             current_iteration: None,
             max_iterations: None,
+            is_silent: None,
         });
         let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
             .bind("RAG 저장 중...")
@@ -351,6 +373,7 @@ pub async fn index_project_embeddings(
                         status: "EMBEDDING_COMPLETE".into(),
                         current_iteration: None,
                         max_iterations: None,
+                        is_silent: None,
                     });
                     indexed_count += 1;
                 },
@@ -364,6 +387,7 @@ pub async fn index_project_embeddings(
                         status: "EMBEDDING_FAILED".into(),
                         current_iteration: None,
                         max_iterations: None,
+                        is_silent: None,
                     });
                     println!(">>> [RAG-Index] {} failed: {}", node.target_node_type, e);
                 }

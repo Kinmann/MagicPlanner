@@ -553,7 +553,10 @@ export const EditorPanel: React.FC = () => {
       <div className={styles.content}>
         {workspaceViewMode === 'BOARD' || !selectedNodeId ? (
           <div className={styles.emptyState}>
-            <div className={styles.logoWatermark}>MAGIC PLANNER</div>
+            <div className={styles.logoWatermark}>
+              <img src="/logo.png" alt="Logo" />
+              MAGIC PLANNER
+            </div>
             <p>프로젝트를 선택하고 보드 또는 노드를 확인하세요.</p>
           </div>
         ) : (

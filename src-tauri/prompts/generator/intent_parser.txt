@@ -9,13 +9,16 @@
       "action_type": "add" | "modify" | "delete",
       "target_feature": "핵심 수정 대상 기능 명칭",
       "search_keywords": ["검색 키워드 배열"],
-      "target_node_ids": ["수정 대상이 되는 명확한 canonical_id 배열 (예: MODULE:USER:API-001)"],
+      "target_node_ids": ["수정 범위에 포함되는 문서 노드 ID 배열"],
+      "target_block_ids": ["정밀 주소 배열. 형식 A(ID): 'Module:Type:ArtifactID', 형식 B(Path): 'Module:Type:$,path'. 두 형식은 혼용 불가."],
       "reasoning": "사용자의 요청을 이렇게 분석한 근거와 논리적 추론 과정",
       "action_description": "구체적으로 어떤 작업을 수행해야 하는지에 대한 상세 설명",
       "key_considerations": ["아키텍처 설계 시 주의해야 할 점이나 전역 제약 사항 배열"],
       "is_context_mismatch": boolean,
-      "mismatch_reason": "is_context_mismatch가 true일 경우, 왜 잘못된 코멘트/컨텍스트 매핑이라고 판단했는지 설명 (false일 경우 null)",
-      "impact_scope": "local" | "cross_module" | "global"
+      "mismatch_reason": "is_context_mismatch가 true일 경우 이유 설명",
+      "impact_scope": "local" | "cross_module" | "global",
+      "resolved_comment_ids": ["이 의도에 반영된 원본 코멘트 ID 배열"],
+      "conflict_resolution": "상충하는 요청이 있었을 경우, 어떻게 해결했는지 기술 (없으면 null)"
     }
   ]
 }
@@ -39,10 +42,22 @@
 10. [의도와 좌표 분리 해석 및 스코프 재정의] 사용자가 지정한 코멘트 위치(block_id 등)를 맹목적으로 신뢰하지 마십시오. 코멘트 내용을 분석하여 실제 수정의 파급 범위(Scope)를 스스로 재정의해야 합니다.
     - 정보가 부족하여 정확한 `target_node_ids`를 결정할 수 없다면, 망설이지 말고 위에 나열된 탐색 도구들을 호출하십시오.
     - 특히 횡단 관심사(Cross-module)가 의심되는 경우, `search_artifacts`를 통해 다른 모듈의 영향을 반드시 확인해야 합니다.
-    - 최종 결과에는 반드시 유효한 `canonical_id` (형식: MODULE:TYPE:ID) 배열이 포함되어야 합니다.
-    - 'local': 수정 사항이 사용자가 클릭/지정한 블록 또는 단일 모듈 내용에만 국한되는 경우 (정상적인 핀포인트 수정)
-    - 'cross_module': 사용자가 특정 모듈에 코멘트를 달았으나, 다른 모듈의 로직이나 설계까지 함께 수정되어야 하는 횡단 관심사일 경우 (해당하는 여러 모듈의 canonical_id를 target_node_ids에 포함시킬 것)
-    - 'global': 전체 시스템 구조나 공통 아키텍처, 정책 전반에 영향을 미치는 전역적인 변경일 경우
+    - 최종 결과에는 반드시 정규화된 주소(형식 A: MODULE:TYPE:ID 또는 형식 B: MODULE:TYPE:$,path) 배열이 포함되어야 합니다. (쉼표로 ID와 Path를 섞지 말 것)
+    - [경고] 주소 파트 간 구분자로 점('.')을 절대 사용하지 마십시오. 반드시 콜론(':')만 사용해야 합니다.
+    - [경고] JSON Path 내부 구분자로 쉼표(',')를 절대 사용하지 마십시오. 반드시 점('.')을 사용해야 합니다.
+    - [예시] 잘못된 형식: GENESIS:GPRD_Architecture_Schema:$,tech_stack,backend (X) -> 올바른 형식: GENESIS:GPRD_Architecture_Schema:$.tech_stack.backend (O)
+    - JSON Path 부분은 반드시 '$'로 시작하고 계층 간 구분자로 점('.')을 사용해야 합니다.
+    - 'TYPE'은 반드시 시스템의 실제 `target_node_type` 전체 명칭(Full Name)을 사용해야 합니다 (예: GPRD_Architecture_Schema).
+    - 'MODULE' 명칭 규칙:
+        - 비즈니스/요구사항/PRD 관련 전역 노드: `GENESIS` 사용
+        - 시스템 설계/공통 아키텍처 관련 전역 노드: `SAD` 사용
+        - 개별 모듈 노드: 실제 모듈 명칭 사용 (예: `Auth`, `Payment`)
+
+[CONFLICT RESOLUTION]
+1. 동일한 블록(`canonical_id`)에 대해 상충하는 여러 개의 코멘트가 존재할 경우, 각 코멘트의 생성 시간(Timestamp)을 확인하여 가장 최신(Latest) 요청을 우선순위로 둡니다.
+2. 만약 최신 요청이 이전 요청을 완전히 대체하는 것이 아니라 보완하는 것이라면, 두 의도를 논리적으로 합성(Synthesis)하십시오.
+3. 어떻게 충돌을 해결했는지에 대한 상세한 논리를 `conflict_resolution` 필드에 기록하여 다음 단계의 패치 생성기가 혼란을 겪지 않도록 하십시오.
+4. 이 과정에서 참조된 모든 코멘트 ID를 `resolved_comment_ids`에 목록화하십시오.
 
 [INPUT]
 사용자 입력: 

@@ -485,6 +485,30 @@ pub fn extract_artifact_ids(json_str: &str) -> HashSet<String> {
         .collect()
 }
 
+pub fn extract_artifact_ids_from_value(val: &serde_json::Value) -> HashSet<String> {
+    let mut ids = HashSet::new();
+    match val {
+        serde_json::Value::Object(map) => {
+            for (k, v) in map {
+                if k == "id" || k == "screen_id" || k == "table_id" || k == "module_id" || k == "api_id" || 
+                   k == "artifact_id" || k == "func_id" || k == "role_id" || k == "table_name" || k == "entity_name" {
+                    if let Some(s) = v.as_str() {
+                        ids.insert(s.to_uppercase());
+                    }
+                }
+                ids.extend(extract_artifact_ids_from_value(v));
+            }
+        },
+        serde_json::Value::Array(arr) => {
+            for v in arr {
+                ids.extend(extract_artifact_ids_from_value(v));
+            }
+        },
+        _ => {}
+    }
+    ids
+}
+
 /// 노드 컨텍스트(모듈, 타입)를 바탕으로 단순 ID를 Canonical ID로 변환하여 추출 (대문자 정규화)
 pub fn extract_canonical_ids(json_str: &str, module_id: &str, node_type: &str) -> HashSet<String> {
     let raw_ids = extract_artifact_ids(json_str);

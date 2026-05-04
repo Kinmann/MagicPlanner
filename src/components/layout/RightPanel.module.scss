@@ -267,6 +267,44 @@
   word-break: break-word;
 }
 
+.validationInline {
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  &.pass {
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    .validationHeader { color: #10b981; }
+  }
+
+  &.fail {
+    background: rgba(244, 63, 94, 0.08);
+    border: 1px solid rgba(244, 63, 94, 0.2);
+    .validationHeader { color: #f43f5e; }
+  }
+}
+
+.validationHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.validationRationale {
+  font-size: 12px;
+  color: #d1d5db;
+  line-height: 1.5;
+  margin: 0;
+}
+
 /* Comments Overlay */
 .commentsOverlay {
   position: absolute;
@@ -526,4 +564,435 @@
   padding: 40px;
   
   p { font-size: 13px; font-weight: 500; }
+}
+
+/* High-Density Text Analysis Styles */
+.textAnalysis {
+  width: 100%;
+  padding: 4px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.textSectionTitle {
+  font-size: 10px;
+  font-weight: 900;
+  color: #71717a;
+  letter-spacing: 0.1em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  text-transform: uppercase;
+}
+
+.textLogItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.textHeaderLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.textActionType {
+  font-family: monospace;
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  
+  &[data-type="ADD"] { color: #10b981; background: rgba(16, 185, 129, 0.1); }
+  &[data-type="MODIFY"] { color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
+  &[data-type="DELETE"] { color: #f43f5e; background: rgba(244, 63, 94, 0.1); }
+}
+
+.textTarget {
+  color: #f4f4f5;
+}
+
+.textReasoning {
+  font-size: 11px;
+  color: #71717a;
+  line-height: 1.6;
+  padding-left: 8px;
+  border-left: 2px solid rgba(255, 255, 255, 0.05);
+}
+
+.textArtifactList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.textArtifactName {
+  font-family: monospace;
+  font-size: 11px;
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.05);
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(59, 130, 246, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.textStatGrid {
+  display: grid;
+  grid-template-cols: 1fr 1fr;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.textStat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.textStatLabel {
+  font-size: 9px;
+  font-weight: 700;
+  color: #71717a;
+  text-transform: uppercase;
+}
+
+.textStatValue {
+  font-size: 18px;
+  font-weight: 900;
+  font-family: monospace;
+}
+
+.textArtifactRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 4px;
+  font-size: 11px;
+  
+  .rowLabel {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #e4e4e7;
+    
+    svg { opacity: 0.5; color: #3b82f6; }
+  }
+  
+  .rowCount {
+    font-family: monospace;
+    color: #71717a;
+    font-size: 10px;
+  }
+}
+
+/* Chat-Style AI Briefing UI */
+.chatStyleMessage {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #e4e4e7;
+}
+
+.chatHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #f4f4f5;
+  margin-bottom: 4px;
+}
+
+.chatList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+
+  & > li {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    
+    strong {
+      color: #a1a1aa;
+      font-size: 12px;
+    }
+
+    ul {
+      list-style: none;
+      padding-left: 0px; // 들여쓰기 대폭 감소
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      
+      li {
+        position: relative;
+        padding-left: 0px; // 불렛 포인트 및 여백 제거하여 들여쓰기 축소
+        
+        &::before {
+          content: ""; // 불렛 포인트 제거
+          position: absolute;
+          left: 0;
+          color: #52525b;
+        }
+      }
+    }
+  }
+}
+
+.chatCode {
+  font-family: monospace;
+  font-size: 11px;
+  background: #27272a;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #f4f4f5;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.chatDesc {
+  margin: 4px 0;
+  font-size: 13px; // 12px -> 13px로 상향
+  color: #e4e4e7;
+  line-height: 1.6;
+  
+  strong {
+    color: #a1a1aa; // 라벨도 약간 더 밝게
+    font-size: 11px;
+    text-transform: uppercase;
+    margin-right: 6px;
+    font-weight: 800;
+  }
+}
+
+.intentListItem {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  padding-bottom: 12px;
+  margin-bottom: 8px;
+  
+  &:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+  }
+}
+
+.intentHeaderLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.intentTitleText {
+  font-size: 13px;
+  font-weight: 700;
+  color: #f4f4f5;
+  flex: 1;
+}
+
+.scopeBadge {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: rgba(255, 255, 255, 0.05);
+  color: #71717a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+
+  &[data-scope="global"] { color: #f59e0b; border-color: rgba(245, 158, 11, 0.3); background: rgba(245, 158, 11, 0.1); }
+  &[data-scope="cross_module"] { color: #8b5cf6; border-color: rgba(139, 92, 246, 0.3); background: rgba(139, 92, 246, 0.1); }
+}
+
+.intentDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 4px; // 참조선을 없애는 대신 여백을 최소화
+  border-left: none; // 참조선 제거
+}
+
+.conflictBox {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  background: rgba(244, 63, 94, 0.05);
+  border: 1px solid rgba(244, 63, 94, 0.2);
+  padding: 6px 10px;
+  border-radius: 6px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #fca5a5;
+  
+  svg { 
+    color: #f87171; 
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+}
+
+.blockIdsRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  
+  svg { color: #3b82f6; opacity: 0.7; }
+}
+
+.blockTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.blockTag {
+  font-family: monospace;
+  font-size: 11px; // 9px -> 11px로 상향
+  background: rgba(59, 130, 246, 0.1);
+  color: #60a5fa;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.chatStatRow {
+  display: flex;
+  gap: 12px;
+  margin: 8px 0;
+  
+  .statItem {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.02);
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    
+    .label {
+      font-size: 10px;
+      color: #71717a;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    
+    .value {
+      font-family: monospace;
+      font-size: 18px;
+      font-weight: 900;
+    }
+  }
+}
+
+.chatFooter {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.footerLabel {
+  font-size: 11px;
+  font-weight: 700;
+  color: #52525b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.footerFiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fileBadge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #1e1e22;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: #3b82f6;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: #27272a;
+    border-color: rgba(59, 130, 246, 0.3);
+  }
+}
+/* Markdown Style Alerts */
+.markdownHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #f4f4f5;
+  margin-bottom: 8px;
+}
+
+.markdownAlert {
+  padding: 12px 16px;
+  border-left: 4px solid transparent;
+  border-radius: 4px;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  &.pass {
+    border-left-color: #10b981;
+    background: rgba(16, 185, 129, 0.05);
+    .alertHeader { color: #10b981; }
+  }
+
+  &.fail {
+    border-left-color: #f43f5e;
+    background: rgba(244, 63, 94, 0.05);
+    .alertHeader { color: #f43f5e; }
+  }
+}
+
+.alertHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.alertBody {
+  font-size: 13px;
+  color: #e4e4e7;
+  line-height: 1.6;
+  white-space: pre-wrap; // 마크다운 스타일의 개행 유지
 }

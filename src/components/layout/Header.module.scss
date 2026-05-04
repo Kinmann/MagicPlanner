@@ -33,6 +33,12 @@
   &:hover {
     background-color: rgba(255, 255, 255, 0.05);
   }
+
+  .logoImage {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+  }
 }
 
 .logoText {

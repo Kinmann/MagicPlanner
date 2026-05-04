@@ -59,7 +59,7 @@ export const Dashboard: React.FC = () => {
       <div className={styles.dashboardHeader}>
         <div className={styles.gradientBg} />
         <div className={styles.bgIcon}>
-          <LayoutDashboard size={200} />
+          <img src="/logo.png" alt="" style={{ width: '240px', height: '240px', objectFit: 'contain' }} />
         </div>
         
         <div className={styles.headerContent}>

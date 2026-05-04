@@ -12,9 +12,8 @@ use regex::Regex;
 // models/ - Models and structures
 // ============================================================
 pub use crate::models::{
-    PipelineError,
     Project, DocumentNode, GenerationIteration,
-    GlobalContext, LocalModule, PipelineStatusPayload,
+    GlobalContext, PipelineStatusPayload,
 };
 
 // Service functions
@@ -38,9 +37,6 @@ pub async fn parse_intent(
         .map_err(|e| format!("Failed to load intent parser prompt: {}", e))?;
     
     prompt = prompt.replace("{{RAW_INPUT}}", &raw_input);
-
-    let schema_json = schemars::schema_for!(crate::schemas::IntentSchema);
-    let flattened_schema = crate::schemas::flatten_schema(serde_json::to_value(schema_json).unwrap());
 
     // 도구 명세 정의
     let tools = serde_json::json!([{
@@ -97,16 +93,17 @@ pub async fn parse_intent(
             status: "IN_PROGRESS".into(),
             current_iteration: Some(iteration as i32),
             max_iterations: Some(max_iterations as i32),
+            is_silent: Some(true),
         }).ok();
 
-        // Gemini 호출 (마지막 턴에서만 schema 적용)
+        // Gemini 호출 (도구 사용 시 스키마 충돌 방지를 위해 None 전달)
         let response_content = call_gemini_raw(
             &*client, 
             &api_key, 
             Some("You are a software requirement analyzer. Use tools to find precise canonical_ids when needed."), 
             messages.clone(), 
             Some(tools.clone()), 
-            if iteration == max_iterations { Some(flattened_schema.clone()) } else { None }
+            None
         ).await.map_err(|e| e.to_string())?;
 
         // 응답을 기록에 추가
@@ -144,6 +141,7 @@ pub async fn parse_intent(
                         status: "IN_PROGRESS".into(),
                         current_iteration: Some(iteration as i32),
                         max_iterations: Some(max_iterations as i32),
+                        is_silent: Some(true),
                     }).ok();
 
                     // 도구 실행
@@ -240,7 +238,6 @@ pub async fn parse_intent(
     Ok(intent)
 }
 
-
 #[tauri::command]
 pub async fn route_architecture_target(
     app_handle: tauri::AppHandle,
@@ -251,78 +248,173 @@ pub async fn route_architecture_target(
     intent: crate::schemas::IntentSchema,
 ) -> Result<crate::schemas::RoutingSchema, String> {
     let prompts_dir = get_prompts_dir(&app_handle);
-    let mut prompt = std::fs::read_to_string(prompts_dir.join("generator/architecture_router.txt"))
-        .map_err(|e| format!("Failed to load architecture router prompt: {}", e))?;
 
-    // 1. Global architecture context (Genesis PRD)
-    let out_1a = get_approved_node_output(&*pool, &project_id, "GPRD_Context_Goal").await;
-    let out_1b = get_approved_node_output(&*pool, &project_id, "GPRD_Capability_Actor").await;
-    let out_1c = get_approved_node_output(&*pool, &project_id, "GPRD_Architecture_Schema").await;
-    let genesis_prd = format!("[Source Document: Genesis PRD Context]\n{}\n\n[Source Document: Genesis PRD Capability]\n{}\n\n[Source Document: Genesis PRD Architecture]\n{}", out_1a, out_1b, out_1c);
-    
-    let contexts = sqlx::query_as::<_, GlobalContext>(
-        "SELECT * FROM global_context WHERE project_id = ? AND is_deleted = 0"
-    )
-    .bind(&project_id)
-    .fetch_all(&*pool)
-    .await
-    .map_err(|e: sqlx::Error| e.to_string())?;
+    // ============================================================
+    // [Phase 1] Target Selection (AI 추론 삭제)
+    // ============================================================
+    // Intent Parser가 이미 도구 탐색을 통해 정밀 좌표(target_node_ids, target_block_ids)를 찾아냈으므로
+    // 추가적인 AI 추론 없이 해당 좌표를 직접 수정 타겟으로 사용합니다.
+    let mut target_nodes_set = std::collections::HashSet::new();
+    for i in &intent.intents {
+        for nid in &i.target_node_ids {
+            target_nodes_set.insert(nid.clone());
+        }
+        for bid in &i.target_block_ids {
+            target_nodes_set.insert(bid.clone());
+        }
+    }
 
-    let sad_global = contexts.iter()
-        .filter(|c| c.context_type.to_lowercase().starts_with("sad_"))
-        .map(|c| format!("[{}] {}", c.context_type, c.context_data_json))
-        .collect::<Vec<_>>()
-        .join("\n");
+    // ============================================================
+    // [Phase 2] Policy Decision (상향 전파 권한 부여)
+    // ============================================================
+    // 직접 타겟을 추가하지는 않으나, 인텐트의 성격을 분석하여 
+    // Taint Cascade 단계에서 상향 전파(Upward)를 허용할지 결정합니다.
+    let needs_refactoring = intent.intents.iter().any(|i| {
+        let is_structural = matches!(i.action_type, crate::schemas::ActionType::Add | crate::schemas::ActionType::Delete);
+        let is_wide_scope = matches!(i.impact_scope, crate::schemas::ImpactScope::Global | crate::schemas::ImpactScope::CrossModule);
+        is_structural || is_wide_scope
+    });
 
-    let modules = sqlx::query_as::<_, LocalModule>(
-        "SELECT * FROM local_module WHERE project_id = ? AND is_deleted = 0"
-    )
-    .bind(&project_id)
-    .fetch_all(&*pool)
-    .await
-    .map_err(|e: sqlx::Error| e.to_string())?;
+    let (decision, rationale) = if needs_refactoring {
+        (
+            crate::schemas::ValidationDecision::Refactoring,
+            "구조적 변경(추가/삭제) 또는 광범위한 영향권이 감지되어 상위 설계 명세와의 정합성 검토가 필요합니다. 상향 전파가 활성화됩니다.".to_string()
+        )
+    } else {
+        (
+            crate::schemas::ValidationDecision::Pass,
+            "변경 사항이 국부적이며 기존 설계 구조 내에서 처리가 가능합니다. 하향 전파 위주로 영향권을 분석합니다.".to_string()
+        )
+    };
 
-    let module_list = modules.iter()
-        .map(|m| format!("- Module ID: {}, Name: {}, Priority: {}", m.module_id, m.module_name, m.priority_order))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let mut routing = crate::schemas::RoutingSchema {
+        target_nodes: target_nodes_set.into_iter().collect(),
+        decision,
+        rationale,
+    };
 
-    // 2. 핵심 정보만 필터링하여 전달 (진단 상세 제외)
-    let compact_intents = intent.intents.iter().map(|i| {
-        serde_json::json!({
-            "action_type": i.action_type,
-            "target_feature": i.target_feature,
-            "search_keywords": i.search_keywords,
-            "suggested_target_node_ids": i.target_node_ids,
-        })
-    }).collect::<Vec<_>>();
-    let intent_json = serde_json::to_string_pretty(&compact_intents).unwrap_or_default();
-    prompt = prompt.replace("{{INTENT_JSON}}", &intent_json);
-    prompt = prompt.replace("{{GENESIS_PRD}}", &genesis_prd);
-    prompt = prompt.replace("{{SAD_GLOBAL}}", &sad_global);
-    prompt = prompt.replace("{{MODULE_LIST}}", &module_list);
+    // ============================================================
+    // [Phase 3] Pinpoint Virtual Upward Check (핀포인트 검증)
+    // ============================================================
+    let validator_prompt_tmpl = std::fs::read_to_string(prompts_dir.join("generator/upward_validator.txt"))
+        .map_err(|e| format!("Failed to load upward validator prompt: {}", e))?;
 
-    let schema_json = schemars::schema_for!(crate::schemas::RoutingSchema);
-    let flattened_schema = crate::schemas::flatten_schema(serde_json::to_value(schema_json).unwrap());
+    let intent_json = serde_json::to_string_pretty(&intent.intents).unwrap_or_default();
 
-    // 3. Gemini API ?몄텧
-    let response = call_gemini(&*client, &api_key, "You are a senior solution architect who determines the impact of changes.", &prompt, Some(flattened_schema))
-        .await
-        .map_err(|e| match e {
-            PipelineError::ApiError(code, msg) => format!("API Error ({}): {}", code, msg),
-            PipelineError::Internal(msg) => format!("Internal Error: {}", msg),
-        })?;
+    for target_id in routing.target_nodes.clone() {
+        // [Hyper-Precise Pinpoint Tracing]
+        // 타겟 노드의 JSON을 파싱하여 mapped_ 식별자를 추출하고, 상위 노드에서 해당 블록만 가져옵니다.
+        let mut pinpoint_context = Vec::new();
 
-    let routing: crate::schemas::RoutingSchema = serde_json::from_str(&response)
-        .map_err(|e| format!("Failed to parse routing JSON: {} | Content: {}", e, response))?;
+        // 1. 타겟 노드의 최신 승인된 내용 로드
+        let target_json_str = if target_id.starts_with("SAD_") {
+            // SAD 글로벌 노드인 경우
+            sqlx::query("SELECT context_data_json FROM global_context WHERE project_id = ? AND context_type = ? AND is_deleted = 0 ORDER BY created_at DESC LIMIT 1")
+                .bind(&project_id).bind(&target_id).fetch_optional(&*pool).await.ok().flatten()
+                .map(|r| r.get::<String, _>("context_data_json")).unwrap_or_default()
+        } else {
+            // 일반 문서 노드인 경우
+            get_approved_node_output(&*pool, &project_id, &target_id).await
+        };
 
-    // [Sprint 1 HITL] 아키텍처 영향도 확인을 위한 사용자 확인 이벤트 발행
+        if let Ok(target_json) = serde_json::from_str::<serde_json::Value>(&target_json_str) {
+            // 2. mapped_ 식별자 추출
+            let mapped_ids = extract_mapped_ids(&target_json);
+            
+            for m_id in mapped_ids {
+                // 3. 식별자 타입에 따른 부모 노드 특정 및 블록 추출
+                let parent_node_type = if m_id.starts_with("REQ-") || m_id.starts_with("EPIC-") || m_id.starts_with("ROLE-") {
+                    if m_id.starts_with("REQ-") || m_id.starts_with("EPIC-") { "GPRD_Capability_Actor" } else { "GPRD_Architecture_Schema" }
+                } else if m_id.starts_with("FUNC-") {
+                    "FSD" // 실제 운영 시에는 해당 모듈의 FSD 노드를 찾아야 함
+                } else if m_id.starts_with("ENT-") || m_id.starts_with("SCR-") {
+                    if m_id.starts_with("ENT-") { "SAD_Core_Erd" } else { "IA" }
+                } else {
+                    ""
+                };
+
+                if !parent_node_type.is_empty() {
+                    let parent_json_str = get_approved_node_output(&*pool, &project_id, parent_node_type).await;
+                    if let Ok(parent_json) = serde_json::from_str::<serde_json::Value>(&parent_json_str) {
+                        if let Some(block) = get_pinpoint_block(&parent_json, &m_id) {
+                            pinpoint_context.push(format!("[Parent Block: {}]\n{}", m_id, serde_json::to_string_pretty(&block).unwrap_or_default()));
+                        }
+                    }
+                }
+            }
+        }
+
+        // 기본 컨텍스트 (목표 및 제약사항) 추가
+        if pinpoint_context.is_empty() {
+            pinpoint_context.push(get_approved_node_output(&*pool, &project_id, "GPRD_Context_Goal").await);
+        }
+
+        let parent_context = pinpoint_context.join("\n\n---\n\n");
+
+        let mut v_prompt = validator_prompt_tmpl.clone();
+        v_prompt = v_prompt.replace("{{INTENT_JSON}}", &intent_json);
+        v_prompt = v_prompt.replace("{{NODE_TYPE}}", &target_id);
+        v_prompt = v_prompt.replace("{{BLOCK_ID}}", &target_id);
+        v_prompt = v_prompt.replace("{{PARENT_JSON}}", &parent_context);
+
+        let val_schema = schemars::schema_for!(crate::schemas::GlobalValidationSchema);
+        let val_flattened = crate::schemas::flatten_schema(serde_json::to_value(val_schema).unwrap());
+
+        let val_res = call_gemini(&*client, &api_key, "You are a senior architect auditing upward alignment.", &v_prompt, Some(val_flattened))
+            .await.unwrap_or_else(|_| serde_json::json!({"decision": "PASS", "rationale": "Validation failed, defaulting to PASS"}).to_string());
+
+        let validation: crate::schemas::GlobalValidationSchema = serde_json::from_str(&val_res).unwrap_or(crate::schemas::GlobalValidationSchema {
+            decision: crate::schemas::ValidationDecision::Pass,
+            rationale: "Deserialization failed".into(),
+            violations: vec![],
+        });
+
+        println!("[UPWARD-CHECK] ⚖️ Result for {}: {:?} | Rationale: {}", target_id, validation.decision, validation.rationale);
+
+        // 개별 검증 결과 실시간 발행
+        let status_emoji = if matches!(validation.decision, crate::schemas::ValidationDecision::Pass) { "✅" } else { "⚠️" };
+        app_handle.emit("pipeline-status", PipelineStatusPayload {
+            message: format!("[상향 검증: {}] {} {}", target_id, status_emoji, validation.rationale),
+            node_id: "".into(),
+            node_type: "UpwardValidator".into(),
+            project_id: project_id.clone(),
+            level: if matches!(validation.decision, crate::schemas::ValidationDecision::Pass) { "INFO".into() } else { "WARN".into() },
+            status: "IN_PROGRESS".into(),
+            current_iteration: None,
+            max_iterations: None,
+            is_silent: Some(true),
+        }).ok();
+
+        if matches!(validation.decision, crate::schemas::ValidationDecision::Refactoring | crate::schemas::ValidationDecision::Fail) {
+            routing.decision = validation.decision;
+            routing.rationale = format!("[상향 설계 모순 감지: {}] {}", target_id, validation.rationale);
+            
+            app_handle.emit("pipeline-status", PipelineStatusPayload {
+                message: format!("상향 설계 모순이 발견되었습니다 ({}). 확인이 필요합니다.", target_id),
+                node_id: "".into(),
+                node_type: "UpwardValidator".into(),
+                project_id: project_id.clone(),
+                level: "WARN".into(),
+                status: "PAUSED_HITL".into(),
+                current_iteration: None,
+                max_iterations: None,
+                is_silent: None,
+            }).ok();
+            
+            break; 
+        }
+    }
+
+    // ============================================================
+    // [Phase 4] Dry-run & Result Return
+    // ============================================================
+    // DB 쓰기를 수행하지 않고 최종 스키마만 반환 (HITL 대기)
     app_handle.emit("requires-target-confirmation", &routing)
         .map_err(|e| format!("Failed to emit HITL event: {}", e))?;
 
-
     Ok(routing)
 }
+
 
 
 #[tauri::command]
@@ -343,197 +435,173 @@ pub async fn confirm_architecture_routing(
 }
 
 
-#[tauri::command]
-pub async fn validate_intent_globally(
-    app_handle: tauri::AppHandle,
-    pool: tauri::State<'_, SqlitePool>,
-    client: tauri::State<'_, Client>,
-    api_key: String,
-    project_id: String,
-    intent: crate::schemas::IntentSchema,
-    targets: Vec<String>,
-) -> Result<crate::schemas::GlobalValidationSchema, String> {
-    let prompts_dir = get_prompts_dir(&app_handle);
-    let mut prompt = std::fs::read_to_string(prompts_dir.join("generator/global_validator.txt"))
-        .map_err(|e| format!("Failed to load global validator prompt: {}", e))?;
-
-    // 1. SAD Global 전역 컨텍스트 조회
-    let contexts = sqlx::query_as::<_, GlobalContext>(
-        "SELECT * FROM global_context WHERE project_id = ? AND is_deleted = 0"
-    )
-    .bind(&project_id)
-    .fetch_all(&*pool)
-    .await
-    .map_err(|e: sqlx::Error| e.to_string())?;
-
-    let sad_global = contexts.iter()
-        .filter(|c| c.context_type.to_lowercase().starts_with("sad_"))
-        .map(|c| format!("[{}] {}", c.context_type, c.context_data_json))
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    // 2. 핵심 정보만 필터링하여 전달 (진단 상세 제외)
-    let compact_intents = intent.intents.iter().map(|i| {
-        serde_json::json!({
-            "action_type": i.action_type,
-            "target_feature": i.target_feature,
-            "search_keywords": i.search_keywords,
-        })
-    }).collect::<Vec<_>>();
-    let intent_json = serde_json::to_string_pretty(&compact_intents).unwrap_or_default();
-    let targets_json = targets.join(", ");
-    
-    prompt = prompt.replace("{{INTENT_JSON}}", &intent_json);
-    prompt = prompt.replace("{{TARGET_NODES}}", &targets_json);
-    prompt = prompt.replace("{{SAD_GLOBAL}}", &sad_global);
-
-    let schema_json = schemars::schema_for!(crate::schemas::GlobalValidationSchema);
-    let flattened_schema = crate::schemas::flatten_schema(serde_json::to_value(schema_json).unwrap());
-
-    // 3. Gemini API ?몄텧
-    let response = call_gemini(&*client, &api_key, "You are a senior solution architect auditing system changes.", &prompt, Some(flattened_schema))
-        .await
-        .map_err(|e| match e {
-            PipelineError::ApiError(code, msg) => format!("API Error ({}): {}", code, msg),
-            PipelineError::Internal(msg) => format!("Internal Error: {}", msg),
-        })?;
-
-    let validation: crate::schemas::GlobalValidationSchema = serde_json::from_str(&response)
-        .map_err(|e| format!("Failed to parse validation JSON: {} | Content: {}", e, response))?;
-
-    Ok(validation)
-}
-
 
 #[tauri::command]
 pub async fn apply_taint_cascade(
-    app_handle: tauri::AppHandle,
+    _app_handle: tauri::AppHandle,
     pool: tauri::State<'_, SqlitePool>,
     project_id: String,
     intent: crate::schemas::IntentSchema,
     targets: Vec<String>,
-) -> Result<(), String> {
-    println!(">>> Starting Taint Cascade for targets: {:?}", targets);
-    let now = Utc::now().to_rfc3339();
+    router_decision: String,
+) -> Result<crate::schemas::TaintCascadeSchema, String> {
+    println!("[TAINT-CASCADE] 🧪 Starting Bidirectional Cascade for targets: {:?} (Decision: {})", targets, router_decision);
 
-    // 0. Intent 저장
-    sqlx::query("UPDATE project SET increment_intent = ?, updated_at = ? WHERE project_id = ?")
-        .bind(serde_json::to_string(&intent).unwrap_or_default())
-        .bind(&now)
-        .bind(&project_id)
-        .execute(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // 1. Pre-load all nodes and artifact codes
-    let all_nodes_data: Vec<(String, Option<String>, String, String, String)> = sqlx::query_as(
-        "SELECT dn.node_id, dn.module_id, dn.target_node_type, dn.node_state, COALESCE(gi.generated_draft_json, '') \
-         FROM document_node dn \
-         LEFT JOIN generation_iteration gi ON gi.node_id = dn.node_id AND gi.is_pass = 1 \
-         WHERE dn.project_id = ? AND dn.is_deleted = 0"
-    )
-    .bind(&project_id)
-    .fetch_all(&*pool)
-    .await
-    .map_err(|e| e.to_string())?;
-
-    // Indexing and mapping
-    let mut node_map = std::collections::HashMap::new(); // node_id -> (module_id, node_type, state, codes)
-    let mut code_to_nodes: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
-    let mut module_to_nodes: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
-    let mut type_to_nodes: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
-
-    for (node_id, module_id, node_type, state, draft_json) in all_nodes_data {
-        let mid = module_id.as_deref().unwrap_or("global");
-        let codes = crate::services::embedding::extract_canonical_ids(&draft_json, mid, &node_type);
-        for code in &codes {
-            code_to_nodes.entry(code.clone()).or_insert_with(Vec::new).push(node_id.clone());
-        }
-        if let Some(ref mid) = module_id {
-            module_to_nodes.entry(mid.to_uppercase()).or_insert_with(Vec::new).push(node_id.clone());
-        }
-        type_to_nodes.entry(node_type.to_uppercase()).or_insert_with(Vec::new).push(node_id.clone());
-        node_map.insert(node_id, (module_id, node_type, state, codes));
-    }
-
-    // 2. BFS search (Unlimited depth based on artifact codes)
     let mut queue = std::collections::VecDeque::new();
-    let mut visited = std::collections::HashSet::new();
-    let mut tainted_nodes = std::collections::HashMap::new(); // node_id -> reason
+    let mut visited_nodes = std::collections::HashSet::new();
+    let mut visited_artifacts = std::collections::HashSet::new();
+    let mut impact_map: std::collections::HashMap<String, crate::schemas::TaintImpactItem> = std::collections::HashMap::new();
 
-    // 초기 타겟 노드 식별 및 큐 주입
-    let mut initial_targets = std::collections::HashSet::new();
-    
-    // 1. confirmed targets (from router/user)
+    // 1. 초기 타겟 식별 및 정밀 확장 (Module:Type:ID or Module:Type:$,path)
     for t in &targets {
-        initial_targets.insert(t.clone());
-    }
-    
-    // 2. mandatory suggested targets from intent parser
-    for item in &intent.intents {
-        for t in &item.target_node_ids {
-            initial_targets.insert(t.clone());
-        }
-    }
+        let parts: Vec<&str> = t.split(':').collect();
+        
+        if parts.len() == 3 {
+            let module_name = parts[0];
+            let node_type = parts[1];
+            let target_val = parts[2];
 
-    for t in initial_targets {
-        let t_upper = t.to_uppercase();
-        // 1) module_id matching
-        if let Some(nodes) = module_to_nodes.get(&t_upper) {
-            for nid in nodes {
-                if !visited.contains(nid) {
-                    visited.insert(nid.clone());
-                    queue.push_back(nid.clone());
-                    tainted_nodes.insert(nid.clone(), format!("Direct Target: Module impact ({})", t));
+            println!("[TAINT-CASCADE] 📍 Targeting: Module={}, Type={}, Target={}", module_name, node_type, target_val);
+
+            // 해당 모듈/카테고리와 타입을 가진 정확한 노드 조회
+            let nodes: Vec<(String, String)> = sqlx::query_as(
+                "SELECT dn.node_id, dn.target_node_type FROM document_node dn \
+                 LEFT JOIN local_module lm ON dn.module_id = lm.module_id \
+                 WHERE dn.project_id = ? AND dn.is_deleted = 0 \
+                 AND ( \
+                    UPPER(lm.module_name) = UPPER(?) OR \
+                    UPPER(dn.node_category) = UPPER(?) \
+                 ) \
+                 AND UPPER(dn.target_node_type) = UPPER(?)"
+            )
+            .bind(&project_id).bind(module_name).bind(module_name).bind(node_type)
+            .fetch_all(&*pool).await.map_err(|e| e.to_string())?;
+
+            for (nid, ntype) in nodes {
+                let is_path = target_val.starts_with('$');
+                
+                if is_path {
+                    // [Type B] JSON Path Target
+                    impact_map.entry(nid.clone()).or_insert_with(|| crate::schemas::TaintImpactItem {
+                        node_id: nid.clone(),
+                        node_type: ntype.clone(),
+                        block_ids: Vec::new(),
+                        block_paths: vec![target_val.to_string()],
+                        reason: format!("Path-based Modification: {}", target_val),
+                    });
+                    
+                    // Path인 경우 해당 노드 자체는 오염시키되 연쇄 전파는 해당 노드의 모든 ID로 확장
+                    let latest_json: Option<String> = sqlx::query_scalar(
+                        "SELECT generated_draft_json FROM generation_iteration WHERE node_id = ? AND is_pass = 1 ORDER BY iteration_number DESC LIMIT 1"
+                    ).bind(&nid).fetch_optional(&*pool).await.map_err(|e| e.to_string())?;
+
+                    if let Some(json_str) = latest_json {
+                        if let Ok(val) = serde_json::from_str::<Value>(&json_str) {
+                            for d_id in crate::services::embedding::extract_artifact_ids_from_value(&val) {
+                                queue.push_back(d_id.to_uppercase());
+                            }
+                        }
+                    }
+                } else {
+                    // [Type A] Canonical ID Target
+                    let artifact_id = target_val.to_uppercase();
+                    impact_map.entry(nid.clone()).or_insert_with(|| crate::schemas::TaintImpactItem {
+                        node_id: nid.clone(),
+                        node_type: ntype.clone(),
+                        block_ids: vec![artifact_id.clone()],
+                        block_paths: Vec::new(),
+                        reason: format!("Direct Block Modification: {}", artifact_id),
+                    });
+                    
+                    queue.push_back(artifact_id);
+                }
+
+                // [상향 전파 권한 부여 시]
+                if router_decision == "REFACTORING" {
+                    let parent_node_types = if module_name.to_uppercase() == "GENESIS" {
+                        vec!["GPRD_Architecture_Schema"] // PRD 변경 시 아키텍처 스키마로 상향
+                    } else {
+                        vec!["SAD_Module_List", "GPRD_Architecture_Schema"]
+                    };
+
+                    for p_type in parent_node_types {
+                        let parents: Vec<(String, String)> = sqlx::query_as(
+                            "SELECT node_id, target_node_type FROM document_node WHERE UPPER(target_node_type) = UPPER(?) AND project_id = ?"
+                        ).bind(p_type).bind(&project_id).fetch_all(&*pool).await.unwrap_or_default();
+
+                        for (pnid, ptype) in parents {
+                            if !visited_nodes.contains(&pnid) {
+                                impact_map.entry(pnid.clone()).or_insert_with(|| crate::schemas::TaintImpactItem {
+                                    node_id: pnid.clone(),
+                                    node_type: ptype.clone(),
+                                    block_ids: vec![target_val.to_string()],
+                                    block_paths: vec!["/".to_string()],
+                                    reason: format!("Upward Structural Impact from {}", target_val),
+                                });
+                                visited_nodes.insert(pnid);
+                            }
+                        }
+                    }
                 }
             }
-        }
-        // 2) target_node_type matching
-        if let Some(nodes) = type_to_nodes.get(&t_upper) {
-            for nid in nodes {
-                if !visited.contains(nid) {
-                    visited.insert(nid.clone());
-                    queue.push_back(nid.clone());
-                    tainted_nodes.insert(nid.clone(), format!("Direct Target: Type match ({})", t));
-                }
+        } else {
+            // [Fallback] 3단 형식이 아닌 경우 (Legacy)
+            let node_key = t.split('.').next().unwrap_or(t);
+            let nodes_to_expand: Vec<(String, String)> = sqlx::query_as(
+                "SELECT node_id, target_node_type FROM document_node \
+                 WHERE (UPPER(node_id) = UPPER(?) OR UPPER(target_node_type) = UPPER(?)) AND project_id = ? AND is_deleted = 0"
+            )
+            .bind(node_key).bind(node_key).bind(&project_id)
+            .fetch_all(&*pool).await.map_err(|e| e.to_string())?;
+
+            for (nid, ntype) in nodes_to_expand {
+                impact_map.entry(nid.clone()).or_insert_with(|| crate::schemas::TaintImpactItem {
+                    node_id: nid.clone(),
+                    node_type: ntype.clone(),
+                    block_ids: vec![t.clone()],
+                    block_paths: Vec::new(),
+                    reason: "Node-level Target".into(),
+                });
+                // ... (생략 가능하지만 안정성을 위해 유지)
             }
-        }
-        // 3) canonical_id matching
-        if let Some(nodes) = code_to_nodes.get(&t_upper) {
-            for nid in nodes {
-                if !visited.contains(nid) {
-                    visited.insert(nid.clone());
-                    queue.push_back(nid.clone());
-                    tainted_nodes.insert(nid.clone(), format!("Direct Target: Artifact ID ({})", t));
-                }
-            }
-        }
-        // 4) node_id direct matching
-        if node_map.contains_key(&t) && !visited.contains(&t) {
-            visited.insert(t.clone());
-            queue.push_back(t.clone());
-            tainted_nodes.insert(t.clone(), "Direct Target: Node ID match".into());
         }
     }
 
-    println!(">>> Initial Taint Targets (Level 0): {:?}", visited);
+    // 2. 재귀적 전파 (양방향)
+    while let Some(current_id) = queue.pop_front() {
+        if visited_artifacts.contains(&current_id) { continue; }
+        visited_artifacts.insert(current_id.clone());
 
-    while let Some(current_node_id) = queue.pop_front() {
-        let (_, _, _, codes) = match node_map.get(&current_node_id) {
-            Some(info) => info,
-            None => continue,
-        };
+        // [하향 전파]
+        let dependents: Vec<(String, String, String)> = sqlx::query_as(
+            "SELECT am.node_id, am.json_path, dn.target_node_type \
+             FROM artifact_mapping am \
+             JOIN document_node dn ON am.node_id = dn.node_id \
+             WHERE am.artifact_id = ? AND am.project_id = ? AND dn.is_deleted = 0"
+        ).bind(&current_id).bind(&project_id).fetch_all(&*pool).await.map_err(|e| e.to_string())?;
 
-        // Propagate based on artifact codes
-        for code in codes {
-            if let Some(sharing_nodes) = code_to_nodes.get(code) {
-                for snid in sharing_nodes {
-                    if !visited.contains(snid) {
-                        let (_, _, state, _) = node_map.get(snid).unwrap();
-                        if state == "COMPLETED" {
-                            visited.insert(snid.clone());
-                            tainted_nodes.insert(snid.clone(), format!("Shared Artifact: {}", code));
-                            queue.push_back(snid.clone());
+        for (node_id, json_path, node_type) in dependents {
+            let item = impact_map.entry(node_id.clone()).or_insert_with(|| crate::schemas::TaintImpactItem {
+                node_id: node_id.clone(),
+                node_type: node_type.clone(),
+                block_ids: Vec::new(),
+                block_paths: Vec::new(),
+                reason: format!("Cascaded from: {}", current_id),
+            });
+            if !item.block_ids.contains(&current_id) {
+                item.block_ids.push(current_id.clone());
+                item.block_paths.push(json_path);
+            }
+
+            if !visited_nodes.contains(&node_id) {
+                visited_nodes.insert(node_id.clone());
+                let next_json: Option<String> = sqlx::query_scalar(
+                    "SELECT generated_draft_json FROM generation_iteration WHERE node_id = ? AND is_pass = 1 ORDER BY iteration_number DESC LIMIT 1"
+                ).bind(&node_id).fetch_optional(&*pool).await.map_err(|e| e.to_string())?;
+                if let Some(js) = next_json {
+                    if let Ok(v) = serde_json::from_str::<Value>(&js) {
+                        for d_id in crate::services::embedding::extract_artifact_ids_from_value(&v) {
+                            queue.push_back(d_id.to_uppercase());
                         }
                     }
                 }
@@ -541,40 +609,80 @@ pub async fn apply_taint_cascade(
         }
     }
 
-    println!(">>> Tainted Nodes to be marked STALE: {:?}", tainted_nodes);
+    // 3. 상태 요약 계산
+    let mut stale_count = 0;
+    let mut impact_count = 0;
+    let mut final_impacts = Vec::new();
 
-    // 3. DB 업데이트: 영향받는 노드들을 STALE 상태로 전환 및 사유 기록
-    if !tainted_nodes.is_empty() {
-        let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
-        for (nid, reason) in tainted_nodes {
+    for (node_id, impact) in impact_map {
+        let node_state: String = sqlx::query_scalar("SELECT node_state FROM document_node WHERE node_id = ?")
+            .bind(&node_id).fetch_one(&*pool).await.map_err(|e| e.to_string())?;
+        if node_state == "COMPLETED" { stale_count += 1; }
+        else { impact_count += 1; }
+        final_impacts.push(impact);
+    }
+
+    println!("[TAINT-CASCADE] ✅ Cascade complete. Stale: {}, Impacted: {}", stale_count, impact_count);
+    Ok(crate::schemas::TaintCascadeSchema { impacts: final_impacts, stale_count, impact_count })
+}
+
+#[tauri::command]
+pub async fn confirm_taint_cascade(
+    pool: tauri::State<'_, SqlitePool>,
+    project_id: String,
+    intent: crate::schemas::IntentSchema,
+    cascade_result: crate::schemas::TaintCascadeSchema,
+) -> Result<(), String> {
+    println!("[CONFIRM-CASCADE] 💾 Final Approval Received. Applying to DB...");
+    let now = Utc::now().to_rfc3339();
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
+    // 1. Intent 저장
+    sqlx::query("UPDATE project SET increment_intent = ?, updated_at = ? WHERE project_id = ?")
+        .bind(serde_json::to_string(&intent).unwrap_or_default())
+        .bind(&now)
+        .bind(&project_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 2. 영향받는 노드들 실제 STALE 처리
+    for impact in cascade_result.impacts {
+        let reason = format!("Tainted Blocks: {:?} | Reason: {}", impact.block_ids, impact.reason);
+        
+        // 상태 조회
+        let node_info: (String,) = sqlx::query_as("SELECT node_state FROM document_node WHERE node_id = ?")
+            .bind(&impact.node_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if node_info.0 == "COMPLETED" {
             sqlx::query(
                 "UPDATE document_node SET node_state = 'STALE', last_action = ?, updated_at = ? \
-                 WHERE node_id = ? AND node_state = 'COMPLETED'"
+                 WHERE node_id = ?"
             )
             .bind(&reason)
             .bind(&now)
-            .bind(&nid)
+            .bind(&impact.node_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+        } else {
+            sqlx::query(
+                "UPDATE document_node SET last_action = ?, updated_at = ? \
+                 WHERE node_id = ?"
+            )
+            .bind(format!("Impacted: {}", reason))
+            .bind(&now)
+            .bind(&impact.node_id)
             .execute(&mut *tx)
             .await
             .map_err(|e| e.to_string())?;
         }
-        tx.commit().await.map_err(|e| e.to_string())?;
     }
 
-
-    // 3. UI ?낅뜲?댄듃 ?대깽??諛쒗뻾
-    let _ = app_handle.emit("nodes-updated", ());
-    let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
-        message: "Taint Cascade 완료: 영향받는 노드들을 STALE 상태로 전환하였습니다.".into(),
-        node_id: "".into(),
-        node_type: "System".into(),
-        project_id: project_id.clone(),
-        level: "SUCCESS".into(),
-        status: "COMPLETED".into(),
-        current_iteration: None,
-        max_iterations: None,
-    });
-
+    tx.commit().await.map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -624,7 +732,10 @@ pub async fn generate_and_apply_patch(
     .await
     .map_err(|e| format!("Failed to load original JSON for refinement: {}", e))?;
 
-    if similarity < 0.2 {
+    // [Sprint 2] ID 기반 오염 추적(Taint Cascade) 결과 확인
+    let is_explicitly_tainted = node.last_action.as_ref().map(|a| a.contains("Tainted Blocks")).unwrap_or(false);
+
+    if similarity < 0.2 && !is_explicitly_tainted {
         println!(">>> [RAG-Recovery] Similarity {:.4} < 0.2. Auto-restoring node {} to COMPLETED", similarity, node_id);
         
         sqlx::query("UPDATE document_node SET node_state = 'COMPLETED', last_action = ?, updated_at = ? WHERE node_id = ?")
@@ -645,10 +756,12 @@ pub async fn generate_and_apply_patch(
             status: "COMPLETED".into(),
             current_iteration: None,
             max_iterations: None,
+            is_silent: None,
         });
 
-
         return Ok(());
+    } else if is_explicitly_tainted {
+        println!(">>> [Taint-Bypass] Node {} marked as STALE via Taint Cascade. Bypassing similarity check ({:.4})", node_id, similarity);
     }
 
     // SAD Global 컨텍스트 조회
@@ -668,19 +781,6 @@ pub async fn generate_and_apply_patch(
 
     // 2. RAG 컨텍스트 정보
     // 2. RAG 而⑦뀓?ㅽ듃 ?뺣낫
-    let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
-        message: "RAG 분석 중...".into(),
-        node_id: node_id.clone(),
-        node_type: node.target_node_type.clone(),
-        project_id: project_id.clone(),
-        level: "INFO".into(),
-        status: "IN_PROGRESS".into(),
-        current_iteration: None,
-        max_iterations: None,
-    });
-    sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-        .bind("RAG 분석 중...").bind(Utc::now().to_rfc3339()).bind(&node_id)
-        .execute(&*pool).await.map_err(|e| e.to_string())?;
 
     let rag_context = get_rag_context(&pool, &client, &api_key, &project_id, &intent, 5, vec![node_id.clone()]).await
         .unwrap_or_else(|e| {
@@ -752,10 +852,8 @@ pub async fn generate_and_apply_patch(
         status: "IN_PROGRESS".into(),
         current_iteration: None,
         max_iterations: None,
+        is_silent: Some(true),
     });
-    let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-        .bind("Generating Patch...").bind(Utc::now().to_rfc3339()).bind(&node_id)
-        .execute(&*pool).await;
 
     // 2-A. 프롬프트 로드 및 데이터 주입
     let mut prompt_content = std::fs::read_to_string(prompts_dir.join("generator/patch_generator.txt"))
@@ -876,7 +974,7 @@ pub async fn generate_and_apply_patch(
     .await
     .map_err(|e| e.to_string())?;
 
-    sqlx::query("UPDATE document_node SET node_state = 'REFINING', current_iteration = ?, updated_at = ? WHERE node_id = ?")
+    sqlx::query("UPDATE document_node SET node_state = 'REFINING', last_action = 'Refining...', current_iteration = ?, updated_at = ? WHERE node_id = ?")
         .bind(next_iter_num)
         .bind(&now)
         .bind(&node_id)
@@ -896,6 +994,7 @@ pub async fn generate_and_apply_patch(
         status: "IN_PROGRESS".into(),
         current_iteration: None,
         max_iterations: None,
+        is_silent: Some(true),
     });
 
     // 6. 자동 검증 프로세스 시작 (Sprint 4)
@@ -937,7 +1036,10 @@ pub async fn validate_refinement_node(
     let similarity = check_node_intersection(&pool, &client, &api_key, &project_id, &node_id, &intent).await
         .unwrap_or(0.0);
 
-    if similarity < 0.2 {
+    // [Sprint 2] ID 기반 오염 추적(Taint Cascade) 결과 확인
+    let is_explicitly_tainted = node.last_action.as_ref().map(|a| a.contains("Tainted Blocks")).unwrap_or(false);
+
+    if similarity < 0.2 && !is_explicitly_tainted {
         println!(">>> [RAG-Validation-Recovery] Similarity {:.4} < 0.2. Auto-restoring node {} to COMPLETED", similarity, node_id);
         
         sqlx::query("UPDATE document_node SET node_state = 'COMPLETED', last_action = ?, updated_at = ? WHERE node_id = ?")
@@ -950,6 +1052,8 @@ pub async fn validate_refinement_node(
 
         let _ = app_handle.emit("nodes-updated", ());
         return Ok(());
+    } else if is_explicitly_tainted {
+        println!(">>> [Taint-Validation-Bypass] Node {} marked as STALE via Taint Cascade. Forcing Evaluation despite low similarity ({:.4})", node_id, similarity);
     }
 
     // 최신 생성 이터레이션 로드 (방금 생성된 패치 적용본)
@@ -998,10 +1102,8 @@ pub async fn validate_refinement_node(
         status: "IN_PROGRESS".into(),
         current_iteration: None,
         max_iterations: None,
+        is_silent: Some(true),
     });
-    sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-        .bind("RAG 분석 중...").bind(Utc::now().to_rfc3339()).bind(&node_id)
-        .execute(&*pool).await.map_err(|e| e.to_string())?;
 
     let rag_context = get_rag_context(&pool, &client, &api_key, &project_id, &intent, 5, vec![node_id.clone()]).await
         .unwrap_or_else(|e| {
@@ -1019,10 +1121,8 @@ pub async fn validate_refinement_node(
         status: "IN_PROGRESS".into(),
         current_iteration: None,
         max_iterations: None,
+        is_silent: Some(true),
     });
-    let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
-        .bind("패치 검증 중...").bind(Utc::now().to_rfc3339()).bind(&node_id)
-        .execute(&*pool).await;
 
     let prompts_dir = get_prompts_dir(&app_handle);
     let mut prompt_content = std::fs::read_to_string(prompts_dir.join("evaluator/refinement_evaluator.txt"))
@@ -1084,6 +1184,7 @@ pub async fn validate_refinement_node(
         status: "COMPLETED".into(),
         current_iteration: None,
         max_iterations: None,
+        is_silent: None,
     });
     
     // 리파인먼트 결과 수신 후 클라이언트에게 결과 패키지 전송 (결과 모달 표시)
@@ -1126,6 +1227,7 @@ pub async fn retry_patch_loop(
             status: "IN_PROGRESS".into(),
             current_iteration: Some(i + 1),
             max_iterations: Some(retry_count),
+            is_silent: Some(true),
         });
         
         match generate_and_apply_patch(
@@ -1186,6 +1288,7 @@ pub async fn finalize_refinement_update(
         status: "IN_PROGRESS".into(),
         current_iteration: None,
         max_iterations: None,
+        is_silent: Some(true),
     });
 
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
@@ -1230,6 +1333,11 @@ pub async fn finalize_refinement_update(
             .execute(&mut *tx)
             .await
             .map_err(|e| e.to_string())?;
+
+        // artifact_mapping 동기화 (Phase 1)
+        if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&latest_iter.generated_draft_json) {
+            sync_artifact_mappings_in_tx(&mut *tx, &project_id, &node.node_id, &json_value).await?;
+        }
     }
 
     // 2. ??좎룞???????潁뺣먯삕??若밸벨?????????弛??????얜돋 (??좎룞???
@@ -1252,6 +1360,7 @@ pub async fn finalize_refinement_update(
         status: "COMPLETED".into(),
         current_iteration: None,
         max_iterations: None,
+        is_silent: None,
     });
 
     Ok(())
@@ -1345,6 +1454,37 @@ pub async fn migrate_canonical_ids_command(
     Ok(format!("Successfully migrated {} iterations to canonical IDs.", update_count))
 }
 
+#[tauri::command]
+pub async fn migrate_artifact_mappings(
+    app_handle: tauri::AppHandle,
+    pool: tauri::State<'_, SqlitePool>,
+) -> Result<String, String> {
+    println!(">>> [Migration] Starting Artifact Mapping Migration for all projects");
+    
+    // 1. 모든 프로젝트의 모든 승인된 노드 및 최신 이터레이션 로드
+    let all_approved_nodes: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT dn.project_id, dn.node_id, gi.generated_draft_json \
+         FROM document_node dn \
+         JOIN generation_iteration gi ON gi.node_id = dn.node_id \
+         WHERE gi.is_pass = 1 AND dn.is_deleted = 0"
+    )
+    .fetch_all(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let mut total_synced = 0;
+    for (project_id, node_id, json_str) in all_approved_nodes {
+        if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&json_str) {
+            match sync_artifact_mappings(&*pool, &project_id, &node_id, &json_value).await {
+                Ok(_) => total_synced += 1,
+                Err(e) => println!(">>> [Migration] Failed to sync node {}: {}", node_id, e),
+            }
+        }
+    }
+
+    Ok(format!("Successfully synced {} nodes to artifact_mapping table.", total_synced))
+}
+
 // ---------------------------------------------------------
 // Utility: JSON Scoped Path Finder (Sprint 2)
 // ---------------------------------------------------------
@@ -1395,3 +1535,123 @@ fn search_json_paths(value: &Value, current_path: &str, target_ids: &[String], p
     }
 }
 
+
+// ============================================================
+// Helper Functions for Pinpoint Tracing
+// ============================================================
+
+pub async fn sync_artifact_mappings(
+    pool: &sqlx::SqlitePool,
+    project_id: &str,
+    node_id: &str,
+    json_value: &serde_json::Value,
+) -> Result<(), String> {
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    sync_artifact_mappings_in_tx(&mut *tx, project_id, node_id, json_value).await?;
+    tx.commit().await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub async fn sync_artifact_mappings_in_tx(
+    tx: &mut sqlx::SqliteConnection,
+    project_id: &str,
+    node_id: &str,
+    json_value: &serde_json::Value,
+) -> Result<(), String> {
+    // 1. 기존 매핑 삭제
+    sqlx::query("DELETE FROM artifact_mapping WHERE node_id = ?")
+        .bind(node_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 2. 새로운 매핑 추출
+    let mappings = extract_mapped_ids_with_path(json_value, "");
+    let now = Utc::now().to_rfc3339();
+
+    // 3. 삽입
+    for (artifact_id, json_path) in mappings {
+        let mapping_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO artifact_mapping (mapping_id, project_id, node_id, artifact_id, json_path, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+        )
+        .bind(&mapping_id)
+        .bind(project_id)
+        .bind(node_id)
+        .bind(&artifact_id)
+        .bind(&json_path)
+        .bind(&now)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+fn extract_mapped_ids_with_path(value: &serde_json::Value, current_path: &str) -> Vec<(String, String)> {
+    let mut results = Vec::new();
+    if let Some(obj) = value.as_object() {
+        for (k, v) in obj {
+            let next_path = if current_path.is_empty() {
+                format!("/{}", k)
+            } else {
+                format!("{}/{}", current_path, k)
+            };
+
+            if k.starts_with("mapped_") {
+                if let Some(s) = v.as_str() {
+                    results.push((s.to_uppercase(), current_path.to_string())); // 블록 하이라이트를 위해 부모 객체 경로 저장
+                } else if let Some(arr) = v.as_array() {
+                    for item in arr {
+                        if let Some(s) = item.as_str() {
+                            results.push((s.to_uppercase(), current_path.to_string()));
+                        }
+                    }
+                }
+            }
+            results.extend(extract_mapped_ids_with_path(v, &next_path));
+        }
+    } else if let Some(arr) = value.as_array() {
+        for (i, v) in arr.iter().enumerate() {
+            let next_path = format!("{}/{}", current_path, i);
+            results.extend(extract_mapped_ids_with_path(v, &next_path));
+        }
+    }
+    results
+}
+
+fn extract_mapped_ids(value: &serde_json::Value) -> Vec<String> {
+    let mappings = extract_mapped_ids_with_path(value, "");
+    let mut ids: Vec<String> = mappings.into_iter().map(|(id, _)| id).collect();
+    
+    // 중복 제거
+    let set: std::collections::HashSet<_> = ids.into_iter().collect();
+    set.into_iter().collect()
+}
+
+fn get_pinpoint_block(value: &serde_json::Value, block_id: &str) -> Option<serde_json::Value> {
+    if let Some(obj) = value.as_object() {
+        // ID 필드들 확인
+        for id_key in ["id", "req_id", "func_id", "epic_id", "api_id", "tc_id", "screen_id", "table_id", "role_id"] {
+            if let Some(v) = obj.get(id_key) {
+                if v.as_str() == Some(block_id) {
+                    return Some(value.clone());
+                }
+            }
+        }
+        // 자식 노드 탐색
+        for v in obj.values() {
+            if let Some(found) = get_pinpoint_block(v, block_id) {
+                return Some(found);
+            }
+        }
+    } else if let Some(arr) = value.as_array() {
+        for v in arr {
+            if let Some(found) = get_pinpoint_block(v, block_id) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}

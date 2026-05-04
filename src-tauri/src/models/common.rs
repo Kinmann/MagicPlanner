@@ -24,6 +24,7 @@ pub struct PipelineStatusPayload {
     pub status: String, // "START", "IN_PROGRESS", "ITERATION_COMPLETED", "COMPLETED", "STOPPED", "FAILED", "EMBEDDING_START", "EMBEDDING_COMPLETE", "EMBEDDING_FAILED"
     pub current_iteration: Option<i32>,
     pub max_iterations: Option<i32>,
+    pub is_silent: Option<bool>,
 }
 
 impl ToString for NodeState {

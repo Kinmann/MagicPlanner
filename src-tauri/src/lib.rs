@@ -214,6 +214,20 @@ pub fn run() {
                         FOREIGN KEY(node_id) REFERENCES document_node(node_id),
                         FOREIGN KEY(iteration_id) REFERENCES generation_iteration(iteration_id)
                     );
+
+                    -- 10. 아티팩트 매핑 (증분 수정 의존성 추적용)
+                    CREATE TABLE IF NOT EXISTS artifact_mapping (
+                        mapping_id VARCHAR(36) PRIMARY KEY NOT NULL,
+                        project_id VARCHAR(36) NOT NULL,
+                        node_id VARCHAR(36) NOT NULL,
+                        artifact_id VARCHAR(255) NOT NULL,
+                        json_path TEXT NOT NULL,
+                        created_at TIMESTAMP NOT NULL,
+                        FOREIGN KEY(project_id) REFERENCES project(project_id),
+                        FOREIGN KEY(node_id) REFERENCES document_node(node_id)
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_artifact_mapping_id ON artifact_mapping(artifact_id);
+                    CREATE INDEX IF NOT EXISTS idx_artifact_mapping_project ON artifact_mapping(project_id);
                 ").execute(&pool).await.map_err(|e| e.to_string())?;
 
                 // ============================================================
@@ -249,6 +263,27 @@ pub fn run() {
                 // 4. 버려진(Stale) RAG 상태 및 비정상 종료된 작업(IN_PROGRESS) 초기화 (앱 시작 시 오버레이 스턱 방지)
                 let _ = sqlx::query("UPDATE document_node SET last_action = NULL WHERE last_action LIKE '%RAG%'").execute(&pool).await;
                 let _ = sqlx::query("UPDATE document_node SET node_state = 'PAUSED_STOPPED' WHERE node_state IN ('IN_PROGRESS', 'REFINING')").execute(&pool).await;
+                
+                // 5. [NEW] Legacy Comment Path Migration
+                let _ = sqlx::query(
+                    "UPDATE node_comment 
+                     SET json_path = '$' || SUBSTR(json_path, INSTR(json_path, '$') + 1) 
+                     WHERE json_path LIKE '%$%' AND json_path NOT LIKE '$%'"
+                ).execute(&pool).await;
+                
+                // 6. [NEW] Explicit Global Category Migration (GENESIS / SAD)
+                // 모든 GLOBAL 카테고리를 폐기하고 성격에 맞게 분리
+                let _ = sqlx::query(
+                    "UPDATE document_node 
+                     SET node_category = 'GENESIS' 
+                     WHERE target_node_type LIKE 'GPRD_%' OR node_category = 'GLOBAL' AND target_node_type LIKE 'GPRD_%'"
+                ).execute(&pool).await;
+
+                let _ = sqlx::query(
+                    "UPDATE document_node 
+                     SET node_category = 'SAD' 
+                     WHERE target_node_type LIKE 'SAD_%' OR node_category = 'GLOBAL' AND target_node_type LIKE 'SAD_%'"
+                ).execute(&pool).await;
                 
                 Ok::<sqlx::SqlitePool, String>(pool)
             })?;
@@ -296,8 +331,8 @@ pub fn run() {
             commands::refinement::parse_intent,
             commands::refinement::route_architecture_target,
             commands::refinement::confirm_architecture_routing,
-            commands::refinement::validate_intent_globally,
             commands::refinement::apply_taint_cascade,
+            commands::refinement::confirm_taint_cascade,
             commands::refinement::generate_and_apply_patch,
             commands::refinement::validate_refinement_node,
             commands::refinement::finalize_refinement_update,
@@ -308,7 +343,9 @@ pub fn run() {
             commands::comment::create_comment,
             commands::comment::update_comment,
             commands::comment::delete_comment,
+            commands::comment::migrate_comment_paths,
             commands::refinement::migrate_canonical_ids_command,
+            commands::refinement::migrate_artifact_mappings,
         ])
         .plugin(tauri_plugin_dialog::init())
         .run(tauri::generate_context!())

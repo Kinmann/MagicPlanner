@@ -77,6 +77,11 @@ pub async fn confirm_genesis_prd_iteration(
     .bind(&ctx_id).bind(&project_id).bind(&iteration_id).bind(&node.target_node_type).bind(&iteration.generated_draft_json).bind(iteration.iteration_number).bind(&now).bind(&now)
     .execute(&mut *tx).await.map_err(|e| e.to_string())?;
 
+    // artifact_mapping 동기화 (Phase 1)
+    if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&iteration.generated_draft_json) {
+        crate::commands::refinement::sync_artifact_mappings_in_tx(&mut *tx, &project_id, &node.node_id, &json_value).await?;
+    }
+
     tx.commit().await.map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -194,6 +199,7 @@ pub async fn approve_genesis_prd(
                 status: "EMBEDDING_START".into(),
                 current_iteration: None,
                 max_iterations: None,
+                is_silent: None,
             });
             let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
                 .bind("RAG 저장 중...")
@@ -222,6 +228,7 @@ pub async fn approve_genesis_prd(
                         status: "EMBEDDING_COMPLETE".into(),
                         current_iteration: None,
                         max_iterations: None,
+                        is_silent: None,
                     });
                 },
                 Err(e) => {
@@ -234,6 +241,7 @@ pub async fn approve_genesis_prd(
                         status: "EMBEDDING_FAILED".into(),
                         current_iteration: None,
                         max_iterations: None,
+                        is_silent: None,
                     });
                     println!(">>> [RAG] Genesis PRD Embedding Failed: {}", e);
                 }
@@ -368,6 +376,11 @@ pub async fn confirm_sad_iteration(
     sqlx::query("UPDATE document_node SET current_best_score = ?, updated_at = ? WHERE node_id = ?")
         .bind(iteration.calculated_score).bind(&now).bind(&node.node_id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
 
+    // artifact_mapping 동기화 (Phase 1)
+    if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&iteration.generated_draft_json) {
+        crate::commands::refinement::sync_artifact_mappings_in_tx(&mut *tx, &project_id, &node.node_id, &json_value).await?;
+    }
+
     tx.commit().await.map_err(|e| e.to_string())?;
     let _ = _app_handle.emit("nodes-updated", ());
     Ok(())
@@ -480,6 +493,7 @@ pub async fn approve_sad_node(
                 status: "EMBEDDING_START".into(),
                 current_iteration: None,
                 max_iterations: None,
+                is_silent: None,
             });
             let _ = sqlx::query("UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?")
                 .bind("RAG 저장 중...")
@@ -502,6 +516,7 @@ pub async fn approve_sad_node(
                         status: "EMBEDDING_COMPLETE".into(),
                         current_iteration: None,
                         max_iterations: None,
+                        is_silent: None,
                     });
                 },
                 Err(e) => {
@@ -514,6 +529,7 @@ pub async fn approve_sad_node(
                         status: "EMBEDDING_FAILED".into(),
                         current_iteration: None,
                         max_iterations: None,
+                        is_silent: None,
                     });
                     println!(">>> [RAG] SAD Node Embedding Failed: {}", e);
                 }

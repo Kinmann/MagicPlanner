@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Info, Calendar, Hash, Tag, Activity, DollarSign, Clock, Zap,
   MessageSquare, Sparkles, Send, Trash2, Check, ChevronDown, 
-  Cpu, AlertCircle, Layers, Target, ChevronRight, X, Loader2
+  Cpu, AlertCircle, Layers, Target, ChevronRight, X, Loader2, Box
 } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
@@ -12,6 +12,7 @@ import { LineChart } from '../ui/Chart';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Spinner } from '../ui/Spinner';
+import { ImpactReportModal } from '../Project/ImpactReportModal';
 import styles from './RightPanel.module.scss';
 
 export const RightPanel: React.FC = () => {
@@ -19,7 +20,7 @@ export const RightPanel: React.FC = () => {
   const { nodes, currentProject } = useProjectStore();
   const { 
     messages, mode, setMode, isLoading, step, requestText, setRequestText,
-    startAnalysis, confirmRouting, approveValidation,
+    startAnalysis, confirmRouting, approveValidation, confirmTaintCascade,
     comments, selectedCommentIds, toggleComment, reset, statusMessages,
     isCommentsListVisible, toggleCommentsList, fetchComments
   } = useRefinementStore();
@@ -89,6 +90,7 @@ export const RightPanel: React.FC = () => {
             statusMessages={statusMessages}
             confirmRouting={confirmRouting}
             approveValidation={approveValidation}
+            confirmTaintCascade={confirmTaintCascade}
             isCommentsListVisible={isCommentsListVisible}
             toggleCommentsList={toggleCommentsList}
           />
@@ -155,7 +157,7 @@ const PropertiesView = ({ selectedNode }: any) => {
 const RefinementView = ({ 
   messages, scrollRef, isLoading, step, requestText, setRequestText, 
   onSend, onReset, projectId, comments, selectedCommentIds, toggleComment,
-  statusMessages, confirmRouting, approveValidation,
+  statusMessages, confirmRouting, approveValidation, confirmTaintCascade,
   isCommentsListVisible, toggleCommentsList
 }: any) => {
   const selectedCommentsList = comments.filter((c: any) => selectedCommentIds.has(c.comment_id));
@@ -199,6 +201,8 @@ const RefinementView = ({
               <AnalysisMessage data={msg.data} />
             ) : msg.type === 'validation' ? (
               <ValidationMessage data={msg.data} />
+            ) : msg.type === 'cascade_analysis' ? (
+              <CascadeAnalysisMessage data={msg.data} />
             ) : (
               <div className={styles.bubble}>{msg.content}</div>
             )}
@@ -212,7 +216,7 @@ const RefinementView = ({
             {selectedCommentsList.map((c: any) => (
               <div key={c.comment_id} className={styles.contextPill}>
                 <MessageSquare size={10} />
-                <span>{c.node_type}.{c.json_path}</span>
+                <span>{c.module_name || c.node_category}:{c.node_type}:{c.json_path.includes('$') ? '$' + c.json_path.split('$')[1] : c.json_path}</span>
                 <X size={10} className={styles.remove} onClick={() => toggleComment(c.comment_id)} />
               </div>
             ))}
@@ -275,6 +279,17 @@ const RefinementView = ({
               Confirm & Cascade
             </Button>
           )}
+          {step === 'CASCADE_CONFIRMATION' && (
+            <Button 
+              variant="primary" 
+              onClick={() => confirmTaintCascade(projectId)} 
+              isLoading={isLoading}
+              fullWidth
+              leftIcon={<Check size={16}/>}
+            >
+              Approve Impact & Apply
+            </Button>
+          )}
         </div>
       </div>
     </div>
@@ -299,7 +314,9 @@ const CommentsOverlay = ({ comments, selectedIds, onToggle, onClose }: any) => (
             className={`${styles.commentItem} ${selectedIds.has(c.comment_id) ? styles.selected : ''}`}
             onClick={() => onToggle(c.comment_id)}
           >
-            <div className={styles.commentPath}>{c.node_category}.{c.node_type}.{c.json_path}</div>
+            <div className={styles.commentPath}>
+              {c.module_name || c.node_category}:{c.node_type}:{c.json_path.includes('$') ? '$' + c.json_path.split('$')[1] : c.json_path}
+            </div>
             <div className={styles.commentText}>{c.comment_text}</div>
           </div>
         ))
@@ -328,40 +345,175 @@ const ThinkingMessage = ({ content, statusMessages, hideLogs }: any) => (
 );
 
 const AnalysisMessage = ({ data }: any) => (
-  <div className={styles.analysisCard}>
-    <div className={styles.cardHeader}>Impact Analysis</div>
-    {data.intent.intents.map((item: any, idx: number) => (
-      <div key={idx} className={styles.intentItem}>
-        <div className={styles.intentTitle}>
-          <span className={styles.badge} data-type={item.action_type}>{item.action_type}</span>
-          {item.target_feature}
+  <div className={styles.chatStyleMessage}>
+    <div className={styles.chatHeader}>🖋️ 주요 변경 사항</div>
+    
+    <ul className={styles.chatList}>
+      <li>
+        <strong>Impact Analysis (텍스트 로그 형식):</strong>
+        <ul>
+          {data.intent.intents.map((item: any, idx: number) => (
+            <li key={idx} className={styles.intentListItem}>
+              <div className={styles.intentHeaderLine}>
+                <span className={styles.chatCode} data-type={item.action_type}>{item.action_type.toUpperCase()}</span>
+                <span className={styles.intentTitleText}>{item.target_feature}</span>
+                <span className={styles.scopeBadge} data-scope={item.impact_scope}>{item.impact_scope}</span>
+              </div>
+              
+              <div className={styles.intentDetails}>
+                <p className={styles.chatDesc}><strong>Reasoning:</strong> {item.reasoning}</p>
+                <p className={styles.chatDesc}><strong>Description:</strong> {item.action_description}</p>
+                
+                {item.conflict_resolution && (
+                  <div className={styles.conflictBox}>
+                    <AlertCircle size={10} />
+                    <span><strong>Conflict Resolution:</strong> {item.conflict_resolution}</span>
+                  </div>
+                )}
+
+                {item.target_block_ids && item.target_block_ids.length > 0 && (
+                  <div className={styles.blockIdsRow}>
+                    <Target size={10} />
+                    <div className={styles.blockTags}>
+                      {item.target_block_ids.map((bid: string, bidx: number) => (
+                        <span key={bidx} className={styles.blockTag}>{bid}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </li>
+    </ul>
+
+    {data.targets && data.targets.length > 0 && (
+      <div className={styles.chatFooter}>
+        <div className={styles.footerLabel}>Files Modified</div>
+        <div className={styles.footerFiles}>
+          {data.targets.map((target: string, i: number) => (
+            <div key={i} className={styles.fileBadge}>
+              <Box size={12} />
+              {target}
+            </div>
+          ))}
         </div>
-        <p className={styles.intentDesc}>{item.reasoning}</p>
       </div>
-    ))}
-    <div className={styles.impactSection}>
-      <div className={styles.cardHeader} style={{ padding: 0, background: 'none', border: 'none', marginBottom: 4 }}>Impacted Artifacts</div>
-      <div className={styles.impactGrid}>
-        {data.targets.map((target: string, i: number) => (
-          <div key={i} className={styles.artifactBadge}>
-            <Layers size={10} />
-            {target}
-          </div>
-        ))}
-      </div>
-    </div>
+    )}
   </div>
 );
 
 const ValidationMessage = ({ data }: any) => (
-  <div className={`${styles.validationCard} ${data.decision === 'PASS' ? styles.pass : styles.fail}`}>
-    <div className={styles.decisionLabel}>
-      {data.decision === 'PASS' ? <Check size={12} /> : <AlertCircle size={12} />}
-      Validation {data.decision}
+  <div className={styles.chatStyleMessage}>
+    <div className={styles.markdownHeader}>⚖️ 설계 정합성 검증 결과</div>
+    
+    <div className={`${styles.markdownAlert} ${data.decision === 'PASS' ? styles.pass : styles.fail}`}>
+      <div className={styles.alertHeader}>
+        {data.decision === 'PASS' ? <Check size={14} /> : <AlertCircle size={14} />}
+        <span>{data.decision === 'PASS' ? 'ARCHITECTURE PASS' : 'ARCHITECTURE REFACTORING'}</span>
+      </div>
+      <div className={styles.alertBody}>
+        {data.rationale}
+      </div>
     </div>
-    <p className={styles.rationale}>{data.rationale}</p>
+
   </div>
 );
+
+const CascadeAnalysisMessage = ({ data }: any) => {
+  const { nodes, currentProject } = useProjectStore();
+  const { confirmTaintCascade, isLoading } = useRefinementStore();
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  return (
+    <>
+      <div className={styles.chatStyleMessage}>
+        <div className={styles.chatHeader}>⚡ Taint Cascade Simulation Analysis</div>
+
+        <ul className={styles.chatList}>
+          <li>
+            <strong>Impact Radius Summary:</strong>
+            <div className="mt-2 space-y-1 ml-1">
+              <p className="text-xs">
+                <span className="text-gray-500">• </span>
+                <strong className="text-rose-500">To be Stale</strong>: {data.stale_count}
+              </p>
+              <p className="text-xs">
+                <span className="text-gray-500">• </span>
+                <strong className="text-amber-500">Impacted Pending Nodes</strong>: {data.impact_count}
+              </p>
+            </div>
+            <p className={styles.chatDesc} style={{ opacity: 0.6, fontStyle: 'italic', marginTop: '8px' }}>
+              {"> "} {data.stale_count}개의 아티팩트가 변경의 직접적인 영향을 받아 'STALE' 상태로 전환될 예정입니다.
+            </p>
+          </li>
+
+          <li>
+            <strong>Cascaded Artifact Details:</strong>
+            <ul>
+              {data.impacts.slice(0, 5).map((impact: any, i: number) => {
+                const node = nodes.find(n => n.node_id === impact.node_id);
+                const displayName = node ? node.target_node_type : impact.node_id.split('-')[0];
+                
+                return (
+                  <li key={i} className={styles.intentListItem}>
+                    <div className={styles.intentHeaderLine}>
+                      <span className={styles.chatCode}>{displayName}</span>
+                      <span className="text-[10px] font-mono text-gray-600 opacity-50">{impact.node_id.split('-')[0]}</span>
+                    </div>
+                    
+                    <div className={styles.intentDetails}>
+                      <div className={styles.blockIdsRow} style={{ marginBottom: '4px' }}>
+                        <Target size={10} />
+                        <div className={styles.blockTags}>
+                          {impact.block_ids.map((bid: string, bidx: number) => (
+                            <span key={bidx} className={styles.blockTag}>{bid}</span>
+                          ))}
+                        </div>
+                      </div>
+                      <p className={styles.chatDesc}><strong>Reason:</strong> {impact.reason}</p>
+                    </div>
+                  </li>
+                );
+              })}
+              {data.impacts.length > 5 && (
+                <li className="text-[11px] text-gray-600 italic mt-2 opacity-50">
+                  ...and {data.impacts.length - 5} more artifacts detected in cascade.
+                </li>
+              )}
+            </ul>
+          </li>
+        </ul>
+
+        <div className={styles.chatFooter}>
+          <div className="flex items-center justify-between w-full">
+            <div className={styles.footerLabel}>Simulation Report</div>
+            <button 
+              className="text-[10px] font-black text-sky-500/60 hover:text-sky-400 transition-colors uppercase tracking-widest flex items-center gap-1"
+              onClick={() => setIsModalOpen(true)}
+            >
+              Open Full Report <ChevronRight size={10} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <ImpactReportModal 
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        data={data}
+        isLoading={isLoading}
+        onConfirm={() => {
+          if (currentProject) {
+            confirmTaintCascade(currentProject.project_id);
+            setIsModalOpen(false);
+          }
+        }}
+      />
+    </>
+  );
+};
 
 const PropertyItem = ({ icon, label, value }: any) => (
   <div className={styles.propertyItem}>

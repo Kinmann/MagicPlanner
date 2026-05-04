@@ -4,7 +4,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { useSettingsStore } from './settingsStore';
 import { useProjectStore } from './projectStore';
 
-export type UpdateStep = 'IDLE' | 'INPUT' | 'ANALYZING' | 'CONFIRMATION' | 'VALIDATING' | 'VALIDATION_RESULT' | 'CASCADING' | 'SUCCESS';
+export type UpdateStep = 'IDLE' | 'INPUT' | 'ANALYZING' | 'CONFIRMATION' | 'VALIDATING' | 'VALIDATION_RESULT' | 'CASCADING' | 'CASCADE_CONFIRMATION' | 'SUCCESS';
 
 export interface EnrichedComment {
   comment_id: string;
@@ -15,6 +15,7 @@ export interface EnrichedComment {
   node_category: string;
   module_name: string | null;
   created_at: string;
+  original_content?: string | null;
 }
 
 export interface IntentItem {
@@ -37,11 +38,31 @@ export interface IntentSchema {
 export interface ValidationResult {
   decision: 'PASS' | 'FAIL' | 'REFACTORING';
   rationale: string;
-  violations: string[];
+  violations?: string[];
+}
+
+export interface RoutingSchema {
+  target_nodes: string[];
+  decision: 'PASS' | 'FAIL' | 'REFACTORING';
+  rationale: string;
+}
+
+export interface TaintImpactItem {
+  node_id: string;
+  node_type: string;
+  block_ids: string[];
+  block_paths: string[];
+  reason: string;
+}
+
+export interface TaintCascadeSchema {
+  impacts: TaintImpactItem[];
+  stale_count: number;
+  impact_count: number;
 }
 
 export type MessageRole = 'user' | 'assistant';
-export type MessageType = 'text' | 'thinking' | 'analysis' | 'validation' | 'success' | 'error';
+export type MessageType = 'text' | 'thinking' | 'analysis' | 'validation' | 'cascade_analysis' | 'success' | 'error';
 
 export interface RefinementMessage {
   id: string;
@@ -79,6 +100,7 @@ interface RefinementState {
   startAnalysis: (projectId: string) => Promise<void>;
   confirmRouting: (projectId: string) => Promise<void>;
   approveValidation: (projectId: string) => Promise<void>;
+  confirmTaintCascade: (projectId: string) => Promise<void>;
   reset: () => void;
   setMode: (mode: 'PROPERTIES' | 'REFINEMENT') => void;
   addMessage: (message: Omit<RefinementMessage, 'id' | 'timestamp'>) => void;
@@ -94,6 +116,7 @@ export const useRefinementStore = create<RefinementState>((set, get) => ({
   targetNodes: [],
   intent: null,
   validationResult: null,
+  taintCascadeResult: null,
   isLoading: false,
   thinkingDuration: 0,
   comments: [],
@@ -160,8 +183,21 @@ export const useRefinementStore = create<RefinementState>((set, get) => ({
 
     const selectedComments = comments
       .filter(c => selectedCommentIds.has(c.comment_id))
-      .map(c => `[${c.node_category}.${c.node_type}${c.module_name ? `(${c.module_name})` : ''}.${c.json_path}] ${c.comment_text}`)
-      .join('\n');
+      .map(c => {
+        const modulePrefix = c.module_name || c.node_category;
+        // 레거시 데이터 대응: json_path에 노드 타입이나 점이 섞여있을 경우 $로 시작하는 순수 경로만 추출
+        const normalizedPath = c.json_path.includes('$') 
+          ? '$' + c.json_path.split('$')[1] 
+          : c.json_path;
+          
+        let text = `[${modulePrefix}:${c.node_type}:${normalizedPath}]`;
+        if (c.original_content) {
+          text += `\n  [Original Content: ${c.original_content}]`;
+        }
+        text += `\n  [Comment: ${c.comment_text}]`;
+        return text;
+      })
+      .join('\n\n');
     
     const fullPrompt = selectedComments 
       ? `Selected Comments Context:\n${selectedComments}\n\nUser Request: ${requestText}`
@@ -187,15 +223,53 @@ export const useRefinementStore = create<RefinementState>((set, get) => ({
       const parsedIntent = await invoke<any>('parse_intent', { apiKey, projectId, rawInput: fullPrompt });
       set({ intent: parsedIntent });
       
-      const routing = await invoke<any>('route_architecture_target', { apiKey, projectId, intent: parsedIntent });
-      set({ targetNodes: routing.target_nodes, step: 'CONFIRMATION' });
-
-      // Add Analysis Result Message
+      // 1. Intent Analysis 결과 즉시 추가
       get().addMessage({
         role: 'assistant',
         type: 'analysis',
-        content: 'I have analyzed the impact of your request.',
-        data: { intent: parsedIntent, targets: routing.target_nodes }
+        content: 'I have parsed your intent and identified the target features.',
+        data: { 
+          intent: parsedIntent, 
+          targets: [], // 아직 라우팅 전
+          decision: 'PASS',
+          rationale: 'Intent parsing complete. Proceeding to architectural routing...'
+        }
+      });
+      
+      // 2. Routing 단계를 위한 새로운 Thinking 메시지 추가 (로그 노출용)
+      get().addMessage({
+        role: 'assistant',
+        type: 'thinking',
+        content: 'Performing architectural routing and upward validation...',
+        data: { hideLogs: false }
+      });
+
+      const routing = await invoke<RoutingSchema>('route_architecture_target', { apiKey, projectId, intent: parsedIntent });
+      
+      const validationResult: ValidationResult = {
+        decision: routing.decision,
+        rationale: routing.rationale,
+        violations: []
+      };
+
+      set({ 
+        targetNodes: routing.target_nodes, 
+        validationResult: validationResult,
+        step: routing.decision === 'PASS' ? 'CONFIRMATION' : 'VALIDATION_RESULT'
+      });
+
+      // 3. Routing 및 Validation 결과 추가 (중복 방지를 위해 type을 validation으로 설정)
+      get().addMessage({
+        role: 'assistant',
+        type: 'validation',
+        content: routing.decision === 'PASS' 
+          ? 'Architectural alignment check passed.'
+          : `Architecture check result: ${routing.decision}`,
+        data: { 
+          targets: routing.target_nodes,
+          decision: routing.decision,
+          rationale: routing.rationale
+        }
       });
 
     } catch (err: any) {
@@ -210,46 +284,16 @@ export const useRefinementStore = create<RefinementState>((set, get) => ({
     }
   },
 
-  confirmRouting: async (projectId) => {
-    const { intent, targetNodes, isLoading } = get();
-    if (isLoading) return;
+  confirmRouting: async (_projectId) => {
+    const { validationResult } = get();
+    if (!validationResult) return;
 
-    const apiKey = useSettingsStore.getState().apiKey;
-    set({ isLoading: true, error: null, step: 'VALIDATING' });
-
-    get().addMessage({
-      role: 'assistant',
-      type: 'thinking',
-      content: 'Validating proposed changes against global constraints...'
-    });
-
-    try {
-      const result = await invoke<ValidationResult>('validate_intent_globally', {
-        apiKey, projectId, intent, targets: targetNodes
-      });
-      set({ validationResult: result, step: 'VALIDATION_RESULT' });
-
-      get().addMessage({
-        role: 'assistant',
-        type: 'validation',
-        content: `Validation complete: ${result.decision}`,
-        data: result
-      });
-
-    } catch (err: any) {
-      set({ error: err.toString(), step: 'CONFIRMATION' });
-      get().addMessage({
-        role: 'assistant',
-        type: 'error',
-        content: `Validation failed: ${err.toString()}`
-      });
-    } finally {
-      set({ isLoading: false });
-    }
+    // 라우팅 단계에서 이미 검증이 완료되었으므로, 바로 결과 화면으로 전환
+    set({ step: 'VALIDATION_RESULT' });
   },
 
   approveValidation: async (projectId) => {
-    const { intent, targetNodes, isLoading } = get();
+    const { intent, targetNodes, validationResult, isLoading } = get();
     if (isLoading) return;
 
     set({ isLoading: true, error: null, step: 'CASCADING' });
@@ -257,27 +301,66 @@ export const useRefinementStore = create<RefinementState>((set, get) => ({
     get().addMessage({
       role: 'assistant',
       type: 'thinking',
-      content: 'Applying changes and propagating taint cascade...'
+      content: 'Simulating impact of changes (Dry-run taint cascade)...'
     });
 
     try {
-      await invoke('apply_taint_cascade', { projectId, intent, targets: targetNodes });
-      set({ step: 'SUCCESS' });
+      const result = await invoke<TaintCascadeSchema>('apply_taint_cascade', { 
+        projectId, 
+        intent, 
+        targets: targetNodes,
+        routerDecision: validationResult?.decision || 'PASS'
+      });
+      set({ taintCascadeResult: result, step: 'CASCADE_CONFIRMATION' });
       
       get().addMessage({
         role: 'assistant',
-        type: 'success',
-        content: 'Architectural refinement successfully applied. Impacted artifacts have been marked as STALE.'
+        type: 'cascade_analysis',
+        content: `Impact analysis complete: ${result.stale_count} blocks will be marked as STALE, and ${result.impact_count} related blocks will be impacted.`,
+        data: result
       });
 
-      // Refresh nodes after cascade
-      useProjectStore.getState().fetchNodes(projectId);
     } catch (err: any) {
       set({ error: err.toString(), step: 'VALIDATION_RESULT' });
       get().addMessage({
         role: 'assistant',
         type: 'error',
-        content: `Cascade failed: ${err.toString()}`
+        content: `Cascade simulation failed: ${err.toString()}`
+      });
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  confirmTaintCascade: async (projectId) => {
+    const { intent, taintCascadeResult, isLoading } = get();
+    if (isLoading || !taintCascadeResult) return;
+
+    set({ isLoading: true, error: null, step: 'CASCADING' });
+
+    try {
+      await invoke('confirm_taint_cascade', { 
+        projectId, 
+        intent, 
+        cascadeResult: taintCascadeResult 
+      });
+      
+      set({ step: 'SUCCESS' });
+      
+      get().addMessage({
+        role: 'assistant',
+        type: 'success',
+        content: 'Changes successfully applied. Artifacts have been updated based on the confirmed impact scope.'
+      });
+
+      // Refresh nodes after cascade
+      useProjectStore.getState().fetchNodes(projectId);
+    } catch (err: any) {
+      set({ error: err.toString(), step: 'CASCADE_CONFIRMATION' });
+      get().addMessage({
+        role: 'assistant',
+        type: 'error',
+        content: `Final application failed: ${err.toString()}`
       });
     } finally {
       set({ isLoading: false });

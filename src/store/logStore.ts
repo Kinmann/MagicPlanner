@@ -49,6 +49,9 @@ export const initLogEventListeners = async () => {
 
   // 백엔드 파이프라인 상태 이벤트 리스너
   await listen<any>('pipeline-status', (event) => {
+    // is_silent 플래그가 있는 경우 로그 기록에서 제외 (증분 수정 세부 로그 등)
+    if (event.payload.is_silent) return;
+
     const status = normalizePipelineStatus(event.payload);
     if (!status) return;
 

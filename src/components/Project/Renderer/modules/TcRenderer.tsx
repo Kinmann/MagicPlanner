@@ -26,7 +26,7 @@ const TcRenderer: React.FC<TcRendererProps> = ({ data, nodeId, currentIteration 
             const isNegative = tc.tc_type?.toLowerCase().includes('negative');
             
             return (
-              <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.test_cases[?(@.tc_id=='${tc.tc_id}')]`} currentIteration={currentIteration}>
+              <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.test_cases[?(@.tc_id=='${tc.tc_id}')]`} currentIteration={currentIteration} blockId={tc.tc_id}>
                 <article className={styles.epicItem} style={{ width: '100%' }}>
                   {/* Test Case Header - GPRD Epic Style */}
                   <h3 className={styles.epicHeader}>

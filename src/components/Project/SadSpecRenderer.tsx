@@ -72,7 +72,7 @@ const ErdRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?: any
         </h2>
         <div className={styles.epicList}>
           {entities.map((ent: any, i: number) => (
-            <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={getEntityPath(ent.entity_name)} currentIteration={currentIteration}>
+            <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={getEntityPath(ent.entity_name)} currentIteration={currentIteration} blockId={ent.table_id}>
               <article className={styles.epicItem} style={{ width: '100%' }}>
                 <h3 className={styles.criteriaTitle} style={{ fontSize: '15px' }}>
                   <Layers size={18} className="text-primary opacity-50" />
@@ -165,7 +165,7 @@ const RbacRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?: an
         </h2>
         <div className={styles.epicList}>
           {authMethod && (
-            <CommentableRow nodeId={nodeId || ''} jsonPath={authPath} currentIteration={currentIteration}>
+            <CommentableRow nodeId={nodeId || ''} jsonPath={authPath} currentIteration={currentIteration} blockId={authData.id}>
               <article className={styles.epicItem}>
                 <h3 className={styles.criteriaTitle} style={{ fontSize: '15px' }}>
                   <Zap size={18} className="text-primary" />
@@ -203,7 +203,7 @@ const RbacRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?: an
           {(data.roles || []).map((r: any, i: number) => {
             const isAdmin = r.role_name?.toUpperCase().includes('ADMIN') || r.role_id?.toUpperCase().includes('ADMIN');
             return (
-              <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.roles[?(@.role_id=='${r.role_id || r.role_name}')]`} currentIteration={currentIteration}>
+              <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.roles[?(@.role_id=='${r.role_id || r.role_name}')]`} currentIteration={currentIteration} blockId={r.role_id}>
                 <article className={styles.epicItem} style={{ width: '100%' }}>
                   <h3 className={styles.criteriaTitle} style={{ fontSize: '15px' }}>
                     {isAdmin ? <ShieldCheck size={18} className="text-primary" /> : <User size={18} className="opacity-40" />}
@@ -272,7 +272,7 @@ const TechStackRenderer: React.FC<{ data: any, nodeId?: string, currentIteration
                   if (!val) return null;
 
                   return (
-                    <CommentableRow key={idx} nodeId={nodeId || ''} jsonPath={`$.${item.id}`} currentIteration={currentIteration}>
+                    <CommentableRow key={idx} nodeId={nodeId || ''} jsonPath={`$.${item.id}`} currentIteration={currentIteration} blockId={val.id || item.id}>
                       <div style={{ width: '100%' }}>
                         <h4 className={styles.criteriaTitle}>
                           <span style={{ opacity: 0.5, display: 'flex', alignItems: 'center' }}>{item.icon}</span>
@@ -328,7 +328,7 @@ const TechStackRenderer: React.FC<{ data: any, nodeId?: string, currentIteration
                <div className={styles.epicBody}>
                  <ul className={styles.criteriaList}>
                    {data.rationale.map((r: string, i: number) => (
-                     <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.rationale[${i}]`} currentIteration={currentIteration}>
+                     <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.rationale[${i}]`} currentIteration={currentIteration} blockId={data.rationale_ids?.[i]}>
                        <li className={styles.criteriaItem}>
                          <CheckCircle2 size={16} className={styles.checkIcon} />
                          <span className={styles.valueWrapper}>{r}</span>
@@ -397,7 +397,7 @@ const InterfaceRenderer: React.FC<{ data: any, nodeId?: string, currentIteration
         </h2>
         <div className={styles.epicList}>
           {(data.error_codes || []).map((err: any, i: number) => (
-            <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.error_codes[?(@.code=="${err.code}")]`} currentIteration={currentIteration}>
+            <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.error_codes[?(@.code=="${err.code}")]`} currentIteration={currentIteration} blockId={err.code}>
               <article className={styles.epicItem} style={{ width: '100%' }}>
                 <h3 className={styles.criteriaTitle} style={{ fontSize: '15px' }}>
                   <span className={styles.idBadge}>{err.code}</span>
@@ -433,7 +433,7 @@ const ModuleListRenderer: React.FC<{ data: any, nodeId?: string, currentIteratio
         
         <div className={styles.epicList}>
           {modules.map((mod: any, i: number) => (
-            <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.modules[?(@.module_id=="${mod.module_id}")]`} currentIteration={currentIteration}>
+            <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.modules[?(@.module_id=="${mod.module_id}")]`} currentIteration={currentIteration} blockId={mod.module_id}>
               <article className={styles.epicItem} style={{ width: '100%' }}>
               <h3 className={styles.epicHeader}>
                 <span className={styles.idBadge}>{mod.module_id}</span>
@@ -524,7 +524,7 @@ const EpicMappingRenderer: React.FC<{ data: any, nodeId?: string, currentIterati
         </h2>
         <div className={styles.epicList} style={{ gap: '2px' }}>
           {(data.mappings || []).map((m: any, i: number) => (
-            <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.mappings[?(@.epic_id=="${m.epic_id}")]`} currentIteration={currentIteration}>
+            <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.mappings[?(@.epic_id=="${m.epic_id}")]`} currentIteration={currentIteration} blockId={m.epic_id}>
             <div key={i} className={styles.minimalRelRow}>
               <div className={styles.relNames} style={{ minWidth: '380px' }}>
                 <span className={styles.idBadge} style={{ marginRight: '8px' }}>{m.epic_id}</span>
@@ -563,7 +563,7 @@ const ModuleDepsRenderer: React.FC<{ data: any, nodeId?: string, currentIteratio
         </h2>
         <div className={styles.epicList}>
           {(data.dependencies || []).map((dep: any, i: number) => (
-            <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.dependencies[?(@.from_module=="${dep.from_module}" && @.to_module=="${dep.to_module}")]`} currentIteration={currentIteration}>
+            <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.dependencies[?(@.from_module=="${dep.from_module}" && @.to_module=="${dep.to_module}")]`} currentIteration={currentIteration} blockId={dep.id}>
             <article key={i} className={styles.epicItem}>
               <h3 className={styles.criteriaTitle} style={{ 
                 fontSize: '15px', 
@@ -650,7 +650,7 @@ const ApiSpecRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?:
             const hasReqBody = reqBody && (typeof reqBody === 'object' ? Object.keys(reqBody).length > 0 : String(reqBody).length > 0);
 
             return (
-              <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.endpoints[?(@.path=="${ep.path}" && @.method=="${ep.method}")]`} currentIteration={currentIteration}>
+              <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.endpoints[?(@.path=="${ep.path}" && @.method=="${ep.method}")]`} currentIteration={currentIteration} blockId={ep.api_id}>
                 <article className={styles.epicItem} style={{ width: '100%' }}>
                 <h3 className={styles.epicHeader}>
                   {ep.api_id && <span className={styles.idBadge} style={{ marginRight: '8px' }}>{ep.api_id}</span>}
@@ -745,7 +745,7 @@ const IaRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?: any 
           </div>
           <div className={styles.epicList}>
             {screenElements.map((screen: any, i: number) => (
-              <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.screen_elements[${i}]`} currentIteration={currentIteration}>
+              <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.screen_elements[${i}]`} currentIteration={currentIteration} blockId={screen.screen_id}>
                 <article className={styles.epicItem} style={{ width: '100%' }}>
                   <h3 className={styles.epicHeader}>
                     <span className={`${styles.epicTitle} ${styles.valueWrapper}`}>
@@ -776,6 +776,7 @@ const IaRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?: any 
                               nodeId={nodeId || ''} 
                               jsonPath={`$.screen_elements[${i}].elements[${j}]`}
                               currentIteration={currentIteration}
+                              blockId={el.element_id}
                             >
                               <li className={styles.criteriaItem}>
                                 <CheckCircle2 size={14} className={styles.checkIcon} />
@@ -819,7 +820,7 @@ const IaRenderer: React.FC<{ data: any, nodeId?: string, currentIteration?: any 
           {hierarchy.map((item: any, i: number) => {
             const depth = item.depth || 1;
             return (
-                <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.hierarchy[?(@.screen_id=="${item.screen_id}")]`} currentIteration={currentIteration}>
+                <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.hierarchy[?(@.screen_id=="${item.screen_id}")]`} currentIteration={currentIteration} blockId={item.screen_id}>
                 <div 
                   className={styles.minimalRelRow}
                   style={{ 

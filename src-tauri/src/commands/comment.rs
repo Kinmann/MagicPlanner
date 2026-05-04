@@ -131,6 +131,7 @@ pub struct EnrichedComment {
     pub node_category: String,
     pub module_name: Option<String>,
     pub created_at: String,
+    pub original_content: Option<String>,
 }
 
 #[tauri::command]
@@ -147,9 +148,11 @@ pub async fn get_project_comments(
             n.target_node_type as node_type,
             n.node_category,
             m.module_name,
-            c.created_at
+            c.created_at,
+            json_extract(gi.generated_draft_json, c.json_path) as original_content
          FROM node_comment c
          JOIN document_node n ON c.node_id = n.node_id
+         JOIN generation_iteration gi ON c.iteration_id = gi.iteration_id
          LEFT JOIN local_module m ON n.module_id = m.module_id
          WHERE c.project_id = ? AND c.is_deleted = 0
          ORDER BY c.created_at DESC"
@@ -158,4 +161,20 @@ pub async fn get_project_comments(
     .fetch_all(&*pool)
     .await
     .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn migrate_comment_paths(
+    pool: tauri::State<'_, sqlx::SqlitePool>
+) -> Result<String, String> {
+    let result = sqlx::query(
+        "UPDATE node_comment 
+         SET json_path = '$' || SUBSTR(json_path, INSTR(json_path, '$') + 1) 
+         WHERE json_path LIKE '%$%' AND json_path NOT LIKE '$%'"
+    )
+    .execute(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(format!("Successfully migrated {} rows to new path format.", result.rows_affected()))
 }

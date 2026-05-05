@@ -69,4 +69,6 @@ pub struct GenerationIteration {
     pub actionable_feedback_text: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    #[sqlx(default)]
+    pub is_archived: bool,
 }

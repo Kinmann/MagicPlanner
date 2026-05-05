@@ -16,6 +16,8 @@ interface CommentableRowProps {
   className?: string;
   disabled?: boolean;
   currentIteration?: any;
+  isStale?: boolean; // 추가: 이전 확정본 블록 여부
+  isRefined?: boolean; // 추가: 수정된 블록 여부
 }
 
 export const CommentableRow: React.FC<CommentableRowProps> = ({
@@ -26,6 +28,8 @@ export const CommentableRow: React.FC<CommentableRowProps> = ({
   className = '',
   disabled = false,
   currentIteration: propIteration,
+  isStale = false,
+  isRefined = false,
 }) => {
   const count = useCommentStore(state => 
     state.comments.filter(c => c.json_path === jsonPath).length
@@ -35,8 +39,63 @@ export const CommentableRow: React.FC<CommentableRowProps> = ({
   const node = useProjectStore(state => state.nodes.find(n => n.node_id === nodeId));
   
   // Refinement 시뮬레이션 결과 가져오기
+  const intent = useRefinementStore(state => state.intent);
   const taintCascadeResult = useRefinementStore(state => state.taintCascadeResult);
   
+  // 현재 블록이 직접적인 수정 대상(Targeted)인지 확인
+  const isTargeted = (() => {
+    if (!intent || !nodeId) return false;
+
+    return intent.intents.some(i => {
+      // 1. 노드 매칭 (UUID 또는 Canonical ID)
+      const isNodeMatch = i.target_node_ids.some(tnid => {
+        const tnidUpper = tnid.toUpperCase();
+        const nodeIdUpper = nodeId.toUpperCase();
+
+        if (tnidUpper === nodeIdUpper) return true;
+        
+        // Canonical ID 구성 (MODULE:TYPE)
+        let canonicalId = node ? `${node.node_category}:${node.target_node_type}` : "";
+        
+        // mock- 노드 처리 (global specs)
+        if (!canonicalId && nodeId.startsWith('mock-')) {
+          const mockType = nodeId.replace('mock-', '').toUpperCase();
+          canonicalId = `ARCHITECTURE:${mockType}`;
+        }
+
+        return tnidUpper === canonicalId.toUpperCase();
+      });
+
+      if (!isNodeMatch) return false;
+
+      // 2. 블록 매칭
+      // target_block_ids가 비어있으면 노드 전체가 대상임
+      if (!i.target_block_ids || i.target_block_ids.length === 0) return true;
+
+      return i.target_block_ids.some(tbid => {
+        const tbidUpper = tbid.toUpperCase();
+        
+        // JSON Path 매칭 (예: $.tech_stack.backend)
+        // $. 제거 후 비교하여 경로 깊이 차이($.backend vs $.tech_stack.backend) 유연하게 처리
+        if (tbid.includes('$')) {
+          const targetPathClean = tbid.replace(/^\$\./, '').toUpperCase();
+          const currentPathClean = jsonPath.replace(/^\$\./, '').toUpperCase();
+          
+          if (targetPathClean === currentPathClean ||
+              targetPathClean.endsWith(`.${currentPathClean}`) ||
+              currentPathClean.endsWith(`.${targetPathClean}`)) return true;
+        }
+
+        // 아티팩트 ID 매칭
+        if (blockId) {
+          const bid = blockId.toUpperCase();
+          return tbidUpper === bid || tbidUpper.endsWith(`.${bid}`) || tbidUpper.endsWith(`:${bid}`);
+        }
+        return false;
+      });
+    });
+  })();
+
   // 현재 블록이 오염(Tainted) 되었는지 확인 (경로 기반 정밀 매칭 및 ID 매칭 지원)
   const isTainted = (() => {
     if (!taintCascadeResult) return false;
@@ -82,7 +141,9 @@ export const CommentableRow: React.FC<CommentableRowProps> = ({
       className={`
         ${styles.commentableRow} 
         ${isActive ? styles.active : ''} 
-        ${isTainted ? styles.tainted : ''}
+        ${(isTainted || isTargeted) ? styles.tainted : ''}
+        ${isStale ? styles.stale : ''}
+        ${isRefined ? styles.refined : ''}
         ${count > 0 ? styles.hasComments : ''} 
         ${className}
       `}

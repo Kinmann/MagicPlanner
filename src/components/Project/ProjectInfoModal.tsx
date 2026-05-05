@@ -6,7 +6,6 @@ import {
   Box,
   RefreshCw,
   Trash2,
-  Sparkles,
   FileText,
   Layout,
   ChevronRight,
@@ -22,7 +21,7 @@ import { Dialog } from '../ui/Dialog';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import { useRefinementStore } from '../../store/refinementStore';
+
 import styles from './ProjectInfoModal.module.scss';
 
 export const ProjectInfoModal: React.FC = () => {
@@ -45,8 +44,7 @@ export const ProjectInfoModal: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false); // Legacy - keeping for state if needed briefly
-  const { setMode } = useRefinementStore();
-  const { toggleRightPanel } = useUIStore();
+
 
   // Initialize selected project when modal opens
   useEffect(() => {
@@ -231,17 +229,7 @@ export const ProjectInfoModal: React.FC = () => {
                     <span>{selectedProject.needs_indexing ? 'Index Context' : 'Context Indexed'}</span>
                   </button>
                   
-                   <button 
-                    className={styles.actionBtn} 
-                    onClick={() => {
-                      setMode('REFINEMENT');
-                      toggleRightPanel(true);
-                      toggleProjectInfo(false);
-                    }}
-                  >
-                    <Sparkles size={14} />
-                    <span>Refine Architecture</span>
-                  </button>
+
 
                   <div className={styles.btnDivider} />
 

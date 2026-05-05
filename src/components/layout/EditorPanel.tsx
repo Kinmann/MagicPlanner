@@ -211,11 +211,25 @@ export const EditorPanel: React.FC = () => {
       );
       setIterations(sorted);
       
-      // Auto-select pass or latest if nothing selected
+      const latestIter = sorted[sorted.length - 1];
+
       if (!selectedIterationId) {
+        // 초기 로드: pass iter 또는 최신 iter로 초기화
         const passIdx = sorted.findIndex(it => it.is_pass);
-        const initial = passIdx >= 0 ? sorted[passIdx] : sorted[sorted.length - 1];
+        const initial = passIdx >= 0 ? sorted[passIdx] : latestIter;
         if (initial) setSelectedIteration(initial.iteration_id);
+      } else {
+        // nodes-updated 이벤트로 재로드된 경우:
+        // 노드가 패치 후 상태(REFINING/PAUSED_HITL)이고, 현재 선택된 iter가 pass iter(구버전)이며,
+        // 새 iter(패치 결과)가 존재하면 → 새 iter로 자동 전환하여 diff가 렌더링되도록 함
+        const currentNode = useProjectStore.getState().nodes.find(n => n.node_id === selectedNodeId);
+        const isPostPatch = currentNode?.node_state === 'REFINING' || currentNode?.node_state === 'PAUSED_HITL';
+        const currentSelectedIter = sorted.find(it => it.iteration_id === selectedIterationId);
+        const latestIsNew = latestIter?.iteration_id !== selectedIterationId;
+
+        if (isPostPatch && currentSelectedIter?.is_pass && latestIsNew && latestIter) {
+          setSelectedIteration(latestIter.iteration_id);
+        }
       }
     } catch (e) {
       console.error("Failed to load iterations in EditorPanel:", e);
@@ -476,6 +490,18 @@ export const EditorPanel: React.FC = () => {
               onConfirmIteration={(id) => {
                 const idx = iterations.findIndex(it => it.iteration_id === id);
                 if (idx >= 0) handleConfirmIteration(idx);
+              }}
+              onArchiveIteration={async (id) => {
+                const store = useProjectStore.getState();
+                await store.archiveIteration(id);
+                await loadIterations();
+              }}
+              onArchiveAll={async () => {
+                if (selectedNodeId) {
+                  const store = useProjectStore.getState();
+                  await store.archiveAllNonConfirmedIterations(selectedNodeId);
+                  await loadIterations();
+                }
               }}
               onDeleteIteration={handleDeleteIteration}
               isRawMode={isRawMode}

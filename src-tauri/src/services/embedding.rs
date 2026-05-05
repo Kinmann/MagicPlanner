@@ -430,11 +430,13 @@ pub async fn get_rag_context(
         .map_err(|e| format!("Query embedding error: {}", e))?;
     let query_json = serde_json::to_string(&query_vector).unwrap_or_default();
 
-    // 2. 유사도 검색 수행 (k-NN)
+    // 2. 유사도 검색 수행 (k-NN) - 모듈 정보와 카테고리 정보 포함
     let mut query_builder = sqlx::QueryBuilder::new(
-        "SELECT m.chunk_text, m.node_type, v.distance 
+        "SELECT m.chunk_text, m.node_type, v.distance, lm.module_name, dn.node_category, dn.node_id 
          FROM document_embeddings v
          JOIN embedding_metadata m ON v.rowid = m.rowid
+         JOIN document_node dn ON m.node_id = dn.node_id
+         LEFT JOIN local_module lm ON dn.module_id = lm.module_id
          WHERE v.embedding MATCH "
     );
     query_builder.push_bind(&query_json);
@@ -464,17 +466,24 @@ pub async fn get_rag_context(
         return Ok("".to_string());
     }
 
-    let mut context = String::from("\n[REFERENCE_DOCUMENTS]\n(The following are relevant snippets retrieved from existing documentation and past requirements. Use them for consistency and context.)\n");
+    let mut context = String::from("\n[REFERENCE_DOCUMENTS]\n(The following are relevant snippets retrieved from existing documentation. Use the Module and Type to construct Canonical IDs. Example: MODULE:TYPE:$.path.to.element)\n");
     for (i, row) in rows.iter().enumerate() {
         let text: String = row.get(0);
         let ntype: String = row.get(1);
         let dist: f64 = row.get(2);
-        context.push_str(&format!("\n-- REFERENCE {} (Type: {}, Relevance: {:.2}%) --\n{}\n", 
-            i + 1, ntype, (1.0 - dist) * 100.0, text));
+        let mname: Option<String> = row.get(3);
+        let cat: String = row.get(4);
+        
+        // 모듈명 또는 카테고리(GENESIS, SAD)를 접두어로 사용
+        let module_prefix = mname.unwrap_or_else(|| cat.to_uppercase());
+        
+        context.push_str(&format!("\n-- REFERENCE {} (Address: {}:{}, NodeID: {}, Relevance: {:.2}%) --\n{}\n", 
+            i + 1, module_prefix, ntype, row.get::<String, _>(5), (1.0 - dist) * 100.0, text));
     }
 
     Ok(context)
 }
+
 
 pub fn extract_artifact_ids(json_str: &str) -> HashSet<String> {
     // 패턴: 계층적 구조(module:type:id) 또는 단순 ID(ID-001) 지원

@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import { safeInvoke, safeListen } from '../utils/tauri';
 import { save } from '@tauri-apps/plugin-dialog';
-import { Project, DocumentNode, LocalModule } from '../types/project';
+import { Project, DocumentNode, LocalModule, GenerationIteration } from '../types/project';
 import { useEngineStore } from './engineStore';
 import { useSettingsStore } from './settingsStore';
+import { useUIStore } from './uiStore';
 import { convertToMarkdown } from '../utils/markdownConverter';
 
 interface ProjectState {
@@ -11,6 +12,7 @@ interface ProjectState {
   currentProject: Project | null;
   nodes: DocumentNode[];
   modules: LocalModule[];
+  archivedIterations: GenerationIteration[];
   
   isLoadingProjects: boolean;
   isLoadingNodes: boolean;
@@ -32,6 +34,10 @@ interface ProjectState {
   updateMaxIterations: (nodeId: string, maxIterations: number) => Promise<void>;
   updateTargetCount: (nodeId: string, targetCount: number) => Promise<void>;
   deleteIteration: (iterationId: string) => Promise<void>;
+  archiveIteration: (iterationId: string) => Promise<void>;
+  restoreIteration: (iterationId: string) => Promise<void>;
+  fetchArchivedIterations: (nodeId: string) => Promise<void>;
+  archiveAllNonConfirmedIterations: (nodeId: string) => Promise<void>;
   downloadSpecs: (nodeId: string, iterations: any[]) => Promise<void>;
   
   // Genesis Specific
@@ -57,6 +63,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   currentProject: null,
   nodes: [],
   modules: [],
+  archivedIterations: [],
   
   isLoadingProjects: false,
   isLoadingNodes: false,
@@ -245,8 +252,54 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     try {
       await safeInvoke('delete_generation_iteration', { iterationId });
       await fetchNodes(currentProject.project_id);
+      // 아카이브 목록도 갱신 (아카이브 탭에서 삭제했을 수 있으므로)
+      const selectedNodeId = useUIStore.getState().selectedNodeId;
+      if (selectedNodeId) {
+        get().fetchArchivedIterations(selectedNodeId);
+      }
     } catch (err: any) {
       set({ error: err.toString() });
+    }
+  },
+
+  archiveIteration: async (iterationId) => {
+    const { currentProject, fetchNodes } = get();
+    if (!currentProject) return;
+    try {
+      await safeInvoke('archive_generation_iteration', { iterationId });
+      await fetchNodes(currentProject.project_id);
+      
+      const selectedNodeId = useUIStore.getState().selectedNodeId;
+      if (selectedNodeId) {
+        get().fetchArchivedIterations(selectedNodeId);
+      }
+    } catch (err: any) {
+      set({ error: err.toString() });
+    }
+  },
+
+  restoreIteration: async (iterationId) => {
+    const { currentProject, fetchNodes } = get();
+    if (!currentProject) return;
+    try {
+      await safeInvoke('restore_generation_iteration', { iterationId });
+      await fetchNodes(currentProject.project_id);
+      
+      const selectedNodeId = useUIStore.getState().selectedNodeId;
+      if (selectedNodeId) {
+        get().fetchArchivedIterations(selectedNodeId);
+      }
+    } catch (err: any) {
+      set({ error: err.toString() });
+    }
+  },
+
+  fetchArchivedIterations: async (nodeId) => {
+    try {
+      const iters = await safeInvoke<GenerationIteration[]>('get_archived_iterations', { nodeId });
+      set({ archivedIterations: iters });
+    } catch (err: any) {
+      console.error("Failed to fetch archived iterations:", err);
     }
   },
 
@@ -321,6 +374,18 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     try {
       await safeInvoke('create_local_modules', { projectId: currentProject.project_id, modulesJson });
     } catch (err: any) { set({ error: err.toString() }); }
+  },
+
+  archiveAllNonConfirmedIterations: async (node_id: string) => {
+    const { currentProject, fetchNodes } = get();
+    if (!currentProject) return;
+    try {
+      await safeInvoke('archive_all_non_confirmed_iterations', { nodeId: node_id });
+      await fetchNodes(currentProject.project_id);
+      get().fetchArchivedIterations(node_id);
+    } catch (err: any) {
+      set({ error: err.toString() });
+    }
   },
 
   downloadSpecs: async (nodeId, iterations) => {

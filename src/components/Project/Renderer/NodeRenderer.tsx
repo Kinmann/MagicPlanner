@@ -156,6 +156,7 @@ export const NodeRenderer: React.FC = () => {
   })));
 
   const [content, setContent] = useState<any>(null);
+  const [baseContent, setBaseContent] = useState<any>(null);
   const [currentIteration, setCurrentIteration] = useState<any>(null);
   const [loadingContent, setLoadingContent] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -230,8 +231,51 @@ export const NodeRenderer: React.FC = () => {
     // Only load if it's not a folder
     if (selectedNodeId && !selectedNodeId.startsWith('phase-') && !selectedNodeId.startsWith('group-') && !selectedNodeId.startsWith('stage-') && !selectedNodeId.startsWith('module-')) {
       loadContent();
+
+      // Load base content for comparison if needed
+      // baseContent는 현재 content(새 draft)와 비교할 이전 pass iter
+      // 단, selectedIter가 이미 pass iter이면 diff 대상이 없으므로 baseContent를 로드하지 않음
+      const node = nodes.find(n => n.node_id === selectedNodeId);
+      const isPostPatchState = node && (
+        node.node_state === 'STALE' ||
+        node.node_state === 'REFINING' ||
+        node.node_state === 'PAUSED_HITL'
+      );
+
+      if (isPostPatchState && selectedIterationId) {
+        // 현재 선택된 iter가 pass가 아닐 때만 baseContent를 로드 (pass이면 diff 필요 없음)
+        invoke<any | null>('get_iteration_by_id', { iterationId: selectedIterationId })
+          .then(selectedIter => {
+            if (selectedIter?.is_pass) {
+              // 선택된 것이 이미 pass iter → diff 불필요
+              setBaseContent(null);
+              return;
+            }
+            // 선택된 iter가 draft(is_pass=0)이면 이전 pass를 baseContent로 로드
+            return invoke<any | null>('get_latest_pass_iteration', { nodeId: selectedNodeId })
+              .then(it => {
+                if (it && it.iteration_id !== selectedIterationId) {
+                  const raw = it.content_json || it.generated_draft_json;
+                  if (raw) {
+                    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                    setBaseContent(normalizeKeys(parsed));
+                  } else {
+                    setBaseContent(null);
+                  }
+                } else {
+                  setBaseContent(null);
+                }
+              });
+          })
+          .catch(err => {
+            console.error("Error loading base iteration:", err);
+            setBaseContent(null);
+          });
+      } else {
+        setBaseContent(null);
+      }
     }
-  }, [selectedIterationId, selectedNodeId]);
+  }, [selectedIterationId, selectedNodeId, nodes]);
 
   if (!selectedNodeId) {
     return (
@@ -344,19 +388,48 @@ export const NodeRenderer: React.FC = () => {
         <div className="p-12 flex justify-center opacity-50"><RefreshCw className="animate-spin" /></div>
       ) : content ? (
         <>
-          {isPrd && <PrdBentoRenderer content={content} isIntegrated={false} stage={prdStage} nodeId={selectedNodeId} currentIteration={currentIteration} />}
-          {isFsd && <ModuleFsdRenderer content={content} nodeId={selectedNodeId} currentIteration={currentIteration} />}
+          {isPrd && (
+            <PrdBentoRenderer 
+              content={content} 
+              baseContent={baseContent}
+              isIntegrated={false} 
+              stage={prdStage} 
+              nodeId={selectedNodeId} 
+              currentIteration={currentIteration} 
+            />
+          )}
+          {isFsd && (
+            <ModuleFsdRenderer 
+              content={content} 
+              baseContent={baseContent}
+              nodeId={selectedNodeId} 
+              currentIteration={currentIteration} 
+            />
+          )}
           {isErd && (
             <div className="bg-surface-container border border-border rounded-xl p-6">
-              <ModuleErdRenderer content={content} nodeId={selectedNodeId} currentIteration={currentIteration} />
+              <ModuleErdRenderer 
+                content={content} 
+                baseContent={baseContent}
+                nodeId={selectedNodeId} 
+                currentIteration={currentIteration} 
+              />
             </div>
           )}
-          {isUserFlow && <ModuleUserFlowRenderer content={content} nodeId={selectedNodeId} currentIteration={currentIteration} />}
+          {isUserFlow && (
+            <ModuleUserFlowRenderer 
+              content={content} 
+              baseContent={baseContent}
+              nodeId={selectedNodeId} 
+              currentIteration={currentIteration} 
+            />
+          )}
           {(isSad || isApiSpec || isIa || isWireframe || isTc) && (
             <div className="bg-surface-container border border-border rounded-xl p-6">
               <SadSpecRenderer 
                 type={node.target_node_type} 
                 data={content} 
+                baseData={baseContent}
                 isRaw={false} 
                 nodeId={selectedNodeId} 
                 currentIteration={currentIteration}

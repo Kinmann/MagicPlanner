@@ -6,7 +6,7 @@ import {
   X,
   MessageSquareText,
   AlertTriangle,
-  Trash2
+  Archive
 } from 'lucide-react';
 import { Dialog } from '../ui/Dialog';
 import styles from './NodeActionHeader.module.scss';
@@ -24,6 +24,8 @@ interface NodeActionHeaderProps {
   selectedIterationId: string | null;
   onSelectIteration: (id: string) => void;
   onConfirmIteration: (id: string) => void;
+  onArchiveIteration: (id: string) => void;
+  onArchiveAll: () => void;
   onDeleteIteration: (id: string) => void;
   isRawMode: boolean;
   onToggleRawMode: () => void;
@@ -37,6 +39,8 @@ export const NodeActionHeader: React.FC<NodeActionHeaderProps> = ({
   selectedIterationId, 
   onSelectIteration,
   onConfirmIteration,
+  onArchiveIteration,
+  onArchiveAll,
   onDeleteIteration,
   isRawMode, 
   onToggleRawMode,
@@ -73,6 +77,8 @@ export const NodeActionHeader: React.FC<NodeActionHeaderProps> = ({
     if (it.iteration_id === selectedIterationId) return styles.selected;
     return '';
   };
+
+  const isArchiveDisabled = !selectedIterationId || isSelectedPass;
 
   return (
     <div className={styles.container}>
@@ -137,12 +143,12 @@ export const NodeActionHeader: React.FC<NodeActionHeaderProps> = ({
 
         <div className={styles.actionRow}>
           <button 
-            onClick={() => selectedIterationId && onDeleteIteration(selectedIterationId)}
-            disabled={!canAction}
-            className={styles.deleteBtn}
-            title="Delete this draft"
+            onClick={() => selectedIterationId && onArchiveIteration(selectedIterationId)}
+            disabled={isArchiveDisabled}
+            className={styles.archiveBtn}
+            title="Archive this draft"
           >
-            <Trash2 size={18} />
+            <Archive size={18} />
           </button>
 
           <button 

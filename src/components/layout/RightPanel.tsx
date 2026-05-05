@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import { 
   Info, Calendar, Hash, Tag, Activity, DollarSign, Clock, Zap,
   MessageSquare, Sparkles, Send, Trash2, Check, ChevronDown, 
-  Cpu, AlertCircle, Layers, Target, ChevronRight, X, Loader2, Box
+  Cpu, AlertCircle, Layers, Target, ChevronRight, X, Loader2, Box,
+  RotateCcw
 } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
@@ -103,6 +105,36 @@ export const RightPanel: React.FC = () => {
 // --- Sub-components ---
 
 const PropertiesView = ({ selectedNode }: any) => {
+  const { archivedIterations, fetchArchivedIterations, restoreIteration, deleteIteration } = useProjectStore();
+  const [isArchivedLoading, setIsArchivedLoading] = useState(false);
+
+  useEffect(() => {
+    if (selectedNode?.node_id) {
+      loadArchived();
+    }
+  }, [selectedNode?.node_id]);
+
+  useEffect(() => {
+    const unlisten = listen('nodes-updated', () => {
+      if (selectedNode?.node_id) {
+        loadArchived();
+      }
+    });
+    return () => {
+      unlisten.then(f => f());
+    };
+  }, [selectedNode?.node_id]);
+
+  const loadArchived = async () => {
+    if (!selectedNode) return;
+    setIsArchivedLoading(true);
+    try {
+      await fetchArchivedIterations(selectedNode.node_id);
+    } finally {
+      setIsArchivedLoading(false);
+    }
+  };
+
   if (!selectedNode) {
     return (
       <div className={styles.emptyState}>
@@ -146,9 +178,49 @@ const PropertiesView = ({ selectedNode }: any) => {
         <PropertyItem icon={<Zap size={14}/>} label="Iterations" value={`${selectedNode.current_iteration} / ${selectedNode.max_iterations}`} />
       </Accordion>
 
-      <Accordion title="Resources & Cost">
-        <PropertyItem icon={<Clock size={14}/>} label="Time Elapsed" value="2m 45s" />
-        <PropertyItem icon={<DollarSign size={14}/>} label="Estimated Cost" value={`$${(selectedNode.current_iteration * 0.02).toFixed(3)}`} />
+      <Accordion title={`Archived Drafts (${archivedIterations.length})`}>
+        {isArchivedLoading ? (
+          <div className="flex items-center justify-center py-4">
+            <Loader2 size={16} className="animate-spin opacity-50" />
+          </div>
+        ) : archivedIterations.length === 0 ? (
+          <div className="text-[11px] text-zinc-500 italic py-4 text-center">
+            No archived drafts for this node.
+          </div>
+        ) : (
+          <div className={styles.archivedList}>
+            {archivedIterations.map((it) => (
+              <div key={it.iteration_id} className={styles.archivedItem}>
+                <div className={styles.itemLeft}>
+                  <span className={styles.draftInfo}>Draft #{it.iteration_number}</span>
+                  <span className={styles.scoreInfo}>
+                    Score: <strong>{it.calculated_score}</strong> pt
+                  </span>
+                </div>
+                <div className={styles.itemRight}>
+                  <button 
+                    className={`${styles.actionIconBtn} ${styles.restore}`}
+                    onClick={() => restoreIteration(it.iteration_id)}
+                    title="Restore to active drafts"
+                  >
+                    <RotateCcw size={14} />
+                  </button>
+                  <button 
+                    className={`${styles.actionIconBtn} ${styles.delete}`}
+                    onClick={() => {
+                      if (confirm('Permanently delete this iteration?')) {
+                        deleteIteration(it.iteration_id);
+                      }
+                    }}
+                    title="Permanently delete"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </Accordion>
     </div>
   );
@@ -461,17 +533,47 @@ const CascadeAnalysisMessage = ({ data }: any) => {
                     <div className={styles.intentHeaderLine}>
                       <span className={styles.chatCode}>{displayName}</span>
                       <span className="text-[10px] font-mono text-gray-600 opacity-50">{impact.node_id.split('-')[0]}</span>
+                      {(() => {
+                        const addresses = [...(impact.block_ids || []), ...(impact.block_paths || [])]
+                          .filter(a => !!a && a.trim().length > 0);
+                        
+                        // 표시할 주소가 전혀 없는 경우 (노드 레벨)
+                        if (addresses.length === 0) {
+                          return (
+                            <span className={styles.blockAddressChip} style={{ opacity: 0.5, background: 'transparent' }}>
+                              @NODE
+                            </span>
+                          );
+                        }
+                        
+                        const mainAddress = addresses[0];
+                        const displayAddress = mainAddress.includes('$') 
+                          ? mainAddress.split('.').pop() || mainAddress
+                          : mainAddress;
+
+                        return (
+                          <span 
+                            className={styles.blockAddressChip} 
+                            title={addresses.join('\n')}
+                          >
+                            @{displayAddress}
+                            {addresses.length > 1 && ` (+${addresses.length - 1})`}
+                          </span>
+                        );
+                      })()}
                     </div>
                     
                     <div className={styles.intentDetails}>
-                      <div className={styles.blockIdsRow} style={{ marginBottom: '4px' }}>
-                        <Target size={10} />
-                        <div className={styles.blockTags}>
-                          {impact.block_ids.map((bid: string, bidx: number) => (
-                            <span key={bidx} className={styles.blockTag}>{bid}</span>
-                          ))}
+                      {impact.block_ids.filter(id => !!id).length > 0 && (
+                        <div className={styles.blockIdsRow} style={{ marginBottom: '4px' }}>
+                          <Target size={10} />
+                          <div className={styles.blockTags}>
+                            {impact.block_ids.filter(id => !!id).map((bid: string, bidx: number) => (
+                              <span key={bidx} className={styles.blockTag}>{bid}</span>
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      )}
                       <p className={styles.chatDesc}><strong>Reason:</strong> {impact.reason}</p>
                     </div>
                   </li>

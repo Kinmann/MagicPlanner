@@ -248,6 +248,9 @@ pub fn run() {
                 let _ = sqlx::query("UPDATE generation_iteration SET is_pass = 1 WHERE is_pass = 'true' OR is_pass = '1' OR is_pass = 1").execute(&pool).await;
                 let _ = sqlx::query("UPDATE generation_iteration SET is_pass = 0 WHERE is_pass = 'false' OR is_pass = '0' OR is_pass = 0 OR is_pass IS NULL").execute(&pool).await;
 
+                // 5. generation_iteration 테이블: is_archived 컬럼 추가
+                let _ = sqlx::query("ALTER TABLE generation_iteration ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0").execute(&pool).await;
+
                 // last_action 컬럼 추가 시도
                 match sqlx::query("ALTER TABLE document_node ADD COLUMN last_action TEXT").execute(&pool).await {
                     Ok(_) => println!(">>> Migration: last_action column added to document_node"),
@@ -303,6 +306,7 @@ pub fn run() {
             commands::node::get_node_iterations,
             commands::node::get_iteration_by_id,
             commands::node::get_latest_iteration,
+            commands::node::get_latest_pass_iteration,
             commands::pipeline::handle_hitl_action,
             commands::node::update_node_max_iterations,
             commands::node::update_node_target_count,
@@ -324,6 +328,9 @@ pub fn run() {
             commands::pipeline::resume_node_pipeline,
             commands::node::get_all_active_nodes,
             commands::node::delete_generation_iteration,
+            commands::node::archive_generation_iteration,
+            commands::node::restore_generation_iteration,
+            commands::node::get_archived_iterations,
             commands::approval::approve_sad_node,
             commands::approval::unconfirm_iteration,
             commands::project::search_similar_documents,
@@ -346,6 +353,7 @@ pub fn run() {
             commands::comment::migrate_comment_paths,
             commands::refinement::migrate_canonical_ids_command,
             commands::refinement::migrate_artifact_mappings,
+            commands::node::archive_all_non_confirmed_iterations,
         ])
         .plugin(tauri_plugin_dialog::init())
         .run(tauri::generate_context!())

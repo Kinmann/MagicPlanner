@@ -22,14 +22,18 @@ export interface IntentItem {
   action_type: 'add' | 'modify' | 'delete';
   target_feature: string;
   search_keywords: string[];
+  target_node_ids: string[];
+  target_block_ids: string[];
   reasoning: string;
   action_description: string;
   key_considerations: string[];
-  target_node_ids?: string[];
-  is_context_mismatch?: boolean;
-  mismatch_reason?: string | null;
-  impact_scope?: 'local' | 'cross_module' | 'global';
+  is_context_mismatch: boolean;
+  mismatch_reason: string | null;
+  impact_scope: 'local' | 'cross_module' | 'global';
+  resolved_comment_ids: string[];
+  conflict_resolution: string | null;
 }
+
 
 export interface IntentSchema {
   intents: IntentItem[];
@@ -186,9 +190,9 @@ export const useRefinementStore = create<RefinementState>((set, get) => ({
       .map(c => {
         const modulePrefix = c.module_name || c.node_category;
         // 레거시 데이터 대응: json_path에 노드 타입이나 점이 섞여있을 경우 $로 시작하는 순수 경로만 추출
-        const normalizedPath = c.json_path.includes('$') 
+        const normalizedPath = (c.json_path.includes('$') 
           ? '$' + c.json_path.split('$')[1] 
-          : c.json_path;
+          : c.json_path).replace(/,/g, '.');
           
         let text = `[${modulePrefix}:${c.node_type}:${normalizedPath}]`;
         if (c.original_content) {

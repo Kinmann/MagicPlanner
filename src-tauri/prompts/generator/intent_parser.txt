@@ -10,7 +10,7 @@
       "target_feature": "핵심 수정 대상 기능 명칭",
       "search_keywords": ["검색 키워드 배열"],
       "target_node_ids": ["수정 범위에 포함되는 문서 노드 ID 배열"],
-      "target_block_ids": ["정밀 주소 배열. 형식 A(ID): 'Module:Type:ArtifactID', 형식 B(Path): 'Module:Type:$,path'. 두 형식은 혼용 불가."],
+      "target_block_ids": ["정밀 주소 배열. 형식 A(ID): 'Module:Type:ArtifactID', 형식 B(Path): 'Module:Type:$.path'. 두 형식은 혼용 불가."],
       "reasoning": "사용자의 요청을 이렇게 분석한 근거와 논리적 추론 과정",
       "action_description": "구체적으로 어떤 작업을 수행해야 하는지에 대한 상세 설명",
       "key_considerations": ["아키텍처 설계 시 주의해야 할 점이나 전역 제약 사항 배열"],
@@ -42,7 +42,7 @@
 10. [의도와 좌표 분리 해석 및 스코프 재정의] 사용자가 지정한 코멘트 위치(block_id 등)를 맹목적으로 신뢰하지 마십시오. 코멘트 내용을 분석하여 실제 수정의 파급 범위(Scope)를 스스로 재정의해야 합니다.
     - 정보가 부족하여 정확한 `target_node_ids`를 결정할 수 없다면, 망설이지 말고 위에 나열된 탐색 도구들을 호출하십시오.
     - 특히 횡단 관심사(Cross-module)가 의심되는 경우, `search_artifacts`를 통해 다른 모듈의 영향을 반드시 확인해야 합니다.
-    - 최종 결과에는 반드시 정규화된 주소(형식 A: MODULE:TYPE:ID 또는 형식 B: MODULE:TYPE:$,path) 배열이 포함되어야 합니다. (쉼표로 ID와 Path를 섞지 말 것)
+    - 최종 결과에는 반드시 정규화된 주소(형식 A: MODULE:TYPE:ID 또는 형식 B: MODULE:TYPE:$.path) 배열이 포함되어야 합니다. (쉼표로 ID와 Path를 섞지 말 것)
     - [경고] 주소 파트 간 구분자로 점('.')을 절대 사용하지 마십시오. 반드시 콜론(':')만 사용해야 합니다.
     - [경고] JSON Path 내부 구분자로 쉼표(',')를 절대 사용하지 마십시오. 반드시 점('.')을 사용해야 합니다.
     - [예시] 잘못된 형식: GENESIS:GPRD_Architecture_Schema:$,tech_stack,backend (X) -> 올바른 형식: GENESIS:GPRD_Architecture_Schema:$.tech_stack.backend (O)
@@ -52,6 +52,16 @@
         - 비즈니스/요구사항/PRD 관련 전역 노드: `GENESIS` 사용
         - 시스템 설계/공통 아키텍처 관련 전역 노드: `SAD` 사용
         - 개별 모듈 노드: 실제 모듈 명칭 사용 (예: `Auth`, `Payment`)
+11. [주소 교정 및 리다이렉션 - **최우선 강제 지침**] `is_context_mismatch`가 true인 경우(사용자가 엉뚱한 위치에 코멘트를 단 경우), 당신은 반드시 다음과 같이 행동해야 합니다:
+    - **자동 교정 의무 (No Bail-out)**: 사용자가 "Node.js"를 "Frontend" 섹션에 언급하는 등 기술-도메인 불일치가 명백할 경우, **절대로 사용자에게 추가 설명을 요구하거나 질문하며 멈추지 마십시오.** 아키텍처 내에서 해당 기술이 위치해야 할 진짜 자리를 찾아내어 프로세스를 완수해야 합니다.
+    - **탐색 프로세스**: `search_artifacts("기술명")`를 즉시 호출하여 올바른 수정 대상 주소와 NodeID를 확보하십시오.
+    - **대상 덮어쓰기 (Overwriting)**: 올바른 주소를 찾았다면 다음 필드들을 **원래의 잘못된 주소가 아닌, 새로 찾은 올바른 정보로** 업데이트하십시오:
+        - `target_block_ids`: 새로 찾은 정확한 주소 (예: `GENESIS:GPRD_Architecture_Schema:$.tech_stack.backend`)
+        - `target_node_ids`: 해당 주소가 속한 실제 노드의 정규 주소 (예: `MODULE:TYPE`. RAG 컨텍스트의 Address 참조)
+        - `target_feature`: 실제 수정 대상의 성격에 부합하는 명칭 (예: "Backend Tech Stack Update")
+    - **JSON Path 정규화**: 입력 데이터에 쉼표(',')가 포함되어 있더라도, 출력 시에는 반드시 모든 구분자를 점('.')으로 교체하십시오.
+    - `reasoning`에 "사용자가 A 위치에 코멘트를 달았으나, 내용이 B 기술에 해당하므로 B 모듈로 주소를 자동 리다이렉션하여 분석을 진행함"이라고 명시하십시오.
+    - **예외**: 아키텍처 전체를 탐색해도 관련 기술이나 개념이 전혀 존재하지 않는 '완전한 무관'의 경우에만 `mismatch_reason`을 통해 설명을 요청하십시오. "Node.js", "SQL", "Redis" 등 도메인이 명확한 기술 키워드는 무조건 리다이렉션 대상입니다.
 
 [CONFLICT RESOLUTION]
 1. 동일한 블록(`canonical_id`)에 대해 상충하는 여러 개의 코멘트가 존재할 경우, 각 코멘트의 생성 시간(Timestamp)을 확인하여 가장 최신(Latest) 요청을 우선순위로 둡니다.

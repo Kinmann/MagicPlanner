@@ -20,7 +20,11 @@ pub use crate::models::{
 use crate::services::embedding::{get_rag_context, check_node_intersection};
 use crate::services::gemini::{call_gemini, call_gemini_raw};
 
-use crate::services::node_query::{get_approved_node_output};
+use crate::services::node_query::{
+    get_approved_node_output, 
+    resolve_node_by_canonical_id, 
+    get_approved_output_by_canonical_id
+};
 use crate::utils::get_prompts_dir;
 
 #[tauri::command]
@@ -180,23 +184,18 @@ pub async fn parse_intent(
                         },
                         "get_artifact_detail" => {
                             let canonical_id = args["canonical_id"].as_str().unwrap_or("");
-                            let node = sqlx::query(
-                                "SELECT dn.target_node_type as node_type, gi.generated_draft_json as output_json \
-                                 FROM document_node dn \
-                                 JOIN generation_iteration gi ON gi.node_id = dn.node_id \
-                                 WHERE dn.project_id = ? AND dn.target_node_type = ? AND gi.is_pass = 1 AND dn.is_deleted = 0 \
-                                 ORDER BY gi.iteration_number DESC LIMIT 1"
-                            )
-                            .bind(&project_id)
-                            .bind(canonical_id)
-                            .fetch_optional(&*pool).await.ok().flatten()
-                            .map(|row| {
-                                serde_json::json!({
-                                    "node_type": row.get::<String, _>("node_type"),
-                                    "output_json": row.get::<String, _>("output_json")
+                            let output_json = get_approved_output_by_canonical_id(&*pool, &project_id, canonical_id).await;
+                            
+                            if output_json == "{}" {
+                                serde_json::json!({ "artifact": null, "error": format!("Artifact not found for id: {}", canonical_id) })
+                            } else {
+                                serde_json::json!({ 
+                                    "artifact": {
+                                        "canonical_id": canonical_id,
+                                        "output_json": output_json
+                                    }
                                 })
-                            });
-                            serde_json::json!({ "artifact": node })
+                            }
                         },
                         _ => serde_json::json!({ "error": "Unknown tool" })
                     };
@@ -307,15 +306,7 @@ pub async fn route_architecture_target(
         let mut pinpoint_context = Vec::new();
 
         // 1. 타겟 노드의 최신 승인된 내용 로드
-        let target_json_str = if target_id.starts_with("SAD_") {
-            // SAD 글로벌 노드인 경우
-            sqlx::query("SELECT context_data_json FROM global_context WHERE project_id = ? AND context_type = ? AND is_deleted = 0 ORDER BY created_at DESC LIMIT 1")
-                .bind(&project_id).bind(&target_id).fetch_optional(&*pool).await.ok().flatten()
-                .map(|r| r.get::<String, _>("context_data_json")).unwrap_or_default()
-        } else {
-            // 일반 문서 노드인 경우
-            get_approved_node_output(&*pool, &project_id, &target_id).await
-        };
+        let target_json_str = get_approved_output_by_canonical_id(&*pool, &project_id, &target_id).await;
 
         if let Ok(target_json) = serde_json::from_str::<serde_json::Value>(&target_json_str) {
             // 2. mapped_ 식별자 추출
@@ -334,7 +325,7 @@ pub async fn route_architecture_target(
                 };
 
                 if !parent_node_type.is_empty() {
-                    let parent_json_str = get_approved_node_output(&*pool, &project_id, parent_node_type).await;
+                    let parent_json_str = get_approved_output_by_canonical_id(&*pool, &project_id, parent_node_type).await;
                     if let Ok(parent_json) = serde_json::from_str::<serde_json::Value>(&parent_json_str) {
                         if let Some(block) = get_pinpoint_block(&parent_json, &m_id) {
                             pinpoint_context.push(format!("[Parent Block: {}]\n{}", m_id, serde_json::to_string_pretty(&block).unwrap_or_default()));
@@ -346,7 +337,7 @@ pub async fn route_architecture_target(
 
         // 기본 컨텍스트 (목표 및 제약사항) 추가
         if pinpoint_context.is_empty() {
-            pinpoint_context.push(get_approved_node_output(&*pool, &project_id, "GPRD_Context_Goal").await);
+            pinpoint_context.push(get_approved_output_by_canonical_id(&*pool, &project_id, "GENESIS:GPRD_Context_Goal").await);
         }
 
         let parent_context = pinpoint_context.join("\n\n---\n\n");
@@ -456,26 +447,21 @@ pub async fn apply_taint_cascade(
     for t in &targets {
         let parts: Vec<&str> = t.split(':').collect();
         
-        if parts.len() == 3 {
+        if parts.len() >= 2 {
             let module_name = parts[0];
             let node_type = parts[1];
-            let target_val = parts[2];
+            let target_val = if parts.len() >= 3 { parts[2] } else { "" };
 
             println!("[TAINT-CASCADE] 📍 Targeting: Module={}, Type={}, Target={}", module_name, node_type, target_val);
 
             // 해당 모듈/카테고리와 타입을 가진 정확한 노드 조회
-            let nodes: Vec<(String, String)> = sqlx::query_as(
-                "SELECT dn.node_id, dn.target_node_type FROM document_node dn \
-                 LEFT JOIN local_module lm ON dn.module_id = lm.module_id \
-                 WHERE dn.project_id = ? AND dn.is_deleted = 0 \
-                 AND ( \
-                    UPPER(lm.module_name) = UPPER(?) OR \
-                    UPPER(dn.node_category) = UPPER(?) \
-                 ) \
-                 AND UPPER(dn.target_node_type) = UPPER(?)"
-            )
-            .bind(&project_id).bind(module_name).bind(module_name).bind(node_type)
-            .fetch_all(&*pool).await.map_err(|e| e.to_string())?;
+            let node = resolve_node_by_canonical_id(&*pool, &project_id, t).await;
+            
+            let nodes = if let Some(n) = node {
+                vec![n]
+            } else {
+                Vec::new()
+            };
 
             for (nid, ntype) in nodes {
                 let is_path = target_val.starts_with('$');
@@ -505,15 +491,23 @@ pub async fn apply_taint_cascade(
                 } else {
                     // [Type A] Canonical ID Target
                     let artifact_id = target_val.to_uppercase();
+                    let is_node_level = artifact_id.is_empty();
+                    
                     impact_map.entry(nid.clone()).or_insert_with(|| crate::schemas::TaintImpactItem {
                         node_id: nid.clone(),
                         node_type: ntype.clone(),
-                        block_ids: vec![artifact_id.clone()],
+                        block_ids: if is_node_level { Vec::new() } else { vec![artifact_id.clone()] },
                         block_paths: Vec::new(),
-                        reason: format!("Direct Block Modification: {}", artifact_id),
+                        reason: if is_node_level { 
+                            "Node-level Structural Modification".to_string() 
+                        } else { 
+                            format!("Direct Block Modification: {}", artifact_id) 
+                        },
                     });
                     
-                    queue.push_back(artifact_id);
+                    if !is_node_level {
+                        queue.push_back(artifact_id);
+                    }
                 }
 
                 // [상향 전파 권한 부여 시]

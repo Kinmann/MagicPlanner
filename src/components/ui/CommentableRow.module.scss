@@ -36,6 +36,36 @@
       border-color: rgba($error, 0.3);
     }
   }
+
+  &.stale {
+    opacity: 0.4;
+    filter: grayscale(0.5);
+    pointer-events: none; // 이전 버전은 상호작용 비활성화 (코멘트 등)
+    
+    &::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 20px;
+      right: 20px;
+      height: 1px;
+      background: rgba($foreground, 0.2);
+      pointer-events: none;
+    }
+  }
+
+  &.refined {
+    background: linear-gradient(135deg, rgba($primary, 0.08) 0%, rgba($primary, 0.02) 100%);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba($primary, 0.15);
+    box-shadow: 0 4px 15px -3px rgba($primary, 0.1);
+    margin-top: $space-1;
+    
+    &:hover {
+      background: linear-gradient(135deg, rgba($primary, 0.12) 0%, rgba($primary, 0.04) 100%);
+      border-color: rgba($primary, 0.25);
+    }
+  }
 }
 
 @keyframes pulseTaint {

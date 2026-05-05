@@ -45,6 +45,7 @@ export interface GenerationIteration {
   actionable_feedback_text?: string;
   created_at: string;
   updated_at: string;
+  is_archived?: boolean;
 }
 
 export interface Project {

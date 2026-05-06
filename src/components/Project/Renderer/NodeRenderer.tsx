@@ -239,26 +239,47 @@ export const NodeRenderer: React.FC = () => {
       const isPostPatchState = node && (
         node.node_state === 'STALE' ||
         node.node_state === 'REFINING' ||
-        node.node_state === 'PAUSED_HITL'
+        node.node_state === 'PAUSED_HITL' ||
+        node.node_state === 'REVIEW_PENDING' ||
+        node.node_state === 'REVIEWED'
       );
 
       if (isPostPatchState && selectedIterationId) {
-        // 현재 선택된 iter가 pass가 아닐 때만 baseContent를 로드 (pass이면 diff 필요 없음)
+        const isReviewing = node.node_state === 'REVIEW_PENDING' || node.node_state === 'REVIEWED';
+
         invoke<any | null>('get_iteration_by_id', { iterationId: selectedIterationId })
           .then(selectedIter => {
-            if (selectedIter?.is_pass) {
-              // 선택된 것이 이미 pass iter → diff 불필요
+            if (selectedIter?.is_pass && !isReviewing) {
+              // 일반 상태에서 확정본 선택 시 diff 불필요
               setBaseContent(null);
               return;
             }
-            // 선택된 iter가 draft(is_pass=0)이면 이전 pass를 baseContent로 로드
-            return invoke<any | null>('get_latest_pass_iteration', { nodeId: selectedNodeId })
+
+            // 리뷰 모드이거나 드래프트(is_pass=0)인 경우 비교 대상(Base) 로드
+            const baseCommand = (selectedIter?.is_pass) 
+              ? 'get_previous_pass_iteration' 
+              : 'get_latest_pass_iteration';
+            
+            const params = (selectedIter?.is_pass)
+              ? { nodeId: selectedNodeId, currentIterationId: selectedIterationId }
+              : { nodeId: selectedNodeId };
+
+            return invoke<any | null>(baseCommand, params)
               .then(it => {
                 if (it && it.iteration_id !== selectedIterationId) {
                   const raw = it.content_json || it.generated_draft_json;
                   if (raw) {
-                    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-                    setBaseContent(normalizeKeys(parsed));
+                    const parsed = normalizeKeys(typeof raw === 'string' ? JSON.parse(raw) : raw);
+                    
+                    const currentNum = selectedIter.iteration_number;
+                    const passNum = it.iteration_number;
+
+                    if (passNum > currentNum) {
+                      setBaseContent(content);
+                      setContent(parsed);
+                    } else {
+                      setBaseContent(parsed);
+                    }
                   } else {
                     setBaseContent(null);
                   }

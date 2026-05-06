@@ -8,10 +8,11 @@ import {
   CircleDashed, 
   CircleDot, 
   CheckCircle2, 
-  Lightbulb, 
+  Lightbulb,
   PlayCircle,
   PauseCircle,
-  Sparkles
+  Sparkles,
+  AlertCircle
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { useProjectStore } from '../../store/projectStore';
@@ -103,6 +104,10 @@ const TreeItemComponent: React.FC<TreeItemProps> = ({ item, level, selectedId, o
       case 'PAUSED_HITL':
       case 'PAUSED_STOPPED': return <PauseCircle {...iconProps} className="text-orange-400" />;
       case 'PAUSED_API_ERROR': return <PauseCircle {...iconProps} className="text-red-400" />;
+      case 'REVIEW_PENDING':
+        return <AlertCircle {...iconProps} className="text-amber-500 animate-pulse" />;
+      case 'REVIEWED':
+        return <CheckCircle2 {...iconProps} className="text-[#10b981]" />;
       case 'REFINING': return <Sparkles {...iconProps} className="text-purple-400" />;
       default: return null;
     }

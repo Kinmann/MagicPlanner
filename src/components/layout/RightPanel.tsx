@@ -4,7 +4,7 @@ import {
   Info, Calendar, Hash, Tag, Activity, DollarSign, Clock, Zap,
   MessageSquare, Sparkles, Send, Trash2, Check, ChevronDown, 
   Cpu, AlertCircle, Layers, Target, ChevronRight, X, Loader2, Box,
-  RotateCcw
+  RotateCcw, Eye
 } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useProjectStore } from '../../store/projectStore';
@@ -22,9 +22,9 @@ export const RightPanel: React.FC = () => {
   const { nodes, currentProject } = useProjectStore();
   const { 
     messages, mode, setMode, isLoading, step, requestText, setRequestText,
-    startAnalysis, confirmRouting, approveValidation, confirmTaintCascade,
+    startAnalysis, confirmRouting, approveValidation, confirmTaintCascade, finalizeRefinement,
     comments, selectedCommentIds, toggleComment, reset, statusMessages,
-    isCommentsListVisible, toggleCommentsList, fetchComments
+    isCommentsListVisible, toggleCommentsList, fetchComments, initListeners
   } = useRefinementStore();
 
   const selectedNode = nodes.find(n => n.node_id === selectedNodeId);
@@ -42,6 +42,16 @@ export const RightPanel: React.FC = () => {
       fetchComments(currentProject.project_id);
     }
   }, [mode, currentProject?.project_id]);
+
+  // Initialize refinement listeners
+  useEffect(() => {
+    if (currentProject) {
+      const unlistenPromise = initListeners(currentProject.project_id);
+      return () => {
+        unlistenPromise.then(f => f());
+      };
+    }
+  }, [currentProject?.project_id, initListeners]);
 
   const handleSend = () => {
     if (currentProject) {
@@ -93,8 +103,11 @@ export const RightPanel: React.FC = () => {
             confirmRouting={confirmRouting}
             approveValidation={approveValidation}
             confirmTaintCascade={confirmTaintCascade}
+            finalizeRefinement={finalizeRefinement}
             isCommentsListVisible={isCommentsListVisible}
             toggleCommentsList={toggleCommentsList}
+            targetNodes={useRefinementStore.getState().targetNodes}
+            taintCascadeResult={useRefinementStore.getState().taintCascadeResult}
           />
         )}
       </div>
@@ -229,10 +242,25 @@ const PropertiesView = ({ selectedNode }: any) => {
 const RefinementView = ({ 
   messages, scrollRef, isLoading, step, requestText, setRequestText, 
   onSend, onReset, projectId, comments, selectedCommentIds, toggleComment,
-  statusMessages, confirmRouting, approveValidation, confirmTaintCascade,
-  isCommentsListVisible, toggleCommentsList
+  statusMessages, confirmRouting, approveValidation, confirmTaintCascade, finalizeRefinement,
+  isCommentsListVisible, toggleCommentsList,
+  targetNodes, taintCascadeResult
 }: any) => {
+  const { nodes } = useProjectStore();
   const selectedCommentsList = comments.filter((c: any) => selectedCommentIds.has(c.comment_id));
+
+  // 모든 영향 노드가 REVIEWED 상태인지 확인
+  const impactedNodeIds = Array.from(new Set([
+    ...targetNodes,
+    ...(taintCascadeResult?.impacts.map((i: any) => i.node_id) || [])
+  ]));
+
+  const pendingNodes = impactedNodeIds.filter(id => {
+    const node = nodes.find(n => n.node_id === id);
+    return node && node.node_state !== 'REVIEWED' && node.node_state !== 'COMPLETED';
+  });
+
+  const isAllReviewed = pendingNodes.length === 0;
 
   return (
     <div className={styles.chatContainer}>
@@ -326,6 +354,57 @@ const RefinementView = ({
             </div>
           </div>
         </div>
+        
+        {step === 'SUCCESS' && (
+          <div className="mt-4 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl animate-in fade-in slide-in-from-bottom-2">
+            <div className="flex items-center gap-2 text-emerald-500 mb-2">
+              <Check size={16} />
+              <span className="text-xs font-bold uppercase tracking-wider">Refinement Session Finalized</span>
+            </div>
+            <p className="text-[11px] text-emerald-200/70 leading-relaxed mb-4">
+              All changes have been successfully reviewed and acknowledged. The architectural evolution is now part of the canonical specification.
+            </p>
+            <Button variant="outline" size="sm" className="w-full" onClick={onReset}>
+              Start New Intent
+            </Button>
+          </div>
+        )}
+
+        {step === 'AWAITING_UPDATE' && (
+          <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl border-dashed">
+            <div className="flex items-center gap-2 text-amber-500 mb-2">
+              <Zap size={16} className="animate-pulse" />
+              <span className="text-xs font-bold uppercase tracking-wider">Awaiting Artifact Update</span>
+            </div>
+            <p className="text-[11px] text-amber-200/70 leading-relaxed">
+              Impact analysis confirmed. Please click the <span className="text-amber-500 font-bold">[Update]</span> button in the editor for the stale artifacts to generate the "To-Be" specifications.
+            </p>
+          </div>
+        )}
+
+        {step === 'REVIEWING_RESULT' && (
+          <div className="mt-4 p-4 bg-primary/10 border border-primary/20 rounded-xl">
+            <div className="flex items-center gap-2 text-primary mb-2">
+              <Eye size={16} />
+              <span className="text-xs font-bold uppercase tracking-wider">Review New Specifications</span>
+            </div>
+            <p className="text-[11px] text-primary-200/70 leading-relaxed mb-4">
+              {isAllReviewed 
+                ? '모든 영향 노드가 검토 및 확정되었습니다. 이제 세션을 종료하고 변경 사항을 영구적으로 반영할 수 있습니다.'
+                : `아직 검토가 필요한 노드가 ${pendingNodes.length}개 있습니다. 에디터에서 [Confirm] 또는 [Retry]를 클릭하여 모든 노드를 확정해 주세요.`}
+            </p>
+            <Button 
+              variant="primary" 
+              size="sm" 
+              className="w-full" 
+              onClick={() => finalizeRefinement(projectId)}
+              disabled={!isAllReviewed || isLoading}
+              leftIcon={isAllReviewed ? <Check size={14} /> : <Loader2 size={14} className="animate-spin" />}
+            >
+              {isAllReviewed ? 'Acknowledge & Finalize' : 'Awaiting Review & Confirm...'}
+            </Button>
+          </div>
+        )}
 
         {/* Action Buttons for pipeline steps */}
         <div className="mt-2 flex flex-col gap-2">
@@ -494,8 +573,8 @@ const ValidationMessage = ({ data }: any) => (
 );
 
 const CascadeAnalysisMessage = ({ data }: any) => {
-  const { nodes, currentProject } = useProjectStore();
-  const { confirmTaintCascade, isLoading } = useRefinementStore();
+  const { nodes, currentProject, runNode } = useProjectStore();
+  const { confirmTaintCascade, isLoading, intent } = useRefinementStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   return (
@@ -523,13 +602,14 @@ const CascadeAnalysisMessage = ({ data }: any) => {
 
           <li>
             <strong>Cascaded Artifact Details:</strong>
-            <ul>
+            <ul className="space-y-3 mt-3">
               {data.impacts.slice(0, 5).map((impact: any, i: number) => {
                 const node = nodes.find(n => n.node_id === impact.node_id);
                 const displayName = node ? node.target_node_type : impact.node_id.split('-')[0];
+                const isNodeStale = node?.node_state === 'STALE';
                 
                 return (
-                  <li key={i} className={styles.intentListItem}>
+                  <li key={i} className={styles.intentListItem} style={{ padding: '12px', background: 'rgba(255,255,255,0.02)' }}>
                     <div className={styles.intentHeaderLine}>
                       <span className={styles.chatCode}>{displayName}</span>
                       <span className="text-[10px] font-mono text-gray-600 opacity-50">{impact.node_id.split('-')[0]}</span>
@@ -537,7 +617,6 @@ const CascadeAnalysisMessage = ({ data }: any) => {
                         const addresses = [...(impact.block_ids || []), ...(impact.block_paths || [])]
                           .filter(a => !!a && a.trim().length > 0);
                         
-                        // 표시할 주소가 전혀 없는 경우 (노드 레벨)
                         if (addresses.length === 0) {
                           return (
                             <span className={styles.blockAddressChip} style={{ opacity: 0.5, background: 'transparent' }}>
@@ -575,12 +654,25 @@ const CascadeAnalysisMessage = ({ data }: any) => {
                         </div>
                       )}
                       <p className={styles.chatDesc}><strong>Reason:</strong> {impact.reason}</p>
+                      
+                      {/* Refine Action */}
+                      <div className="mt-3 flex justify-end">
+                        <button 
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[10px] font-bold text-gray-400 hover:text-primary hover:border-primary/30 transition-all"
+                          onClick={() => {
+                            if (node) runNode(node.node_id);
+                          }}
+                        >
+                          <Zap size={10} />
+                          {isNodeStale ? 'Update Now' : 'Mark Stale'}
+                        </button>
+                      </div>
                     </div>
                   </li>
                 );
               })}
               {data.impacts.length > 5 && (
-                <li className="text-[11px] text-gray-600 italic mt-2 opacity-50">
+                <li className="text-[11px] text-gray-600 italic mt-2 opacity-50 px-2">
                   ...and {data.impacts.length - 5} more artifacts detected in cascade.
                 </li>
               )}

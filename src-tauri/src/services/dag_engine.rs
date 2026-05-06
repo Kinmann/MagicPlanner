@@ -69,7 +69,7 @@ pub async fn trigger_next_nodes(
             .map_err(|e| e.to_string())?;
 
             if let Some(n) = pre_node {
-                if n.node_state != "COMPLETED" {
+                if n.node_state != "COMPLETED" && n.node_state != "REVIEWED" {
                     all_done = false;
                     break;
                 }
@@ -200,7 +200,7 @@ pub async fn trigger_module_next_nodes(
             .map_err(|e| e.to_string())?;
 
             match pre_node {
-                Some(n) if n.node_state == "COMPLETED" => {},
+                Some(n) if n.node_state == "COMPLETED" || n.node_state == "REVIEWED" => {},
                 _ => { all_done = false; break; }
             }
         }
@@ -288,7 +288,7 @@ pub async fn sync_module_completion_status(
     .await
     .map_err(|e| e.to_string())?;
 
-    if !all_module_nodes.is_empty() && all_module_nodes.iter().all(|n| n.node_state == "COMPLETED") {
+    if !all_module_nodes.is_empty() && all_module_nodes.iter().all(|n| n.node_state == "COMPLETED" || n.node_state == "REVIEWED") {
         let module = sqlx::query_as::<_, LocalModule>(
             "SELECT * FROM local_module WHERE module_id = ?",
         )

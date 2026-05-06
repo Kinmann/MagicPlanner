@@ -12,7 +12,7 @@ import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { ScrollArea } from '../ui/ScrollArea';
 import { useProjectStore } from '../../store/projectStore';
-import { TaintCascadeSchema } from '../../store/refinementStore';
+import { TaintCascadeSchema, useRefinementStore } from '../../store/refinementStore';
 
 interface ImpactReportModalProps {
   isOpen: boolean;
@@ -30,6 +30,7 @@ export const ImpactReportModal: React.FC<ImpactReportModalProps> = ({
   isLoading = false
 }) => {
   const { nodes } = useProjectStore();
+  const { intent } = useRefinementStore();
 
   if (!data) return null;
 
@@ -88,30 +89,46 @@ export const ImpactReportModal: React.FC<ImpactReportModalProps> = ({
                       <span className="text-[10px] font-mono text-gray-600">{impact.node_id}</span>
                     </div>
 
-                    <div className="space-y-1 ml-5 mt-2">
-                      {impact.block_ids.map((bid, bidx) => (
-                        <div key={bidx} className="flex flex-col gap-1 p-2 bg-white/5 rounded border border-white/5">
-                          <div className="flex items-center gap-2">
-                            <ChevronRight size={10} className="text-amber-500" />
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Target ID:</span>
-                            <code className="text-[11px] text-amber-200/70 bg-amber-500/10 px-1.5 py-0.5 rounded font-mono">
-                              {bid}
-                            </code>
+                    {impact.block_ids.map((bid, bidx) => {
+                      const matchingIntent = intent?.intents.find(i => 
+                        i.target_block_ids.some(tbid => tbid.toUpperCase() === bid.toUpperCase())
+                      );
+
+                      return (
+                        <div key={bidx} className="flex flex-col gap-2 p-3 bg-emerald-500/5 rounded-lg border border-emerald-500/10">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <ChevronRight size={10} className="text-emerald-500" />
+                              <span className="text-[9px] font-black text-emerald-900/50 uppercase tracking-tighter">Target ID:</span>
+                              <code className="text-[11px] text-emerald-100 bg-emerald-500/10 px-1.5 py-0.5 rounded font-mono">
+                                {bid}
+                              </code>
+                            </div>
+                            <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-500 text-[8px] font-black rounded uppercase tracking-widest">To-Be</span>
                           </div>
-                          <div className="flex items-center gap-2 pl-4">
+                          
+                          {matchingIntent && (
+                            <div className="pl-4 py-2 border-l border-emerald-500/20">
+                              <p className="text-[11px] text-emerald-100/80 leading-relaxed font-medium">
+                                {matchingIntent.action_description}
+                              </p>
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-2 pl-4 opacity-40">
                             <span className="text-[9px] text-gray-600 uppercase font-bold">Address:</span>
                             <span className="text-[11px] text-sky-400/60 font-mono italic">
                               {impact.block_paths[bidx] || "(Node Level Target)"}
                             </span>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                    
-                    <div className="mt-2 ml-5 flex items-center gap-2 text-[10px] text-gray-500 italic">
-                      <Info size={10} />
-                      {impact.reason}
-                    </div>
+                      );
+                    })}
+                  
+                  <div className="mt-2 ml-5 flex items-center gap-2 text-[10px] text-gray-500 italic">
+                    <Info size={10} />
+                    {impact.reason}
+                  </div>
                   </div>
                 );
               })}

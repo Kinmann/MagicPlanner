@@ -14,7 +14,9 @@ import {
   Square,
   Layers,
   Zap,
-  Loader2
+  Loader2,
+  Check,
+  MessageSquare
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -30,7 +32,6 @@ import { NodeActionHeader } from '../Project/NodeActionHeader';
 import { ReviewPopover } from '../ui/ReviewPopover';
 import { AnimatePresence } from 'framer-motion';
 import { Dialog } from '../ui/Dialog';
-import { MessageSquare } from 'lucide-react';
 import styles from './EditorPanel.module.scss';
 
 export const EditorPanel: React.FC = () => {
@@ -64,6 +65,7 @@ export const EditorPanel: React.FC = () => {
     unconfirmIteration,
     deleteIteration,
     fetchNodes,
+    confirmReview,
     modules
   } = useProjectStore();
   
@@ -205,7 +207,6 @@ export const EditorPanel: React.FC = () => {
     setLoading(true);
     try {
       const iters = await invoke<any[]>('get_node_iterations', { nodeId: selectedNodeId });
-      // 생성 일자(created_at) 기준으로 오름차순 정렬
       const sorted = [...iters].sort((a, b) => 
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       );
@@ -214,16 +215,12 @@ export const EditorPanel: React.FC = () => {
       const latestIter = sorted[sorted.length - 1];
 
       if (!selectedIterationId) {
-        // 초기 로드: pass iter 또는 최신 iter로 초기화
         const passIdx = sorted.findIndex(it => it.is_pass);
         const initial = passIdx >= 0 ? sorted[passIdx] : latestIter;
         if (initial) setSelectedIteration(initial.iteration_id);
       } else {
-        // nodes-updated 이벤트로 재로드된 경우:
-        // 노드가 패치 후 상태(REFINING/PAUSED_HITL)이고, 현재 선택된 iter가 pass iter(구버전)이며,
-        // 새 iter(패치 결과)가 존재하면 → 새 iter로 자동 전환하여 diff가 렌더링되도록 함
         const currentNode = useProjectStore.getState().nodes.find(n => n.node_id === selectedNodeId);
-        const isPostPatch = currentNode?.node_state === 'REFINING' || currentNode?.node_state === 'PAUSED_HITL';
+        const isPostPatch = currentNode?.node_state === 'REFINING' || currentNode?.node_state === 'PAUSED_HITL' || currentNode?.node_state === 'REVIEW_PENDING';
         const currentSelectedIter = sorted.find(it => it.iteration_id === selectedIterationId);
         const latestIsNew = latestIter?.iteration_id !== selectedIterationId;
 
@@ -251,7 +248,6 @@ export const EditorPanel: React.FC = () => {
         await confirmGenesisIteration(it.iteration_id);
       }
       await loadIterations();
-      // Ensure it stays selected
       setSelectedIteration(it.iteration_id);
     } finally {
       setLoading(false);
@@ -276,7 +272,6 @@ export const EditorPanel: React.FC = () => {
     }
   };
 
-  // Breadcrumb logic
   const renderBreadcrumb = () => {
     if (!selectedNode) return null;
     
@@ -311,7 +306,7 @@ export const EditorPanel: React.FC = () => {
           {comments.length > 0 && (
             <span className={styles.reviewBtnCount}>{comments.length}</span>
           )}
-          {selectedNode?.node_state === 'PAUSED_HITL' && (
+          {(selectedNode?.node_state === 'PAUSED_HITL' || selectedNode?.node_state === 'REVIEW_PENDING') && (
             <span className={styles.reviewBadge} />
           )}
         </button>
@@ -346,8 +341,9 @@ export const EditorPanel: React.FC = () => {
     }
 
     const isRunning = selectedNode.node_state === 'IN_PROGRESS' || selectedNode.node_state === 'REFINING' || selectedNode.is_active;
+    const isReviewing = selectedNode.node_state === 'REVIEW_PENDING';
     const hasPassedIter = iterations.some(it => it.is_pass);
-    const isCompleted = selectedNode.node_state === 'COMPLETED' || selectedNode.node_state === 'STALE';
+    const isCompleted = selectedNode.node_state === 'COMPLETED' || selectedNode.node_state === 'STALE' || selectedNode.node_state === 'REVIEWED';
 
     const runningNode = runningNodes.find(n => n.nodeId === selectedNode.node_id);
     const isStopping = !!runningNode?.lastAction?.includes('종료 중');
@@ -369,115 +365,136 @@ export const EditorPanel: React.FC = () => {
             </p>
           </div>
 
-          {/* Determine if stopping */}
-          {(() => {
-            return (
-              <div className={styles.controls}>
-                {selectedNode.target_node_type === 'SAD_Module_List' && (
-                  <div className={styles.iterationBox} style={{ marginRight: '8px' }}>
-                    <Layers size={14} className={styles.label} />
-                    <span className={styles.label}>Modules</span>
-                    <div className={styles.controlGroup}>
-                      <input 
-                        type="number" 
-                        value={selectedNode.target_count || 5} 
-                        onChange={(e) => updateTargetCount(selectedNode.node_id, parseInt(e.target.value) || 1)}
-                        min={1}
-                        max={20}
-                        title="생성할 모듈 개수를 지정합니다."
-                      />
-                    </div>
-                  </div>
-                )}
-                <div className={styles.iterationBox}>
-                  <Settings2 size={14} className={styles.label} />
-                  <span className={styles.label}>Iteration</span>
-                  <div className={styles.controlGroup}>
-                    <span className={styles.current}>{selectedNode.current_iteration}</span>
-                    <span className={styles.sep}>/</span>
-                    <input 
-                      type="number" 
-                      value={selectedNode.max_iterations} 
-                      onChange={(e) => updateMaxIterations(selectedNode.node_id, parseInt(e.target.value) || 1)}
-                      min={1}
-                      max={10}
-                    />
-                  </div>
+          <div className={styles.controls}>
+            {selectedNode.target_node_type === 'SAD_Module_List' && (
+              <div className={styles.iterationBox} style={{ marginRight: '8px' }}>
+                <Layers size={14} className={styles.label} />
+                <span className={styles.label}>Modules</span>
+                <div className={styles.controlGroup}>
+                  <input 
+                    type="number" 
+                    value={selectedNode.target_count || 5} 
+                    onChange={(e) => updateTargetCount(selectedNode.node_id, parseInt(e.target.value) || 1)}
+                    min={1}
+                    max={20}
+                    title="생성할 모듈 개수를 지정합니다."
+                  />
                 </div>
+              </div>
+            )}
+            <div className={styles.iterationBox}>
+              <Settings2 size={14} className={styles.label} />
+              <span className={styles.label}>Iteration</span>
+              <div className={styles.controlGroup}>
+                <span className={styles.current}>{selectedNode.current_iteration}</span>
+                <span className={styles.sep}>/</span>
+                <input 
+                  type="number" 
+                  value={selectedNode.max_iterations} 
+                  onChange={(e) => updateMaxIterations(selectedNode.node_id, parseInt(e.target.value) || 1)}
+                  min={1}
+                  max={10}
+                />
+              </div>
+            </div>
 
-                <div className={styles.actionGroup}>
+            <div className={styles.actionGroup}>
+              {isReviewing ? (
+                <div className="flex gap-2">
                   <button 
-                    className={styles.startBtn}
-                    onClick={() => {
-                      addLog('INFO', `Starting node execution`, selectedNode.target_node_type);
-                      runNode(selectedNode.node_id);
-                    }}
-                    // isProcessing(글로벌 잠금)을 제거하여 병렬 노드 실행 허용
-                    // DAG 의존성 및 최대 반복 횟수 도달 시 처리
-                    disabled={isExecutionDisabled}
-                    data-state={selectedNode.node_state}
-                  >
-                    {selectedNode.node_state === 'REFINING' ? (
-                      <Loader2 size={16} className="animate-spin text-primary" />
-                    ) : selectedNode.node_state === 'STALE' ? (
-                      <Zap size={16} className="text-amber-400 fill-amber-400" />
-                    ) : isDagLocked ? (
-                      <Lock size={16} />
-                    ) : isRunning ? (
-                      <RotateCcw size={16} className="animate-spin" />
-                    ) : isCompleted ? (
-                      <RefreshCw size={16} />
-                    ) : (
-                      <Play size={16} fill="currentColor" />
-                    )}
-                    <span>
-                      {selectedNode.node_state === 'REFINING' ? 'Refining...' :
-                       selectedNode.node_state === 'STALE' ? 'Update' :
-                       isDagLocked ? 'Locked' : 
-                       isRunning ? 'Running' : 
-                       isCompleted ? 'Regenerate' : 'Start'}
-                    </span>
-                  </button>
-
-                  {isRunning && (
-                    <button 
-                      className={styles.stopBtn}
-                      onClick={handleStop}
-                      disabled={isStopping}
-                      style={isStopping ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
-                    >
-                      <Square size={16} />
-                      <span>{isStopping ? 'Stopping...' : 'Stop'}</span>
-                    </button>
-                  )}
-                </div>
-
-                {hasPassedIter && !isCompleted && (
-                  <button 
-                    className={styles.nextStepBtn}
+                    className={styles.confirmReviewBtn}
                     onClick={async () => {
-                      addLog('SUCCESS', `Approving node and moving to next step`, selectedNode.target_node_type);
-                      const store = useProjectStore.getState();
-                      if (selectedNode.target_node_type === 'GPRD_Architecture_Schema') {
-                        await store.approveGenesisPrd();
-                      } else if (selectedNode.target_node_type.startsWith('SAD_')) {
-                        await store.approveSadNode(selectedNode.node_id);
-                      } else if (selectedNode.node_category === 'MODULE') {
-                        await store.handleHITLAction(selectedNode.node_id, 'APPROVE');
-                      } else {
-                        await store.approveGenesisNode(selectedNode.node_id);
-                      }
-                      goToNextNode();
+                      addLog('SUCCESS', `Changes confirmed and reviewed`, selectedNode.target_node_type);
+                      await confirmReview(selectedNode.node_id);
                     }}
                     disabled={loading}
                   >
-                    <span>Next Step</span>
-                    <ChevronRight size={16} />
+                    <Check size={16} className="text-primary" />
+                    <span>Confirm</span>
                   </button>
-                )}
-              </div>
-            );
-          })()}
+                  <button 
+                    className={styles.stopBtn}
+                    onClick={() => {
+                      addLog('INFO', `Retrying update for node`, selectedNode.target_node_type);
+                      runNode(selectedNode.node_id);
+                    }}
+                    disabled={loading}
+                    style={{ background: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.1)' }}
+                  >
+                    <RotateCcw size={16} />
+                    <span>Retry</span>
+                  </button>
+                </div>
+              ) : (
+                <button 
+                  className={`${styles.startBtn} ${isExecutionDisabled ? styles.disabled : ''} ${isRunning ? styles.running : ''} ${isCompleted ? styles.completed : ''}`}
+                  onClick={() => {
+                    addLog('INFO', `Starting node execution`, selectedNode.target_node_type);
+                    runNode(selectedNode.node_id);
+                  }}
+                  disabled={isExecutionDisabled}
+                  data-state={selectedNode.node_state}
+                >
+                  {selectedNode.node_state === 'REFINING' ? (
+                    <Loader2 size={16} className="animate-spin text-primary" />
+                  ) : selectedNode.node_state === 'STALE' ? (
+                    <Zap size={16} className="text-amber-400 fill-amber-400" />
+                  ) : isDagLocked ? (
+                    <Lock size={16} />
+                  ) : isRunning ? (
+                    <RotateCcw size={16} className="animate-spin" />
+                  ) : isCompleted ? (
+                    <RefreshCw size={16} />
+                  ) : (
+                    <Play size={16} fill="currentColor" />
+                  )}
+                  <span>
+                    {selectedNode.node_state === 'REFINING' ? 'Refining...' :
+                     selectedNode.node_state === 'STALE' ? 'Update Now' :
+                     isDagLocked ? 'Locked' : 
+                     isRunning ? 'Running' : 
+                     isCompleted ? 'Regenerate' : 'Start'}
+                  </span>
+                </button>
+              )}
+
+              {isRunning && (
+                <button 
+                  className={styles.stopBtn}
+                  onClick={handleStop}
+                  disabled={isStopping}
+                  style={isStopping ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                >
+                  <Square size={16} />
+                  <span>{isStopping ? 'Stopping...' : 'Stop'}</span>
+                </button>
+              )}
+            </div>
+
+            {hasPassedIter && !isCompleted && (
+              <button 
+                className={styles.nextStepBtn}
+                onClick={async () => {
+                  addLog('SUCCESS', `Approving node and moving to next step`, selectedNode.target_node_type);
+                  const store = useProjectStore.getState();
+                  if (selectedNode.target_node_type === 'GPRD_Architecture_Schema') {
+                    await store.approveGenesisPrd();
+                  } else if (selectedNode.target_node_type.startsWith('SAD_')) {
+                    await store.approveSadNode(selectedNode.node_id);
+                  } else if (selectedNode.node_category === 'MODULE') {
+                    await store.handleHITLAction(selectedNode.node_id, 'APPROVE');
+                  } else {
+                    await store.approveGenesisNode(selectedNode.node_id);
+                  }
+                  goToNextNode();
+                }}
+                disabled={loading}
+              >
+                <span>Next Step</span>
+                <ChevronRight size={16} />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Drafts Section Integrated into Header */}

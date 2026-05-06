@@ -1,4 +1,4 @@
-export type NodeState = 'PENDING' | 'READY' | 'IN_PROGRESS' | 'COMPLETED' | 'PAUSED_HITL' | 'PAUSED_API_ERROR' | 'PAUSED_STOPPED' | 'STALE' | 'REFINING';
+export type NodeState = 'PENDING' | 'READY' | 'IN_PROGRESS' | 'COMPLETED' | 'PAUSED_HITL' | 'PAUSED_API_ERROR' | 'PAUSED_STOPPED' | 'STALE' | 'REFINING' | 'REVIEW_PENDING' | 'REVIEWED';
 
 // v2: Pipeline Phase
 export type PipelinePhase = 'GENESIS_PRD' | 'SAD' | 'MODULE_GENERATION' | 'COMPLETED';

@@ -358,6 +358,38 @@
   }
 }
 
+.confirmReviewBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background-color: rgba(v.$primary, 0.05);
+  border: 1px solid rgba(v.$primary, 0.3);
+  border-radius: 6px;
+  color: v.$primary;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 0 15px rgba(v.$primary, 0.1);
+
+  &:hover:not(:disabled) {
+    background-color: rgba(v.$primary, 0.1);
+    border-color: v.$primary;
+    box-shadow: 0 0 20px rgba(v.$primary, 0.2);
+    transform: translateY(-1px);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
 .stopBtn {
   display: flex;
   align-items: center;

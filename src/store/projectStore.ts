@@ -38,6 +38,7 @@ interface ProjectState {
   restoreIteration: (iterationId: string) => Promise<void>;
   fetchArchivedIterations: (nodeId: string) => Promise<void>;
   archiveAllNonConfirmedIterations: (nodeId: string) => Promise<void>;
+  confirmReview: (nodeId: string) => Promise<void>;
   downloadSpecs: (nodeId: string, iterations: any[]) => Promise<void>;
   
   // Genesis Specific
@@ -126,6 +127,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           nodeId: node.node_id, 
           apiKey 
         });
+
+        // [Workflow Update] 자동 컨펌을 제거하고 REVIEW_PENDING 상태에서 사용자가 직접 확인하도록 함
+
+        await fetchNodes(currentProject.project_id);
         engine.setProcessing(false);
         return { status: 'SUCCESS' };
       } catch (err: any) {
@@ -383,6 +388,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       await safeInvoke('archive_all_non_confirmed_iterations', { nodeId: node_id });
       await fetchNodes(currentProject.project_id);
       get().fetchArchivedIterations(node_id);
+    } catch (err: any) {
+      set({ error: err.toString() });
+    }
+  },
+
+  confirmReview: async (nodeId: string) => {
+    const { currentProject } = get();
+    if (!currentProject) return;
+    try {
+      await safeInvoke('confirm_node_review', { projectId: currentProject.project_id, nodeId });
+      // 리스너가 nodes-updated를 감지하여 자동으로 노드 목록을 갱신하겠지만, 명시적으로 한 번 더 호출 가능
     } catch (err: any) {
       set({ error: err.toString() });
     }

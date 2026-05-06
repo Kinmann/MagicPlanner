@@ -1,5 +1,5 @@
 import React from 'react';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Sparkles, Info, Loader2 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { useCommentStore } from '../../store/commentStore';
 import { useProjectStore } from '../../store/projectStore';
@@ -11,26 +11,30 @@ import { CommentPopover } from './CommentPopover';
 interface CommentableRowProps {
   jsonPath: string;
   nodeId: string;
-  blockId?: string; // 추가: 아티팩트 ID (하이라이트용)
+  blockId?: string;
   children: React.ReactNode;
   className?: string;
   disabled?: boolean;
   currentIteration?: any;
-  isStale?: boolean; // 추가: 이전 확정본 블록 여부
-  isRefined?: boolean; // 추가: 수정된 블록 여부
+  isStale?: boolean;
+  isRefined?: boolean;
+  _internal?: boolean;
 }
 
-export const CommentableRow: React.FC<CommentableRowProps> = ({
-  jsonPath,
-  nodeId,
-  blockId,
-  children,
-  className = '',
-  disabled = false,
-  currentIteration: propIteration,
-  isStale = false,
-  isRefined = false,
-}) => {
+export const CommentableRow: React.FC<CommentableRowProps> = (props) => {
+  const {
+    jsonPath,
+    nodeId,
+    blockId,
+    children,
+    className = '',
+    disabled = false,
+    currentIteration: propIteration,
+    isStale = false,
+    isRefined = false,
+    _internal = false,
+  } = props;
+
   const count = useCommentStore(state => 
     state.comments.filter(c => c.json_path === jsonPath).length
   );
@@ -38,55 +42,33 @@ export const CommentableRow: React.FC<CommentableRowProps> = ({
   const selectedIterationId = useUIStore(state => state.selectedIterationId);
   const node = useProjectStore(state => state.nodes.find(n => n.node_id === nodeId));
   
-  // Refinement 시뮬레이션 결과 가져오기
-  const intent = useRefinementStore(state => state.intent);
-  const taintCascadeResult = useRefinementStore(state => state.taintCascadeResult);
+  const { intent, taintCascadeResult, step } = useRefinementStore();
   
-  // 현재 블록이 직접적인 수정 대상(Targeted)인지 확인
   const isTargeted = (() => {
     if (!intent || !nodeId) return false;
-
     return intent.intents.some(i => {
-      // 1. 노드 매칭 (UUID 또는 Canonical ID)
       const isNodeMatch = i.target_node_ids.some(tnid => {
         const tnidUpper = tnid.toUpperCase();
         const nodeIdUpper = nodeId.toUpperCase();
-
         if (tnidUpper === nodeIdUpper) return true;
-        
-        // Canonical ID 구성 (MODULE:TYPE)
         let canonicalId = node ? `${node.node_category}:${node.target_node_type}` : "";
-        
-        // mock- 노드 처리 (global specs)
         if (!canonicalId && nodeId.startsWith('mock-')) {
           const mockType = nodeId.replace('mock-', '').toUpperCase();
           canonicalId = `ARCHITECTURE:${mockType}`;
         }
-
         return tnidUpper === canonicalId.toUpperCase();
       });
-
       if (!isNodeMatch) return false;
-
-      // 2. 블록 매칭
-      // target_block_ids가 비어있으면 노드 전체가 대상임
       if (!i.target_block_ids || i.target_block_ids.length === 0) return true;
-
       return i.target_block_ids.some(tbid => {
         const tbidUpper = tbid.toUpperCase();
-        
-        // JSON Path 매칭 (예: $.tech_stack.backend)
-        // $. 제거 후 비교하여 경로 깊이 차이($.backend vs $.tech_stack.backend) 유연하게 처리
         if (tbid.includes('$')) {
           const targetPathClean = tbid.replace(/^\$\./, '').toUpperCase();
           const currentPathClean = jsonPath.replace(/^\$\./, '').toUpperCase();
-          
           if (targetPathClean === currentPathClean ||
               targetPathClean.endsWith(`.${currentPathClean}`) ||
               currentPathClean.endsWith(`.${targetPathClean}`)) return true;
         }
-
-        // 아티팩트 ID 매칭
         if (blockId) {
           const bid = blockId.toUpperCase();
           return tbidUpper === bid || tbidUpper.endsWith(`.${bid}`) || tbidUpper.endsWith(`:${bid}`);
@@ -96,19 +78,11 @@ export const CommentableRow: React.FC<CommentableRowProps> = ({
     });
   })();
 
-  // 현재 블록이 오염(Tainted) 되었는지 확인 (경로 기반 정밀 매칭 및 ID 매칭 지원)
   const isTainted = (() => {
     if (!taintCascadeResult) return false;
-    
     return taintCascadeResult.impacts.some(impact => {
       if (impact.node_id !== nodeId) return false;
-      
-      // 1. 구체적 경로(JSON Path) 매칭 (최고 우선순위)
-      if (impact.block_paths && impact.block_paths.includes(jsonPath)) {
-        return true;
-      }
-
-      // 2. 아티팩트 ID 매칭 (Fallback)
+      if (impact.block_paths && impact.block_paths.includes(jsonPath)) return true;
       if (blockId) {
         const bid = blockId.toUpperCase();
         return impact.block_ids.some(tid => {
@@ -116,12 +90,16 @@ export const CommentableRow: React.FC<CommentableRowProps> = ({
           return targetId === bid || targetId.endsWith(`.${bid}`) || targetId.endsWith(`:${bid}`);
         });
       }
-
       return false;
     });
   })();
   
-  // 전달받은 이터레이션이 있으면 사용하고, 없으면 노드에서 찾음 (노드에 이터레이션이 없을 확률이 높으므로 전달받는 것이 SSOT)
+  const intentItem = intent?.intents.find(i => i.target_node_ids.some(tnid => tnid === nodeId));
+  const impactItem = taintCascadeResult?.impacts.find(imp => imp.node_id === nodeId);
+  
+  const intentDescription = intentItem?.action_description;
+  const impactReason = impactItem?.reason;
+
   const activeIteration = propIteration || node?.iterations?.find(it => 
     selectedIterationId ? it.iteration_id === selectedIterationId : it.is_pass
   );
@@ -129,9 +107,51 @@ export const CommentableRow: React.FC<CommentableRowProps> = ({
   const isConfirmed = activeIteration && Number(activeIteration.is_pass) === 1;
   const isActive = activeJsonPath === jsonPath;
 
+  const isApplied = step === 'SUCCESS';
+
+  const isRefining = node?.node_state === 'REFINING';
+
+  if (!_internal && (isTargeted || isTainted) && !isStale && !isRefined && isApplied) {
+    return (
+      <>
+        <CommentableRow 
+          {...props} 
+          isStale={true} 
+          _internal 
+        >
+          {children}
+        </CommentableRow>
+        <CommentableRow 
+          {...props} 
+          isRefined={true} 
+          _internal 
+        >
+          {isRefining ? (
+            <div className={styles.generatingPlaceholder}>
+              <div className={styles.pulseBar} />
+              <div className={styles.generatingInfo}>
+                <Loader2 size={14} className="animate-spin text-emerald-500" />
+                <span>AI is generating refined architectural blocks...</span>
+              </div>
+            </div>
+          ) : children}
+          
+          <div className={styles.proposedContentHunk}>
+            <div className={styles.hunkHeader}>
+              <Sparkles size={12} className="text-emerald-500" />
+              <span>{isTargeted ? 'Proposed Evolution' : 'Cascade Impact'}</span>
+            </div>
+            <div className={styles.hunkBody}>
+              {isTargeted ? intentDescription : impactReason}
+            </div>
+          </div>
+        </CommentableRow>
+      </>
+    );
+  }
+
   const handleTriggerClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    
     setActiveJsonPath(jsonPath);
     setCommentPanelOpen(true);
   };

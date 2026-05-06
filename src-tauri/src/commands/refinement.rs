@@ -626,12 +626,27 @@ pub async fn apply_taint_cascade(
 #[tauri::command]
 pub async fn confirm_taint_cascade(
     pool: tauri::State<'_, SqlitePool>,
+    client: tauri::State<'_, Client>,
+    api_key: String,
     project_id: String,
     intent: crate::schemas::IntentSchema,
     cascade_result: crate::schemas::TaintCascadeSchema,
 ) -> Result<(), String> {
-    println!("[CONFIRM-CASCADE] 💾 Final Approval Received. Applying to DB...");
+    println!("[CONFIRM-CASCADE] 💾 Final Approval Received. Applying to DB with precision filtering...");
     let now = Utc::now().to_rfc3339();
+    
+    // 인텐트에서 모든 대상 블록 ID와 통합 설명 추출
+    let mut intent_target_ids = std::collections::HashSet::new();
+    for i in &intent.intents {
+        for bid in &i.target_block_ids {
+            intent_target_ids.insert(bid.to_uppercase());
+        }
+    }
+    let intent_full_description = intent.intents.iter()
+        .map(|i| i.action_description.as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
+
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
     // 1. Intent 저장
@@ -643,34 +658,72 @@ pub async fn confirm_taint_cascade(
         .await
         .map_err(|e| e.to_string())?;
 
-    // 2. 영향받는 노드들 실제 STALE 처리
+    // 2. 영향받는 노드들 정밀 필터링 및 STALE 처리
     for impact in cascade_result.impacts {
-        let reason = format!("Tainted Blocks: {:?} | Reason: {}", impact.block_ids, impact.reason);
-        
-        // 상태 조회
-        let node_info: (String,) = sqlx::query_as("SELECT node_state FROM document_node WHERE node_id = ?")
-            .bind(&impact.node_id)
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(|e| e.to_string())?;
+        let mut should_transition = false;
+        let mut transition_reason = String::new();
 
-        if node_info.0 == "COMPLETED" {
+        // [Step 0] 기본 정보 로드
+        let node_info: (String, Option<String>) = sqlx::query_as(
+            "SELECT node_state, (SELECT generated_draft_json FROM generation_iteration WHERE node_id = dn.node_id AND is_pass = 1 ORDER BY iteration_number DESC LIMIT 1) \
+             FROM document_node dn WHERE node_id = ?"
+        )
+        .bind(&impact.node_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        let current_state = node_info.0;
+        let node_json = node_info.1.unwrap_or_default();
+
+        // [Step 1] 상태 기반 체크 (기존 COMPLETED 노드는 무조건 오염)
+        if current_state == "COMPLETED" {
+            should_transition = true;
+            transition_reason = "[Stale: Completed Status]".to_string();
+        }
+
+        // [Step 2] ID 매칭 기반 체크 (본문에 인텐트 관련 ID가 포함되어 있는가?)
+        if !should_transition && !node_json.is_empty() {
+            let node_ids = crate::services::embedding::extract_artifact_ids(&node_json);
+            let intersection: Vec<_> = intent_target_ids.intersection(&node_ids).collect();
+            
+            if !intersection.is_empty() {
+                should_transition = true;
+                transition_reason = format!("[Stale: ID Match ({:?})]", intersection);
+            }
+        }
+
+        // [Step 3] RAG 유사도 기반 체크 (ID 매칭 실패 시에만 수행 - 최적화)
+        if !should_transition && !intent_full_description.is_empty() {
+            // check_node_intersection은 내부적으로 ID 체크를 먼저 하지만, 
+            // 위에서 이미 수행했으므로 여기서는 유사도 점수만 의미를 가짐
+            if let Ok(similarity) = check_node_intersection(&*pool, &*client, &api_key, &project_id, &impact.node_id, &intent_full_description).await {
+                if similarity > 0.2 {
+                    should_transition = true;
+                    transition_reason = format!("[Stale: Semantic Similarity ({:.2})]", similarity);
+                }
+            }
+        }
+
+        // 최종 상태 업데이트
+        let final_reason = format!("{} | Tainted: {:?} | Reason: {}", transition_reason, impact.block_ids, impact.reason);
+        
+        if should_transition {
             sqlx::query(
-                "UPDATE document_node SET node_state = 'STALE', last_action = ?, updated_at = ? \
-                 WHERE node_id = ?"
+                "UPDATE document_node SET node_state = 'STALE', last_action = ?, updated_at = ? WHERE node_id = ?"
             )
-            .bind(&reason)
+            .bind(&final_reason)
             .bind(&now)
             .bind(&impact.node_id)
             .execute(&mut *tx)
             .await
             .map_err(|e| e.to_string())?;
         } else {
+            // STALE로 전환되지는 않지만 영향권에는 있으므로 Impact 정보만 기록
             sqlx::query(
-                "UPDATE document_node SET last_action = ?, updated_at = ? \
-                 WHERE node_id = ?"
+                "UPDATE document_node SET last_action = ?, updated_at = ? WHERE node_id = ?"
             )
-            .bind(format!("Impacted: {}", reason))
+            .bind(format!("[Impacted] {}", final_reason))
             .bind(&now)
             .bind(&impact.node_id)
             .execute(&mut *tx)
@@ -716,9 +769,12 @@ pub async fn generate_and_apply_patch(
         .await
         .map_err(|e| e.to_string())?;
 
-    // 2. 교집합 여부 판별 (Similarity Check)
-    let similarity = check_node_intersection(&pool, &client, &api_key, &project_id, &node_id, &intent).await
-        .unwrap_or(0.0);
+    // [Sprint 2] ID 기반 오염 추적(Taint Cascade) 결과 확인
+    let is_explicitly_tainted = node.last_action.as_ref().map(|a| a.contains("Tainted Blocks")).unwrap_or(false);
+
+    if is_explicitly_tainted {
+        println!(">>> [Taint-Bypass] Node {} marked as STALE via Taint Cascade.", node_id);
+    }
 
     // 3. Load existing data
     let latest_pass_iter = sqlx::query_as::<_, GenerationIteration>(
@@ -728,38 +784,6 @@ pub async fn generate_and_apply_patch(
     .fetch_one(&*pool)
     .await
     .map_err(|e| format!("Failed to load original JSON for refinement: {}", e))?;
-
-    // [Sprint 2] ID 기반 오염 추적(Taint Cascade) 결과 확인
-    let is_explicitly_tainted = node.last_action.as_ref().map(|a| a.contains("Tainted Blocks")).unwrap_or(false);
-
-    if similarity < 0.2 && !is_explicitly_tainted {
-        println!(">>> [RAG-Recovery] Similarity {:.4} < 0.2. Auto-restoring node {} to COMPLETED", similarity, node_id);
-        
-        sqlx::query("UPDATE document_node SET node_state = 'COMPLETED', last_action = ?, updated_at = ? WHERE node_id = ?")
-            .bind("No intersection: Auto-restored")
-            .bind(Utc::now().to_rfc3339())
-            .bind(&node_id)
-            .execute(&*pool)
-            .await
-            .map_err(|e| e.to_string())?;
-
-        let _ = app_handle.emit("nodes-updated", ());
-        let _ = app_handle.emit("pipeline-status", PipelineStatusPayload {
-            message: format!("노드 {} 복구: 변경 사항 없음", node.target_node_type),
-            node_id: node_id.clone(),
-            node_type: node.target_node_type.clone(),
-            project_id: project_id.clone(),
-            level: "SUCCESS".into(),
-            status: "COMPLETED".into(),
-            current_iteration: None,
-            max_iterations: None,
-            is_silent: None,
-        });
-
-        return Ok(());
-    } else if is_explicitly_tainted {
-        println!(">>> [Taint-Bypass] Node {} marked as STALE via Taint Cascade. Bypassing similarity check ({:.4})", node_id, similarity);
-    }
 
     // SAD Global 컨텍스트 조회
     let contexts = sqlx::query_as::<_, GlobalContext>(
@@ -1029,28 +1053,11 @@ pub async fn validate_refinement_node(
         .await
         .map_err(|e| e.to_string())?;
 
-    // 2. 교집합 여부 판별 (Similarity Check)
-    let similarity = check_node_intersection(&pool, &client, &api_key, &project_id, &node_id, &intent).await
-        .unwrap_or(0.0);
-
     // [Sprint 2] ID 기반 오염 추적(Taint Cascade) 결과 확인
     let is_explicitly_tainted = node.last_action.as_ref().map(|a| a.contains("Tainted Blocks")).unwrap_or(false);
 
-    if similarity < 0.2 && !is_explicitly_tainted {
-        println!(">>> [RAG-Validation-Recovery] Similarity {:.4} < 0.2. Auto-restoring node {} to COMPLETED", similarity, node_id);
-        
-        sqlx::query("UPDATE document_node SET node_state = 'COMPLETED', last_action = ?, updated_at = ? WHERE node_id = ?")
-            .bind("No intersection: Auto-restored")
-            .bind(Utc::now().to_rfc3339())
-            .bind(&node_id)
-            .execute(&*pool)
-            .await
-            .map_err(|e| e.to_string())?;
-
-        let _ = app_handle.emit("nodes-updated", ());
-        return Ok(());
-    } else if is_explicitly_tainted {
-        println!(">>> [Taint-Validation-Bypass] Node {} marked as STALE via Taint Cascade. Forcing Evaluation despite low similarity ({:.4})", node_id, similarity);
+    if is_explicitly_tainted {
+        println!(">>> [Taint-Validation-Bypass] Node {} marked as STALE via Taint Cascade.", node_id);
     }
 
     // 최신 생성 이터레이션 로드 (방금 생성된 패치 적용본)
@@ -1147,24 +1154,44 @@ pub async fn validate_refinement_node(
     let feedback_json = serde_json::to_string(&eval.feedback).unwrap_or_default();
     let critical_json = serde_json::to_string(&eval.critical_errors).unwrap_or_default();
 
-    // 80점 이상이면서 critical_errors가 없는 경우에만 최종 통과로 인정 (아니면 추가 HITL이나 재시도)
+    // 80점 이상이면서 critical_errors가 없는 경우에만 최종 통과로 인정
     let is_pass = eval.is_pass && eval.score >= 80;
 
     sqlx::query(
-        "UPDATE generation_iteration SET calculated_score = ?, critical_errors_array = ?, actionable_feedback_text = ?, is_pass = ?, updated_at = ? WHERE iteration_id = ?"
+        "UPDATE generation_iteration SET calculated_score = ?, critical_errors_array = ?, actionable_feedback_text = ?, is_pass = 0, updated_at = ? WHERE iteration_id = ?"
     )
     .bind(eval.score)
     .bind(&critical_json)
     .bind(&feedback_json)
-    .bind(if is_pass { 1 } else { 0 })
     .bind(&now)
     .bind(&latest_iter.iteration_id)
     .execute(&*pool)
     .await
     .map_err(|e| e.to_string())?;
 
-    sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', current_best_score = ?, updated_at = ? WHERE node_id = ?")
+    // 5. 자동 Stale 유지 검증 로직 (RAG 유사도 < 0.2 or AI 평가 실패 시)
+    let similarity = check_node_intersection(&*pool, &*client, &api_key, &project_id, &node_id, &intent).await.unwrap_or(0.0);
+    
+    let mut final_state = "REVIEW_PENDING";
+    let mut auto_stale_msg = String::new();
+
+    // Auto-Stale 로직 제거: 점수가 낮더라도 REVIEW_PENDING 상태를 유지하여 사용자가 직접 검토하도록 함
+    if similarity < 0.2 {
+        auto_stale_msg = format!("[Caution] Low Semantic Similarity ({:.2} < 0.2).", similarity);
+    } else if !is_pass {
+        auto_stale_msg = "[Warning] AI Evaluation Score is below threshold.".to_string();
+    }
+
+    let final_last_action = if final_state == "STALE" {
+        format!("{} | AI Feedback: {}", auto_stale_msg, feedback_json)
+    } else {
+        format!("Refined & Validated (Score: {})", eval.score)
+    };
+
+    sqlx::query("UPDATE document_node SET node_state = ?, current_best_score = ?, last_action = ?, updated_at = ? WHERE node_id = ?")
+        .bind(final_state)
         .bind(eval.score)
+        .bind(&final_last_action)
         .bind(&now)
         .bind(&node_id)
         .execute(&*pool)
@@ -1266,6 +1293,74 @@ pub async fn retry_patch_loop(
     Ok(())
 }
 
+#[tauri::command]
+pub async fn confirm_node_review(
+    app_handle: tauri::AppHandle,
+    pool: tauri::State<'_, SqlitePool>,
+    project_id: String,
+    node_id: String,
+) -> Result<(), String> {
+    println!(">>> Confirming Node Review: {}", node_id);
+    let now = Utc::now().to_rfc3339();
+
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+
+    // 1. 최신 이터레이션 조회
+    let latest_iter = sqlx::query_as::<_, GenerationIteration>(
+        "SELECT * FROM generation_iteration WHERE node_id = ? ORDER BY iteration_number DESC LIMIT 1"
+    )
+    .bind(&node_id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 2. 기존 통과 이터레이션 무효화
+    sqlx::query("UPDATE generation_iteration SET is_pass = 0 WHERE node_id = ?")
+        .bind(&node_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 3. 현재 이터레이션 통과 처리
+    sqlx::query("UPDATE generation_iteration SET is_pass = 1 WHERE iteration_id = ?")
+        .bind(&latest_iter.iteration_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 4. 노드 상태를 REVIEWED로 변경
+    sqlx::query("UPDATE document_node SET node_state = 'REVIEWED', updated_at = ? WHERE node_id = ?")
+        .bind(&now)
+        .bind(&node_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 5. Artifact Mapping 동기화
+    if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&latest_iter.generated_draft_json) {
+        sync_artifact_mappings_in_tx(&mut *tx, &project_id, &node_id, &json_value).await?;
+    }
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    // UI 이벤트 발행
+    let _ = app_handle.emit("nodes-updated", ());
+
+    // DAG 엔진 트리거 (REVIEWED가 되었으므로 하위 노드 READY 전환 시도)
+    let node_type: String = sqlx::query_scalar("SELECT target_node_type FROM document_node WHERE node_id = ?")
+        .bind(&node_id).fetch_one(&*pool).await.unwrap_or_default();
+    let module_id: Option<String> = sqlx::query_scalar("SELECT module_id FROM document_node WHERE node_id = ?")
+        .bind(&node_id).fetch_one(&*pool).await.unwrap_or_default();
+
+    if let Some(mid) = module_id {
+        let _ = crate::services::dag_engine::trigger_module_next_nodes(&app_handle, &mid, &node_type).await;
+    } else {
+        let _ = crate::services::dag_engine::trigger_next_nodes(app_handle, &project_id, &node_type).await;
+    }
+
+    Ok(())
+}
+
 
 #[tauri::command]
 pub async fn finalize_refinement_update(
@@ -1290,9 +1385,9 @@ pub async fn finalize_refinement_update(
 
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
-    // 1. Query all STALE or Refined (PAUSED_HITL) nodes
+    // 1. Query all REVIEWED nodes (only reviewed nodes can be finalized)
     let nodes = sqlx::query_as::<_, DocumentNode>(
-        "SELECT * FROM document_node WHERE project_id = ? AND (node_state = 'PAUSED_HITL' OR node_state = 'STALE')"
+        "SELECT * FROM document_node WHERE project_id = ? AND node_state = 'REVIEWED'"
     )
     .bind(&project_id)
     .fetch_all(&mut *tx)

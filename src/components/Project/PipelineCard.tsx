@@ -43,7 +43,8 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
     stopNode: state.stopNode,
     resumeNode: state.resumeNode,
     handleHITLAction: state.handleHITLAction,
-    updateMaxIterations: state.updateMaxIterations
+    updateMaxIterations: state.updateMaxIterations,
+    confirmReview: state.confirmReview
   })));
 
   const setSelectedNode = useUIStore(state => state.setSelectedNode);
@@ -93,6 +94,8 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
       case 'PAUSED_API_ERROR': return { variant: 'danger', label: 'ERROR', active: false };
       case 'STALE': return { variant: 'outline', label: 'STALE', active: false };
       case 'REFINING': return { variant: 'primary', label: 'REFINING', active: true };
+      case 'REVIEW_PENDING': return { variant: 'secondary', label: 'REVIEWING', active: false };
+      case 'REVIEWED': return { variant: 'success', label: 'REVIEWED', active: false };
       default: return { variant: 'outline', label: 'PENDING', active: false };
     }
   })();
@@ -171,10 +174,24 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
             Resume
           </Button>
         )}
-        {node.node_state === 'PAUSED_HITL' && !node.is_active && (
+        {(node.node_state === 'PAUSED_HITL' || node.node_state === 'REVIEW_PENDING') && !node.is_active && (
           <div className="flex gap-1 w-full">
-            <Button variant="outline" size="sm" className="flex-1 border-secondary/30 text-secondary" disabled={isActuallyDisabled} onClick={(e) => { e.stopPropagation(); handleHITLAction(node.node_id, 'APPROVE'); }} leftIcon={<CheckCircle size={12} />}>
-              Pass
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="flex-1 border-secondary/30 text-secondary" 
+              disabled={isActuallyDisabled} 
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                if (node.node_state === 'REVIEW_PENDING') {
+                  confirmReview(node.node_id);
+                } else {
+                  handleHITLAction(node.node_id, 'APPROVE'); 
+                }
+              }} 
+              leftIcon={<CheckCircle size={12} />}
+            >
+              {node.node_state === 'REVIEW_PENDING' ? 'Confirm' : 'Pass'}
             </Button>
             <Button variant="primary" size="sm" className="flex-1" disabled={isActuallyDisabled} onClick={(e) => { e.stopPropagation(); handleHITLAction(node.node_id, 'RETRY'); }} leftIcon={<RotateCcw size={12} />}>
               Retry

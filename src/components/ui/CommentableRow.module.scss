@@ -682,3 +682,110 @@
   color: #52525b;
   font-style: italic;
 }
+
+.stale {
+  opacity: 0.6;
+  border-left: 3px solid $border-strong;
+  margin-bottom: $space-2;
+  position: relative;
+  
+  &::before {
+    content: "PREVIOUS (AS-IS)";
+    position: absolute;
+    top: -14px;
+    left: 0;
+    font-size: 9px;
+    font-weight: 900;
+    color: $text-muted;
+    letter-spacing: 0.05em;
+  }
+}
+
+.refined {
+  background-color: rgba($primary, 0.03);
+  border-left: 3px solid $primary;
+  border-radius: 0 $radius-md $radius-md 0;
+  margin-bottom: $space-4;
+  position: relative;
+  
+  &::before {
+    content: "REFINED (TO-BE)";
+    position: absolute;
+    top: -14px;
+    left: 0;
+    font-size: 9px;
+    font-weight: 900;
+    color: $primary;
+    letter-spacing: 0.05em;
+  }
+}
+
+.proposedContentHunk {
+  padding: $space-4;
+  display: flex;
+  flex-direction: column;
+  gap: $space-2;
+  
+  .hunkHeader {
+    display: flex;
+    align-items: center;
+    gap: $space-2;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: $primary;
+  }
+  
+  .hunkBody {
+    font-size: 13px;
+    line-height: 1.6;
+    color: rgba($foreground, 0.9);
+    font-weight: 500;
+    padding-left: $space-5;
+    border-left: 2px solid rgba($primary, 0.1);
+  }
+}
+
+.generatingPlaceholder {
+  padding: $space-6 $space-4;
+  background: rgba($primary, 0.02);
+  border: 1px dashed rgba($primary, 0.2);
+  border-radius: $radius-md;
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+  margin: $space-2;
+  position: relative;
+  overflow: hidden;
+
+  .pulseBar {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 2px;
+    background: linear-gradient(90deg, transparent, $primary, transparent);
+    animation: pulseScan 2s linear infinite;
+  }
+
+  .generatingInfo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: $space-2;
+    font-size: 11px;
+    font-weight: 700;
+    color: $primary;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+}
+
+@keyframes pulseScan {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}

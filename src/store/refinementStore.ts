@@ -4,7 +4,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { useSettingsStore } from './settingsStore';
 import { useProjectStore } from './projectStore';
 
-export type UpdateStep = 'IDLE' | 'INPUT' | 'ANALYZING' | 'CONFIRMATION' | 'VALIDATING' | 'VALIDATION_RESULT' | 'CASCADING' | 'CASCADE_CONFIRMATION' | 'SUCCESS';
+export type UpdateStep = 'IDLE' | 'INPUT' | 'ANALYZING' | 'CONFIRMATION' | 'VALIDATING' | 'VALIDATION_RESULT' | 'CASCADING' | 'CASCADE_CONFIRMATION' | 'AWAITING_UPDATE' | 'REVIEWING_RESULT' | 'SUCCESS';
 
 export interface EnrichedComment {
   comment_id: string;
@@ -105,11 +105,12 @@ interface RefinementState {
   confirmRouting: (projectId: string) => Promise<void>;
   approveValidation: (projectId: string) => Promise<void>;
   confirmTaintCascade: (projectId: string) => Promise<void>;
+  finalizeRefinement: (projectId: string) => Promise<void>;
   reset: () => void;
   setMode: (mode: 'PROPERTIES' | 'REFINEMENT') => void;
   addMessage: (message: Omit<RefinementMessage, 'id' | 'timestamp'>) => void;
   toggleCommentsList: (visible?: boolean) => void;
-  initListeners: (projectId: string) => Promise<UnlistenFn>;
+  initListeners: (projectId: string) => Promise<() => void>;
 }
 
 export const useRefinementStore = create<RefinementState>((set, get) => ({
@@ -340,21 +341,24 @@ export const useRefinementStore = create<RefinementState>((set, get) => ({
     const { intent, taintCascadeResult, isLoading } = get();
     if (isLoading || !taintCascadeResult) return;
 
+    const apiKey = useSettingsStore.getState().apiKey;
+
     set({ isLoading: true, error: null, step: 'CASCADING' });
 
     try {
       await invoke('confirm_taint_cascade', { 
+        apiKey,
         projectId, 
         intent, 
         cascadeResult: taintCascadeResult 
       });
       
-      set({ step: 'SUCCESS' });
+      set({ step: 'AWAITING_UPDATE' });
       
       get().addMessage({
         role: 'assistant',
         type: 'success',
-        content: 'Changes successfully applied. Artifacts have been updated based on the confirmed impact scope.'
+        content: 'Impact analysis confirmed. Please update the stale artifacts in the editor to see the changes.'
       });
 
       // Refresh nodes after cascade
@@ -366,6 +370,25 @@ export const useRefinementStore = create<RefinementState>((set, get) => ({
         type: 'error',
         content: `Final application failed: ${err.toString()}`
       });
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  finalizeRefinement: async (projectId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      await invoke('finalize_refinement_update', { projectId });
+      set({ step: 'SUCCESS' });
+      get().addMessage({
+        role: 'assistant',
+        type: 'success',
+        content: 'Refinement session finalized. All changes have been acknowledged and synced.'
+      });
+      // 갱신된 노드 상태 반영
+      useProjectStore.getState().fetchNodes(projectId);
+    } catch (err: any) {
+      set({ error: err.toString() });
     } finally {
       set({ isLoading: false });
     }
@@ -386,7 +409,7 @@ export const useRefinementStore = create<RefinementState>((set, get) => ({
   }),
 
   initListeners: async (projectId) => {
-    return await listen('pipeline-status', (event: any) => {
+    const unlistenStatus = await listen('pipeline-status', (event: any) => {
       const payload = event.payload;
       if (payload.project_id === projectId) {
         set((state) => ({
@@ -394,5 +417,34 @@ export const useRefinementStore = create<RefinementState>((set, get) => ({
         }));
       }
     });
+
+    const unlistenNodes = await listen('nodes-updated', () => {
+      const { step, targetNodes, taintCascadeResult } = get();
+      
+      // 업데이트 대기 중인 경우에만 체크
+      if (step === 'AWAITING_UPDATE') {
+        const currentNodes = useProjectStore.getState().nodes;
+        
+        // 대상 노드나 영향 범위 내의 노드 중 하나라도 STALE 상태를 벗어났는지 확인
+        const impactedNodeIds = [
+          ...targetNodes,
+          ...(taintCascadeResult?.impacts.map(i => i.node_id) || [])
+        ];
+
+        const isAnyUpdated = impactedNodeIds.some(id => {
+          const node = currentNodes.find(n => n.node_id === id);
+          return node && node.node_state !== 'STALE';
+        });
+
+        if (isAnyUpdated) {
+          set({ step: 'REVIEWING_RESULT' });
+        }
+      }
+    });
+
+    return () => {
+      unlistenStatus();
+      unlistenNodes();
+    };
   }
 }));

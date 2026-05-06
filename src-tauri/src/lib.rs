@@ -342,6 +342,7 @@ pub fn run() {
             commands::refinement::confirm_taint_cascade,
             commands::refinement::generate_and_apply_patch,
             commands::refinement::validate_refinement_node,
+            commands::refinement::confirm_node_review,
             commands::refinement::finalize_refinement_update,
             commands::refinement::retry_patch_loop,
             // v2: Comment 커맨드

@@ -379,7 +379,12 @@ export const useRefinementStore = create<RefinementState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       await invoke('finalize_refinement_update', { projectId });
-      set({ step: 'SUCCESS' });
+      set({ 
+        step: 'SUCCESS',
+        intent: null,
+        taintCascadeResult: null,
+        targetNodes: []
+      });
       get().addMessage({
         role: 'assistant',
         type: 'success',

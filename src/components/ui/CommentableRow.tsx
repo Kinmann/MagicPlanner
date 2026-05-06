@@ -45,7 +45,7 @@ export const CommentableRow: React.FC<CommentableRowProps> = (props) => {
   const { intent, taintCascadeResult, step } = useRefinementStore();
   
   const isTargeted = (() => {
-    if (!intent || !nodeId) return false;
+    if (!intent || !nodeId || step === 'SUCCESS') return false;
     return intent.intents.some(i => {
       const isNodeMatch = i.target_node_ids.some(tnid => {
         const tnidUpper = tnid.toUpperCase();
@@ -79,7 +79,7 @@ export const CommentableRow: React.FC<CommentableRowProps> = (props) => {
   })();
 
   const isTainted = (() => {
-    if (!taintCascadeResult) return false;
+    if (!taintCascadeResult || step === 'SUCCESS') return false;
     return taintCascadeResult.impacts.some(impact => {
       if (impact.node_id !== nodeId) return false;
       if (impact.block_paths && impact.block_paths.includes(jsonPath)) return true;
@@ -111,7 +111,7 @@ export const CommentableRow: React.FC<CommentableRowProps> = (props) => {
 
   const isRefining = node?.node_state === 'REFINING';
 
-  if (!_internal && (isTargeted || isTainted) && !isStale && !isRefined && isApplied) {
+  if (!_internal && (isTargeted || isTainted) && !isStale && !isRefined && isApplied && step !== 'SUCCESS') {
     return (
       <>
         <CommentableRow 

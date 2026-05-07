@@ -21,7 +21,6 @@ use crate::services::embedding::{get_rag_context, check_node_intersection};
 use crate::services::gemini::{call_gemini, call_gemini_raw};
 
 use crate::services::node_query::{
-    get_approved_node_output, 
     resolve_node_by_canonical_id, 
     get_approved_output_by_canonical_id
 };
@@ -226,8 +225,11 @@ pub async fn parse_intent(
     let response_json = final_response.ok_or("Agent failed to reach a conclusion within limits.")?;
     
     // 최종 텍스트 추출 및 파싱
-    let raw_text = response_json["parts"][0]["text"].as_str()
-        .ok_or_else(|| format!("Expected final JSON output, but got: {:?}", response_json))?;
+    let raw_text = response_json["parts"].as_array()
+        .and_then(|parts| {
+            parts.iter().find_map(|p| p["text"].as_str())
+        })
+        .ok_or_else(|| format!("Expected final JSON output with text part, but got: {:?}", response_json))?;
 
     let cleaned_text = raw_text.trim().trim_start_matches("```json").trim_start_matches("```").trim_end_matches("```").trim();
 
@@ -313,22 +315,13 @@ pub async fn route_architecture_target(
             let mapped_ids = extract_mapped_ids(&target_json);
             
             for m_id in mapped_ids {
-                // 3. 식별자 타입에 따른 부모 노드 특정 및 블록 추출
-                let parent_node_type = if m_id.starts_with("REQ-") || m_id.starts_with("EPIC-") || m_id.starts_with("ROLE-") {
-                    if m_id.starts_with("REQ-") || m_id.starts_with("EPIC-") { "GPRD_Capability_Actor" } else { "GPRD_Architecture_Schema" }
-                } else if m_id.starts_with("FUNC-") {
-                    "FSD" // 실제 운영 시에는 해당 모듈의 FSD 노드를 찾아야 함
-                } else if m_id.starts_with("ENT-") || m_id.starts_with("SCR-") {
-                    if m_id.starts_with("ENT-") { "SAD_Core_Erd" } else { "IA" }
-                } else {
-                    ""
-                };
-
-                if !parent_node_type.is_empty() {
-                    let parent_json_str = get_approved_output_by_canonical_id(&*pool, &project_id, parent_node_type).await;
+                // 3. [Dynamic Definition Lookup] 
+                // 하드코딩된 접두어 대신 artifact_mapping을 조회하여 해당 ID가 정의된 상위 노드를 찾습니다.
+                if let Ok(Some(parent_node_id)) = find_definition_node_by_block_id(&*pool, &project_id, &m_id, &target_id).await {
+                    let parent_json_str = get_approved_output_by_canonical_id(&*pool, &project_id, &parent_node_id).await;
                     if let Ok(parent_json) = serde_json::from_str::<serde_json::Value>(&parent_json_str) {
                         if let Some(block) = get_pinpoint_block(&parent_json, &m_id) {
-                            pinpoint_context.push(format!("[Parent Block: {}]\n{}", m_id, serde_json::to_string_pretty(&block).unwrap_or_default()));
+                            pinpoint_context.push(format!("[Parent Block: {} (Node: {})]\n{}", m_id, parent_node_id, serde_json::to_string_pretty(&block).unwrap_or_default()));
                         }
                     }
                 }
@@ -352,13 +345,9 @@ pub async fn route_architecture_target(
         let val_flattened = crate::schemas::flatten_schema(serde_json::to_value(val_schema).unwrap());
 
         let val_res = call_gemini(&*client, &api_key, "You are a senior architect auditing upward alignment.", &v_prompt, Some(val_flattened))
-            .await.unwrap_or_else(|_| serde_json::json!({"decision": "PASS", "rationale": "Validation failed, defaulting to PASS"}).to_string());
+            .await.map_err(|e| e.to_string())?; // [Phase 2] Fail-Open 방지: 에러 발생 시 즉시 반환
 
-        let validation: crate::schemas::GlobalValidationSchema = serde_json::from_str(&val_res).unwrap_or(crate::schemas::GlobalValidationSchema {
-            decision: crate::schemas::ValidationDecision::Pass,
-            rationale: "Deserialization failed".into(),
-            violations: vec![],
-        });
+        let validation: crate::schemas::GlobalValidationSchema = serde_json::from_str(&val_res).map_err(|e| format!("Failed to parse validation result: {}", e))?;
 
         println!("[UPWARD-CHECK] ⚖️ Result for {}: {:?} | Rationale: {}", target_id, validation.decision, validation.rationale);
 
@@ -431,17 +420,42 @@ pub async fn confirm_architecture_routing(
 pub async fn apply_taint_cascade(
     _app_handle: tauri::AppHandle,
     pool: tauri::State<'_, SqlitePool>,
+    client: tauri::State<'_, Client>,
+    api_key: String,
     project_id: String,
-    intent: crate::schemas::IntentSchema,
+    _intent: crate::schemas::IntentSchema,
     targets: Vec<String>,
     router_decision: String,
 ) -> Result<crate::schemas::TaintCascadeSchema, String> {
     println!("[TAINT-CASCADE] 🧪 Starting Bidirectional Cascade for targets: {:?} (Decision: {})", targets, router_decision);
 
+    enum TaintItem {
+        Artifact(String),
+        Node(String),
+    }
+
     let mut queue = std::collections::VecDeque::new();
     let mut visited_nodes = std::collections::HashSet::new();
     let mut visited_artifacts = std::collections::HashSet::new();
     let mut impact_map: std::collections::HashMap<String, crate::schemas::TaintImpactItem> = std::collections::HashMap::new();
+
+    // 인텐트 요약 설명 (시맨틱 필터링용)
+    let intent_summary = _intent.intents.iter()
+        .map(|i| i.action_description.as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
+    
+    let api_key_ref = &*api_key;
+    let client_ref = &*client;
+    let pool_ref = &*pool;
+
+    // 시맨틱 필터링을 위한 벡터 미리 계산
+    let intent_vector = if !intent_summary.is_empty() {
+        Some(crate::services::gemini::call_gemini_embedding(client_ref, api_key_ref, &intent_summary, "RETRIEVAL_QUERY").await
+            .map_err(|e| format!("Failed to pre-compute intent vector: {:?}", e))?)
+    } else {
+        None
+    };
 
     // 1. 초기 타겟 식별 및 정밀 확장 (Module:Type:ID or Module:Type:$,path)
     for t in &targets {
@@ -484,10 +498,11 @@ pub async fn apply_taint_cascade(
                     if let Some(json_str) = latest_json {
                         if let Ok(val) = serde_json::from_str::<Value>(&json_str) {
                             for d_id in crate::services::embedding::extract_artifact_ids_from_value(&val) {
-                                queue.push_back(d_id.to_uppercase());
+                                queue.push_back(TaintItem::Artifact(d_id.to_uppercase()));
                             }
                         }
                     }
+                    queue.push_back(TaintItem::Node(nid));
                 } else {
                     // [Type A] Canonical ID Target
                     let artifact_id = target_val.to_uppercase();
@@ -506,37 +521,12 @@ pub async fn apply_taint_cascade(
                     });
                     
                     if !is_node_level {
-                        queue.push_back(artifact_id);
+                        queue.push_back(TaintItem::Artifact(artifact_id));
                     }
+                    queue.push_back(TaintItem::Node(nid));
                 }
 
-                // [상향 전파 권한 부여 시]
-                if router_decision == "REFACTORING" {
-                    let parent_node_types = if module_name.to_uppercase() == "GENESIS" {
-                        vec!["GPRD_Architecture_Schema"] // PRD 변경 시 아키텍처 스키마로 상향
-                    } else {
-                        vec!["SAD_Module_List", "GPRD_Architecture_Schema"]
-                    };
-
-                    for p_type in parent_node_types {
-                        let parents: Vec<(String, String)> = sqlx::query_as(
-                            "SELECT node_id, target_node_type FROM document_node WHERE UPPER(target_node_type) = UPPER(?) AND project_id = ?"
-                        ).bind(p_type).bind(&project_id).fetch_all(&*pool).await.unwrap_or_default();
-
-                        for (pnid, ptype) in parents {
-                            if !visited_nodes.contains(&pnid) {
-                                impact_map.entry(pnid.clone()).or_insert_with(|| crate::schemas::TaintImpactItem {
-                                    node_id: pnid.clone(),
-                                    node_type: ptype.clone(),
-                                    block_ids: vec![target_val.to_string()],
-                                    block_paths: vec!["/".to_string()],
-                                    reason: format!("Upward Structural Impact from {}", target_val),
-                                });
-                                visited_nodes.insert(pnid);
-                            }
-                        }
-                    }
-                }
+                // [Bidirectional Recursive로 통합되어 이전의 1회성 상향 전파 로직 삭제]
             }
         } else {
             // [Fallback] 3단 형식이 아닌 경우 (Legacy)
@@ -561,41 +551,141 @@ pub async fn apply_taint_cascade(
         }
     }
 
-    // 2. 재귀적 전파 (양방향)
-    while let Some(current_id) = queue.pop_front() {
-        if visited_artifacts.contains(&current_id) { continue; }
-        visited_artifacts.insert(current_id.clone());
+    // 2. 재귀적 전파 (양방향 + 의미적 필터링)
+    while let Some(item) = queue.pop_front() {
+        match item {
+            TaintItem::Artifact(current_id) => {
+                if visited_artifacts.contains(&current_id) { continue; }
+                visited_artifacts.insert(current_id.clone());
 
-        // [하향 전파]
-        let dependents: Vec<(String, String, String)> = sqlx::query_as(
-            "SELECT am.node_id, am.json_path, dn.target_node_type \
-             FROM artifact_mapping am \
-             JOIN document_node dn ON am.node_id = dn.node_id \
-             WHERE am.artifact_id = ? AND am.project_id = ? AND dn.is_deleted = 0"
-        ).bind(&current_id).bind(&project_id).fetch_all(&*pool).await.map_err(|e| e.to_string())?;
+                // [연관 노드 탐색] 해당 artifact_id를 참조하거나 정의하는 모든 노드
+                let dependents: Vec<(String, String, String)> = sqlx::query_as(
+                    "SELECT am.node_id, am.json_path, dn.target_node_type \
+                     FROM artifact_mapping am \
+                     JOIN document_node dn ON am.node_id = dn.node_id \
+                     WHERE am.artifact_id = ? AND am.project_id = ? AND dn.is_deleted = 0"
+                ).bind(&current_id).bind(&project_id).fetch_all(pool_ref).await.map_err(|e| e.to_string())?;
 
-        for (node_id, json_path, node_type) in dependents {
-            let item = impact_map.entry(node_id.clone()).or_insert_with(|| crate::schemas::TaintImpactItem {
-                node_id: node_id.clone(),
-                node_type: node_type.clone(),
-                block_ids: Vec::new(),
-                block_paths: Vec::new(),
-                reason: format!("Cascaded from: {}", current_id),
-            });
-            if !item.block_ids.contains(&current_id) {
-                item.block_ids.push(current_id.clone());
-                item.block_paths.push(json_path);
-            }
+                for (node_id, json_path, node_type) in dependents {
+                    let mut is_newly_visited = false;
+                    if !visited_nodes.contains(&node_id) {
+                        // [Semantic Filtering] 상향/수평 전파 시에만 적용 (직접 수정 대상이 아닌 경우)
+                        if !targets.contains(&node_id) {
+                            if let Some(ref vec) = intent_vector {
+                                let sim = crate::services::embedding::check_node_intersection_with_vector(pool_ref, &project_id, &node_id, &intent_summary, vec).await.unwrap_or(0.0);
+                                if sim < 0.1 { 
+                                    println!("[TAINT-CASCADE] 🛡️ Filtering out node {} (Similarity: {:.2})", node_id, sim);
+                                    continue; 
+                                }
+                            }
+                        }
+                        visited_nodes.insert(node_id.clone());
+                        is_newly_visited = true;
+                    }
 
-            if !visited_nodes.contains(&node_id) {
-                visited_nodes.insert(node_id.clone());
-                let next_json: Option<String> = sqlx::query_scalar(
+                    let entry = impact_map.entry(node_id.clone()).or_insert_with(|| crate::schemas::TaintImpactItem {
+                        node_id: node_id.clone(),
+                        node_type: node_type.clone(),
+                        block_ids: Vec::new(),
+                        block_paths: Vec::new(),
+                        reason: format!("Cascaded from artifact: {}", current_id),
+                    });
+                    if !entry.block_ids.contains(&current_id) {
+                        entry.block_ids.push(current_id.clone());
+                        entry.block_paths.push(json_path);
+                    }
+
+                    if is_newly_visited {
+                        queue.push_back(TaintItem::Node(node_id));
+                    }
+                }
+            },
+            TaintItem::Node(node_id) => {
+                // [하향 전파를 위한 ID 추출]
+                let node_json: Option<String> = sqlx::query_scalar(
                     "SELECT generated_draft_json FROM generation_iteration WHERE node_id = ? AND is_pass = 1 ORDER BY iteration_number DESC LIMIT 1"
-                ).bind(&node_id).fetch_optional(&*pool).await.map_err(|e| e.to_string())?;
-                if let Some(js) = next_json {
+                ).bind(&node_id).fetch_optional(pool_ref).await.map_err(|e| e.to_string())?;
+
+                if let Some(js) = node_json {
                     if let Ok(v) = serde_json::from_str::<Value>(&js) {
+                        // [하향 전파]
                         for d_id in crate::services::embedding::extract_artifact_ids_from_value(&v) {
-                            queue.push_back(d_id.to_uppercase());
+                            queue.push_back(TaintItem::Artifact(d_id.to_uppercase()));
+                        }
+
+                        // [Dynamic ID-based Upward Propagation]
+                        // 현재 노드가 참조하는 상위 ID(mapped_ 등)를 찾아 정의처(부모)로 오염 전파
+                        let mapped_ids = extract_mapped_ids(&v);
+                        for m_id in mapped_ids {
+                            if let Ok(Some(parent_id)) = find_definition_node_by_block_id(pool_ref, &project_id, &m_id, &node_id).await {
+                                if !visited_nodes.contains(&parent_id) {
+                                    // [Semantic Filtering] 상향 역추적 전파 시 유사도 체크
+                                    let mut sim = 1.0;
+                                    if let Some(ref vec) = intent_vector {
+                                        sim = crate::services::embedding::check_node_intersection_with_vector(pool_ref, &project_id, &parent_id, &intent_summary, vec).await.unwrap_or(0.0);
+                                    }
+
+                                    if sim > 0.1 {
+                                        let p_type: String = sqlx::query_scalar("SELECT target_node_type FROM document_node WHERE node_id = ?")
+                                            .bind(&parent_id).fetch_one(pool_ref).await.unwrap_or_default();
+
+                                        impact_map.entry(parent_id.clone()).or_insert_with(|| crate::schemas::TaintImpactItem {
+                                            node_id: parent_id.clone(),
+                                            node_type: p_type,
+                                            block_ids: vec![m_id.clone()],
+                                            block_paths: vec!["/".to_string()],
+                                            reason: format!("Dynamic Upward from {} (Referenced ID: {})", node_id, m_id),
+                                        });
+                                        visited_nodes.insert(parent_id.clone());
+                                        queue.push_back(TaintItem::Node(parent_id));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // [Hierarchical Fallback]
+                // 구조적 변경(Add/Delete)이거나 매핑이 부족한 경우를 위해 최소한의 계층 전파 유지
+                let node_type: String = sqlx::query_scalar("SELECT target_node_type FROM document_node WHERE node_id = ?")
+                    .bind(&node_id).fetch_one(pool_ref).await.map_err(|e| e.to_string())?;
+
+                let needs_fallback = router_decision == "REFACTORING" || 
+                    _intent.intents.iter().any(|i| matches!(i.action_type, crate::schemas::ActionType::Add | crate::schemas::ActionType::Delete));
+
+                if needs_fallback {
+                    let parent_types = match node_type.to_uppercase().as_str() {
+                        "FSD" => vec!["PRD", "SAD_MODULE_LIST"],
+                        "PRD" => vec!["GPRD_CONTEXT_GOAL", "SAD_MODULE_LIST"],
+                        "SAD_MODULE_LIST" => vec!["GPRD_ARCHITECTURE_SCHEMA"],
+                        "API_SPEC" | "ERD" | "IA" | "WIREFRAME" => vec!["FSD", "SAD_MODULE_LIST"],
+                        _ => vec![],
+                    };
+
+                    for p_type in parent_types {
+                        let parents: Vec<(String, String)> = sqlx::query_as(
+                            "SELECT node_id, target_node_type FROM document_node WHERE UPPER(target_node_type) = UPPER(?) AND project_id = ? AND is_deleted = 0"
+                        ).bind(p_type).bind(&project_id).fetch_all(pool_ref).await.unwrap_or_default();
+
+                        for (p_id, p_type) in parents {
+                            if !visited_nodes.contains(&p_id) {
+                                let mut sim = 1.0;
+                                if let Some(ref vec) = intent_vector {
+                                    sim = crate::services::embedding::check_node_intersection_with_vector(pool_ref, &project_id, &p_id, &intent_summary, vec).await.unwrap_or(0.0);
+                                }
+                                
+                                if sim > 0.1 {
+                                    impact_map.entry(p_id.clone()).or_insert_with(|| crate::schemas::TaintImpactItem {
+                                        node_id: p_id.clone(),
+                                        node_type: p_type.clone(),
+                                        block_ids: Vec::new(),
+                                        block_paths: vec!["/".to_string()],
+                                        reason: format!("Hierarchical Fallback Upward from {}", node_id),
+                                    });
+                                    visited_nodes.insert(p_id.clone());
+                                    queue.push_back(TaintItem::Node(p_id));
+                                }
+                            }
                         }
                     }
                 }
@@ -1172,7 +1262,7 @@ pub async fn validate_refinement_node(
     // 5. 자동 Stale 유지 검증 로직 (RAG 유사도 < 0.2 or AI 평가 실패 시)
     let similarity = check_node_intersection(&*pool, &*client, &api_key, &project_id, &node_id, &intent).await.unwrap_or(0.0);
     
-    let mut final_state = "REVIEW_PENDING";
+    let final_state = "REVIEW_PENDING";
     let mut auto_stale_msg = String::new();
 
     // Auto-Stale 로직 제거: 점수가 낮더라도 REVIEW_PENDING 상태를 유지하여 사용자가 직접 검토하도록 함
@@ -1548,7 +1638,7 @@ pub async fn migrate_canonical_ids_command(
 
 #[tauri::command]
 pub async fn migrate_artifact_mappings(
-    app_handle: tauri::AppHandle,
+    _app_handle: tauri::AppHandle,
     pool: tauri::State<'_, SqlitePool>,
 ) -> Result<String, String> {
     println!(">>> [Migration] Starting Artifact Mapping Migration for all projects");
@@ -1683,6 +1773,11 @@ pub async fn sync_artifact_mappings_in_tx(
 
 fn extract_mapped_ids_with_path(value: &serde_json::Value, current_path: &str) -> Vec<(String, String)> {
     let mut results = Vec::new();
+    
+    // 패턴: 계층적 구조(module:type:id) 또는 단순 ID(ID-001)
+    static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let re = RE.get_or_init(|| Regex::new(r"(?i)\b(?:[A-Z0-9_]+:[A-Z0-9_]+:)?[A-Z]{2,}-\w+\b").unwrap());
+
     if let Some(obj) = value.as_object() {
         for (k, v) in obj {
             let next_path = if current_path.is_empty() {
@@ -1691,9 +1786,10 @@ fn extract_mapped_ids_with_path(value: &serde_json::Value, current_path: &str) -
                 format!("{}/{}", current_path, k)
             };
 
+            // 1. 'mapped_' 접두어 체크
             if k.starts_with("mapped_") {
                 if let Some(s) = v.as_str() {
-                    results.push((s.to_uppercase(), current_path.to_string())); // 블록 하이라이트를 위해 부모 객체 경로 저장
+                    results.push((s.to_uppercase(), current_path.to_string()));
                 } else if let Some(arr) = v.as_array() {
                     for item in arr {
                         if let Some(s) = item.as_str() {
@@ -1702,11 +1798,26 @@ fn extract_mapped_ids_with_path(value: &serde_json::Value, current_path: &str) -
                     }
                 }
             }
+            
+            // 2. 값 자체의 패턴 체크 (유연한 추출)
+            if let Some(s) = v.as_str() {
+                if re.is_match(s) {
+                    results.push((s.to_uppercase(), current_path.to_string()));
+                }
+            }
+
             results.extend(extract_mapped_ids_with_path(v, &next_path));
         }
     } else if let Some(arr) = value.as_array() {
         for (i, v) in arr.iter().enumerate() {
             let next_path = format!("{}/{}", current_path, i);
+            
+            if let Some(s) = v.as_str() {
+                if re.is_match(s) {
+                    results.push((s.to_uppercase(), current_path.to_string()));
+                }
+            }
+            
             results.extend(extract_mapped_ids_with_path(v, &next_path));
         }
     }
@@ -1715,7 +1826,7 @@ fn extract_mapped_ids_with_path(value: &serde_json::Value, current_path: &str) -
 
 fn extract_mapped_ids(value: &serde_json::Value) -> Vec<String> {
     let mappings = extract_mapped_ids_with_path(value, "");
-    let mut ids: Vec<String> = mappings.into_iter().map(|(id, _)| id).collect();
+    let ids: Vec<String> = mappings.into_iter().map(|(id, _)| id).collect();
     
     // 중복 제거
     let set: std::collections::HashSet<_> = ids.into_iter().collect();
@@ -1746,4 +1857,44 @@ fn get_pinpoint_block(value: &serde_json::Value, block_id: &str) -> Option<serde
         }
     }
     None
+}
+
+/// [Phase 1] 특정 블록 ID가 정의된 '부모' 또는 '원천' 노드를 찾습니다.
+/// 단순히 해당 ID를 포함하는 노드 중, 현재 타겟 노드와 다른 상위 계층의 노드를 우선합니다.
+pub async fn find_definition_node_by_block_id(
+    pool: &sqlx::SqlitePool,
+    project_id: &str,
+    block_id: &str,
+    current_node_id: &str,
+) -> Result<Option<String>, String> {
+    // 1. 해당 block_id를 포함하는 모든 노드 조회 (현재 노드 제외)
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT am.node_id, dn.target_node_type FROM artifact_mapping am \
+         JOIN document_node dn ON am.node_id = dn.node_id \
+         WHERE am.artifact_id = ? AND am.project_id = ? AND am.node_id != ? AND dn.is_deleted = 0"
+    )
+    .bind(block_id)
+    .bind(project_id)
+    .bind(current_node_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if rows.is_empty() { return Ok(None); }
+
+    // 2. 상위 계층 노드(GPRD, SAD 등) 우선 순위 부여
+    // GENESIS(GPRD) > SAD > 기타 순으로 정렬하여 가장 상위 노드를 반환
+    let mut sorted_rows = rows.clone();
+    sorted_rows.sort_by(|a, b| {
+        let score = |node_type: &str| {
+            if node_type.contains("GPRD") || node_type.contains("GENESIS") { 0 }
+            else if node_type.contains("SAD") { 1 }
+            else if node_type.contains("PRD") { 2 }
+            else if node_type.contains("FSD") { 3 }
+            else { 4 }
+        };
+        score(&a.1).cmp(&score(&b.1))
+    });
+
+    Ok(Some(sorted_rows[0].0.clone()))
 }

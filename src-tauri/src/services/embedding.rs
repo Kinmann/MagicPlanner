@@ -496,20 +496,41 @@ pub fn extract_artifact_ids(json_str: &str) -> HashSet<String> {
 
 pub fn extract_artifact_ids_from_value(val: &serde_json::Value) -> HashSet<String> {
     let mut ids = HashSet::new();
+    
+    // 패턴: 계층적 구조(module:type:id) 또는 단순 ID(ID-001)
+    static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let re = RE.get_or_init(|| Regex::new(r"(?i)\b(?:[A-Z0-9_]+:[A-Z0-9_]+:)?[A-Z]{2,}-\w+\b").unwrap());
+
     match val {
         serde_json::Value::Object(map) => {
             for (k, v) in map {
+                // 1. 명시적인 ID 필드인 경우 수집
                 if k == "id" || k == "screen_id" || k == "table_id" || k == "module_id" || k == "api_id" || 
-                   k == "artifact_id" || k == "func_id" || k == "role_id" || k == "table_name" || k == "entity_name" {
+                   k == "artifact_id" || k == "func_id" || k == "role_id" || k == "table_name" || k == "entity_name" ||
+                   k.starts_with("mapped_") {
                     if let Some(s) = v.as_str() {
                         ids.insert(s.to_uppercase());
                     }
                 }
+                
+                // 2. 값 자체가 ID 패턴을 가졌는지 검사 (유연한 추출)
+                if let Some(s) = v.as_str() {
+                    if re.is_match(s) {
+                        ids.insert(s.to_uppercase());
+                    }
+                }
+
                 ids.extend(extract_artifact_ids_from_value(v));
             }
         },
         serde_json::Value::Array(arr) => {
             for v in arr {
+                // 배열 내의 문자열 값이 ID 패턴인지 검사
+                if let Some(s) = v.as_str() {
+                    if re.is_match(s) {
+                        ids.insert(s.to_uppercase());
+                    }
+                }
                 ids.extend(extract_artifact_ids_from_value(v));
             }
         },
@@ -542,6 +563,20 @@ pub async fn check_node_intersection(
     node_id: &str,
     query_text: &str,
 ) -> Result<f64, String> {
+    // 의도(Intent) 벡터화
+    let query_vector = call_gemini_embedding(client, api_key, query_text, "RETRIEVAL_QUERY").await
+        .map_err(|e| format!("Intersection query embedding error: {:?}", e))?;
+    
+    check_node_intersection_with_vector(pool, project_id, node_id, query_text, &query_vector).await
+}
+
+pub async fn check_node_intersection_with_vector(
+    pool: &SqlitePool,
+    project_id: &str,
+    node_id: &str,
+    query_text: &str,
+    query_vector: &[f32],
+) -> Result<f64, String> {
     // 1. 아티팩트 코드 기반 연관도 체크 (1순위)
     let query_codes = extract_artifact_ids(query_text);
     
@@ -569,11 +604,6 @@ pub async fn check_node_intersection(
     }
 
     // 2. 연관된 코드가 없는 경우에만 임베딩 유사도 체크 (2순위 Fallback)
-    println!(">>> [Embedding-Fallback] Starting for node: {}", node_id);
-    
-    // 의도(Intent) 벡터화
-    let query_vector = call_gemini_embedding(client, api_key, query_text, "RETRIEVAL_QUERY").await
-        .map_err(|e| format!("Intersection query embedding error: {}", e))?;
     let query_json = serde_json::to_string(&query_vector).unwrap_or_default();
 
     // 해당 노드에 속한 조각들 중 가장 높은 유사도 검색

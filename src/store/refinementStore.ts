@@ -309,8 +309,11 @@ export const useRefinementStore = create<RefinementState>((set, get) => ({
       content: 'Simulating impact of changes (Dry-run taint cascade)...'
     });
 
+    const apiKey = useSettingsStore.getState().apiKey;
+
     try {
       const result = await invoke<TaintCascadeSchema>('apply_taint_cascade', { 
+        apiKey,
         projectId, 
         intent, 
         targets: targetNodes,

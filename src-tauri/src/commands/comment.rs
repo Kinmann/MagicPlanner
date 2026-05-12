@@ -149,7 +149,7 @@ pub async fn get_project_comments(
             n.node_category,
             m.module_name,
             c.created_at,
-            json_extract(gi.generated_draft_json, c.json_path) as original_content
+            NULL as original_content
          FROM node_comment c
          JOIN document_node n ON c.node_id = n.node_id
          JOIN generation_iteration gi ON c.iteration_id = gi.iteration_id

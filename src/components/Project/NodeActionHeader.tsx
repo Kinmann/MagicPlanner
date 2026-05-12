@@ -137,6 +137,12 @@ export const NodeActionHeader: React.FC<NodeActionHeaderProps> = ({
                   <Check strokeWidth={4} />
                 </div>
               )}
+
+              {it.is_archived && (
+                <div className={styles.archiveIndicator}>
+                  <Archive size={12} />
+                </div>
+              )}
             </div>
           ))}
         </div>

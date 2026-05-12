@@ -218,6 +218,13 @@ pub async fn delete_project(
         .execute(&*pool)
         .await
         .map_err(|e| format!("Failed to delete global contexts: {}", e))?;
+    
+    // 1-E. 아티팩트 매핑 삭제 (document_node를 참조하므로 먼저 삭제)
+    sqlx::query("DELETE FROM artifact_mapping WHERE project_id = ?")
+        .bind(&project_id)
+        .execute(&*pool)
+        .await
+        .map_err(|e| format!("Failed to delete artifact mappings: {}", e))?;
 
     // 2. 중간 계층 삭제
     

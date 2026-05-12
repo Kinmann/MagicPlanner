@@ -278,6 +278,7 @@ const RefinementView = ({
           selectedIds={selectedCommentIds} 
           onToggle={toggleComment} 
           onClose={() => toggleCommentsList(false)} 
+          intent={useRefinementStore.getState().intent}
         />
       )}
 
@@ -447,34 +448,69 @@ const RefinementView = ({
   );
 };
 
-const CommentsOverlay = ({ comments, selectedIds, onToggle, onClose }: any) => (
-  <div className={styles.commentsOverlay}>
-    <div className={styles.overlayHeader}>
-      <h3>Architecture Comments ({comments.length})</h3>
-      <X size={14} className={styles.closeBtn} onClick={onClose} />
-    </div>
-    <div className={styles.commentList}>
-      {comments.length === 0 ? (
-        <div className={styles.emptyState} style={{ padding: '20px' }}>
-          <p>No comments found for this project.</p>
-        </div>
-      ) : (
-        comments.map((c: any) => (
-          <div 
-            key={c.comment_id} 
-            className={`${styles.commentItem} ${selectedIds.has(c.comment_id) ? styles.selected : ''}`}
-            onClick={() => onToggle(c.comment_id)}
-          >
-            <div className={styles.commentPath}>
-              {c.module_name || c.node_category}:{c.node_type}:{c.json_path.includes('$') ? '$' + c.json_path.split('$')[1] : c.json_path}
-            </div>
-            <div className={styles.commentText}>{c.comment_text}</div>
+const CommentsOverlay = ({ comments, selectedIds, onToggle, onClose, intent }: any) => {
+  // 코멘트 ID별 리다이렉션된 경로 맵 생성
+  const redirectedMap = React.useMemo(() => {
+    const map = new Map<string, string>();
+    if (intent?.intents) {
+      intent.intents.forEach((item: any) => {
+        if (item.is_context_mismatch && item.resolved_comment_ids) {
+          const mainTarget = item.target_block_ids?.[0] || item.target_node_ids?.[0];
+          if (mainTarget) {
+            item.resolved_comment_ids.forEach((cid: string) => {
+              map.set(cid, mainTarget);
+            });
+          }
+        }
+      });
+    }
+    return map;
+  }, [intent]);
+
+  return (
+    <div className={styles.commentsOverlay}>
+      <div className={styles.overlayHeader}>
+        <h3>Architecture Comments ({comments.length})</h3>
+        <X size={14} className={styles.closeBtn} onClick={onClose} />
+      </div>
+      <div className={styles.commentList}>
+        {comments.length === 0 ? (
+          <div className={styles.emptyState} style={{ padding: '20px' }}>
+            <p>No comments found for this project.</p>
           </div>
-        ))
-      )}
+        ) : (
+          comments.map((c: any) => {
+            const redirectedPath = redirectedMap.get(c.comment_id);
+            const originalPath = `${c.module_name || c.node_category}:${c.node_type}:${c.json_path.includes('$') ? '$' + c.json_path.split('$')[1] : c.json_path}`;
+            
+            return (
+              <div 
+                key={c.comment_id} 
+                className={`${styles.commentItem} ${selectedIds.has(c.comment_id) ? styles.selected : ''}`}
+                onClick={() => onToggle(c.comment_id)}
+              >
+                <div className={styles.commentPath}>
+                  {redirectedPath ? (
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] line-through opacity-40">{originalPath}</span>
+                      <div className="flex items-center gap-1 text-emerald-500">
+                        <Zap size={10} />
+                        <span className="font-bold">{redirectedPath}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    originalPath
+                  )}
+                </div>
+                <div className={styles.commentText}>{c.comment_text}</div>
+              </div>
+            );
+          })
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const ThinkingMessage = ({ content, statusMessages, hideLogs }: any) => (
   <div className={styles.thinkingMessage}>

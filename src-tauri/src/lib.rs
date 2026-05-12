@@ -17,7 +17,7 @@ pub struct ActiveTasks(pub Arc<Mutex<HashSet<String>>>);
 // }
 
 use reqwest::Client;
-use tauri::Manager;
+use tauri::{Emitter, State, Manager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -337,14 +337,12 @@ pub fn run() {
             commands::pipeline::manually_trigger_next_nodes,
             commands::refinement::parse_intent,
             commands::refinement::route_architecture_target,
-            commands::refinement::confirm_architecture_routing,
             commands::refinement::apply_taint_cascade,
             commands::refinement::confirm_taint_cascade,
             commands::refinement::generate_and_apply_patch,
             commands::refinement::validate_refinement_node,
             commands::refinement::confirm_node_review,
             commands::refinement::finalize_refinement_update,
-            commands::refinement::retry_patch_loop,
             // v2: Comment 커맨드
             commands::comment::get_node_comments,
             commands::comment::get_project_comments,

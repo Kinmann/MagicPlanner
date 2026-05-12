@@ -525,7 +525,7 @@ export const EditorPanel: React.FC = () => {
               onToggleRawMode={toggleRawMode}
               isLocked={selectedNode.is_locked}
               title={selectedNode.target_node_type}
-              countLabel="Draft"
+              countLabel={['STALE', 'REFINING', 'REVIEW_PENDING', 'REVIEWED'].includes(selectedNode.node_state) ? "REFINED" : "DRAFT"}
             />
           </div>
         )}

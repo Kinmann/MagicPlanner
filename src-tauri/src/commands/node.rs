@@ -114,8 +114,9 @@ pub async fn get_node_iterations(
     pool: tauri::State<'_, SqlitePool>,
     node_id: String,
 ) -> Result<Vec<GenerationIteration>, String> {
+    // 확정된 초안(is_pass=1)은 아카이브 여부와 상관없이 항상 보여줌 (데이터 정합성 확인용)
     let iterations = sqlx::query_as::<_, GenerationIteration>(
-        "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 AND is_archived = 0 ORDER BY iteration_number ASC"
+        "SELECT * FROM generation_iteration WHERE node_id = ? AND is_deleted = 0 AND (is_archived = 0 OR is_pass = 1) ORDER BY iteration_number ASC"
     )
     .bind(node_id)
     .fetch_all(&*pool)
@@ -458,14 +459,24 @@ pub async fn archive_generation_iteration(
     }
 
     // 3. 아카이브 처리
-    sqlx::query("UPDATE generation_iteration SET is_archived = 1, updated_at = ? WHERE iteration_id = ?")
+    sqlx::query("UPDATE generation_iteration SET is_archived = 1, is_pass = 0, updated_at = ? WHERE iteration_id = ?")
         .bind(Utc::now().to_rfc3339())
         .bind(&iteration_id)
         .execute(&*pool)
         .await
         .map_err(|e| e.to_string())?;
 
-    // 4. 노드 정보 업데이트 (아카이브 제외하고 다시 계산)
+    // 4. 만약 확정된 초안을 아카이브했다면 노드 상태를 PAUSED_HITL로 되돌림 (이미 락 체크를 통과했으므로 안전)
+    if is_pass {
+        sqlx::query("UPDATE document_node SET node_state = 'PAUSED_HITL', updated_at = ? WHERE node_id = ?")
+            .bind(Utc::now().to_rfc3339())
+            .bind(&node_id)
+            .execute(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    // 5. 노드 정보 업데이트 (아카이브 제외하고 다시 계산)
     update_node_stats_from_active_iterations(&*pool, &node_id).await?;
 
     let _ = handle.emit("nodes-updated", ());

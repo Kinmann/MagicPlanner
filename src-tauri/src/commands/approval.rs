@@ -58,7 +58,7 @@ pub async fn confirm_genesis_prd_iteration(
         .await
         .map_err(|e| e.to_string())?;
 
-    sqlx::query("UPDATE generation_iteration SET is_pass = 1, updated_at = ? WHERE iteration_id = ?")
+    sqlx::query("UPDATE generation_iteration SET is_pass = 1, is_archived = 0, updated_at = ? WHERE iteration_id = ?")
         .bind(&now)
         .bind(&iteration_id)
         .execute(&mut *tx)
@@ -83,6 +83,36 @@ pub async fn confirm_genesis_prd_iteration(
     }
 
     tx.commit().await.map_err(|e| e.to_string())?;
+
+    // RAG 임베딩 갱신 (비동기)
+    let pool_clone = pool.inner().clone();
+    let project_id_clone = project_id.clone();
+    let node_id_bg = node.node_id.clone();
+    let node_type_bg = node.target_node_type.clone();
+    let iter_id_bg = iteration.iteration_id.clone();
+    let draft_bg = iteration.generated_draft_json.clone();
+    let score_bg = iteration.calculated_score.unwrap_or(0);
+
+    tauri::async_runtime::spawn(async move {
+        let client = reqwest::Client::new();
+        let session_res = sqlx::query("SELECT api_key_encrypted FROM user_session WHERE session_id = 'default-session' AND is_deleted = 0")
+            .fetch_optional(&pool_clone).await;
+        
+        let actual_api_key = match session_res {
+            Ok(Some(row)) => Some(row.get::<String, _>("api_key_encrypted")),
+            _ => None,
+        };
+
+        if let Some(key) = actual_api_key {
+            if !key.trim().is_empty() {
+                let _ = store_document_embeddings(
+                    &pool_clone, &client, &key, &project_id_clone, 
+                    None, &node_id_bg, &node_type_bg, &iter_id_bg, &draft_bg, score_bg
+                ).await;
+            }
+        }
+    });
+
     Ok(())
 }
 
@@ -362,7 +392,7 @@ pub async fn confirm_sad_iteration(
     sqlx::query("UPDATE generation_iteration SET is_pass = 0, updated_at = ? WHERE node_id = ?")
         .bind(&now).bind(&node.node_id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
 
-    sqlx::query("UPDATE generation_iteration SET is_pass = 1, updated_at = ? WHERE iteration_id = ?")
+    sqlx::query("UPDATE generation_iteration SET is_pass = 1, is_archived = 0, updated_at = ? WHERE iteration_id = ?")
         .bind(&now).bind(&iteration_id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
 
     // 새 컨텍스트 저장
@@ -382,6 +412,36 @@ pub async fn confirm_sad_iteration(
     }
 
     tx.commit().await.map_err(|e| e.to_string())?;
+
+    // RAG 임베딩 갱신 (비동기)
+    let pool_clone = pool.inner().clone();
+    let project_id_clone = project_id.clone();
+    let node_id_bg = node.node_id.clone();
+    let node_type_bg = node.target_node_type.clone();
+    let iter_id_bg = iteration.iteration_id.clone();
+    let draft_bg = iteration.generated_draft_json.clone();
+    let score_bg = iteration.calculated_score.unwrap_or(0);
+
+    tauri::async_runtime::spawn(async move {
+        let client = reqwest::Client::new();
+        let session_res = sqlx::query("SELECT api_key_encrypted FROM user_session WHERE session_id = 'default-session' AND is_deleted = 0")
+            .fetch_optional(&pool_clone).await;
+        
+        let actual_api_key = match session_res {
+            Ok(Some(row)) => Some(row.get::<String, _>("api_key_encrypted")),
+            _ => None,
+        };
+
+        if let Some(key) = actual_api_key {
+            if !key.trim().is_empty() {
+                let _ = store_document_embeddings(
+                    &pool_clone, &client, &key, &project_id_clone, 
+                    None, &node_id_bg, &node_type_bg, &iter_id_bg, &draft_bg, score_bg
+                ).await;
+            }
+        }
+    });
+
     let _ = _app_handle.emit("nodes-updated", ());
     Ok(())
 }

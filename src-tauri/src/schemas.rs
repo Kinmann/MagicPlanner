@@ -866,6 +866,7 @@ pub struct TaintImpactItem {
     pub block_ids: Vec<String>,
     pub block_paths: Vec<String>, // 구체적인 JSON 경로 (UI 하이라이트용)
     pub reason: String,
+    pub similarity_score: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]

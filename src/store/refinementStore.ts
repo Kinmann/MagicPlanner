@@ -94,6 +94,7 @@ interface RefinementState {
   mode: 'PROPERTIES' | 'REFINEMENT';
   messages: RefinementMessage[];
   isCommentsListVisible: boolean;
+  taintCascadeResult: TaintCascadeSchema | null;
 
   // Actions
   setStep: (step: UpdateStep) => void;

@@ -1,0 +1,33 @@
+## 1. 도메인 특화 지표 (Domain Metrics) : 70점
+
+### Metric D: Bounded Context 응집도 및 정의 (Cohesion & Definition) (40점)
+- 각 모듈이 명확한 비즈니스 경계를 가지고 독립적으로 정의되었는지 검증합니다.
+- **감점 (건당 -15점)**:
+    - **모듈 과립화/파편화**: Bounded Context 단위로 묶이지 않고 단순 CRUD나 테이블 단위로 지나치게 잘게 쪼개진 경우.
+    - **책임 모호성**: 각 모듈의 `core_responsibility`가 다른 모듈과 중복되거나 명확하지 않은 경우.
+
+### Metric E: 모듈 식별자 및 추적성 (Module ID & Traceability) (30점)
+- 모듈 ID 규격과 네이밍의 적절성을 검증합니다.
+- **[Critical Error 할당 조건]**
+    - **ID 패턴 불일치**: `module_id`가 `MOD-001` 형식의 정규식(`^MOD-[0-9]{3}$`)을 준수하지 않음.
+    - **ID 누락**: 모듈 목록 중 식별자가 부여되지 않은 항목이 존재함.
+    - **ID 변조 (Refinement 모드)**: `$PREVIOUS_DRAFT`에 존재하던 기존 `module_id`가 정당한 사유 없이 임의로 변경됨.
+- **감점 (건당 -10점)**:
+    - **ID 중복**: 시스템 내에서 유일해야 하는 모듈 식별자가 중복된 경우.
+    - **네이밍 컨벤션 위반**: 전역 네이밍 가이드(SAD Core ERD 등)를 따르지 않은 경우.
+
+---
+
+## [출력 규격]
+반드시 다음 JSON 구조만을 출력하십시오. 인사말이나 설명을 붙이지 마십시오.
+
+{
+  "score": 0,
+  "is_pass": false,
+  "critical_errors": [
+    { "location": "ROOT", "code": "ERR_CODE", "description": "사유" }
+  ],
+  "feedback": [
+    { "location": "ROOT", "description": "수정 권고" }
+  ]
+}

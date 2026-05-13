@@ -3,8 +3,9 @@
 ## [SAD - Module Split 설계 원칙]
 1. **토폴로지 설계**: 모듈 간의 연결망을 식별자 관계(`MOD-A` -> `MOD-B`)로 정의하십시오.
 2. **식별자 상속 및 정합성**: 
-   - 의존성 정의 시 **반드시** `$PREVIOUS_ARCHITECTURAL_DECISIONS.sad_module_list` 노드에서 새롭게 정의되고 확정된 `module_id`만을 사용하십시오. 
-   - 상위 노드인 `sad_module_list`에 존재하지 않는 ID를 임의로 참조하거나 이전 단계의 세분화된 ID를 사용하지 마십시오.
+   - 의존성 정의 시 **반드시** `[Approved Module List (SSOT)]` 또는 `[Global Context]` 내의 `sad_module_list` 노드에서 새롭게 정의되고 확정된 `module_id`만을 사용하십시오. 
+   - **임의 모듈 추가 금지**: 확정된 모듈 리스트에 없는 `module_id`(예: MOD-DATABASE, MOD-CACHE 등)를 임의로 추가하거나 참조하는 행위를 엄격히 금지합니다. 인프라 요소는 모듈이 아닌 각 도메인 모듈 내부의 기술 스택으로 취급하십시오.
+   - `[Global Context]`에 존재하지 않는 ID를 임의로 참조하거나 이전 단계의 세분화된 ID를 사용하지 마십시오.
 3. **순환 참조 방지**: 순환 참조(Circular Dependency) 구조가 발생하지 않도록 의존 방향성을 엄격히 통제하십시오.
 4. **글로벌 규격 준수**: 통신 방식 정의 시 선행 확정된 `Global Context`와 `Genesis PRD`의 프로토콜 규격을 반드시 매핑하십시오.
 5. **이전 설계 계승(Refinement)**: `$PREVIOUS_DRAFT`에 데이터가 존재한다면 이를 기본 골격으로 삼고, `$EVALUATOR_FEEDBACK`의 교정 지시 사항을 최우선으로 반영하여 의존성 및 통신 규격을 개선하십시오.

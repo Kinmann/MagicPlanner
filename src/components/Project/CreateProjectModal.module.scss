@@ -1,0 +1,13 @@
+@use '../../styles/variables' as v;
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-6;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-2;
+}

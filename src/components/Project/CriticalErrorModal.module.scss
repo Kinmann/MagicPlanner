@@ -1,0 +1,93 @@
+@use '../../styles/variables' as v;
+
+.headerBar {
+  display: flex;
+  align-items: center;
+  gap: v.$space-5;
+  padding: v.$space-6;
+  background: rgba(v.$error, 0.05);
+  border-bottom: 1px solid rgba(v.$error, 0.1);
+}
+
+.iconBox {
+  width: 48px;
+  height: 48px;
+  background: rgba(v.$error, 0.1);
+  border: 1px solid rgba(v.$error, 0.3);
+  border-radius: v.$radius-lg;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: v.$error;
+  box-shadow: 0 0 15px rgba(v.$error, 0.2);
+}
+
+.titleGroup {
+  h2 { font-size: 18px; font-weight: 800; color: v.$error; margin-bottom: 2px; }
+  p { font-size: 13px; color: v.$text-muted; }
+}
+
+.body {
+  padding: v.$space-6;
+}
+
+.logSection {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-2;
+
+  label { font-size: 11px; font-weight: 800; color: v.$text-muted; text-transform: uppercase; letter-spacing: 0.05em; }
+}
+
+.logContainer {
+  background-color: #000;
+  border: 1px solid v.$border;
+  border-radius: v.$radius-md;
+  padding: v.$space-4;
+  font-family: v.$font-mono;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.logItem {
+  display: flex;
+  gap: v.$space-3;
+  color: v.$foreground;
+  
+  .dot { color: v.$error; font-size: 8px; margin-top: 4px; }
+  .highlight { color: v.$error; font-weight: 700; margin-right: 4px; }
+  
+  &.dim { opacity: 0.6; }
+}
+
+.actionArea {
+  padding: v.$space-4 v.$space-6;
+  background-color: v.$background-container-high;
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-4;
+}
+
+.buttonRow {
+  display: flex;
+  justify-content: flex-end;
+  gap: v.$space-3;
+}
+
+.dismissRow {
+  display: flex;
+  justify-content: center;
+  padding-top: v.$space-2;
+  border-top: 1px solid v.$border;
+  
+  .dismissBtn {
+    background: transparent;
+    border: none;
+    color: v.$text-muted;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: underline;
+    cursor: pointer;
+    &:hover { color: v.$foreground; }
+  }
+}

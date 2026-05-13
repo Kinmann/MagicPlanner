@@ -1,0 +1,111 @@
+@use '../../styles/variables' as v;
+
+.hiddenInput {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+// Switch
+.switchLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.switchWrapper {
+  position: relative;
+  width: 36px;
+  height: 20px;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.1);
+  transition: .2s;
+  border-radius: 20px;
+  border: 1px solid v.$border;
+
+  &::before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 2px;
+    bottom: 2px;
+    background-color: v.$text-muted;
+    transition: .2s;
+    border-radius: 50%;
+  }
+}
+
+.hiddenInput:checked + .slider {
+  background-color: rgba(16, 185, 129, 0.2);
+  border-color: v.$primary;
+
+  &::before {
+    transform: translateX(16px);
+    background-color: v.$primary;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+  }
+}
+
+// Checkbox
+.checkboxLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.checkboxWrapper {
+  position: relative;
+  width: 18px;
+  height: 18px;
+}
+
+.checkmark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 18px;
+  width: 18px;
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid v.$border;
+  border-radius: 4px;
+  transition: all 0.2s;
+
+  &::after {
+    content: "";
+    position: absolute;
+    display: none;
+    left: 5px;
+    top: 2px;
+    width: 4px;
+    height: 8px;
+    border: solid v.$primary;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+}
+
+.hiddenInput:checked + .checkmark {
+  background-color: rgba(16, 185, 129, 0.1);
+  border-color: v.$primary;
+
+  &::after {
+    display: block;
+  }
+}
+
+.labelText {
+  font-size: 14px;
+  color: v.$foreground;
+}

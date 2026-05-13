@@ -1,0 +1,632 @@
+@use '../../styles/variables' as v;
+
+
+.tableContainer {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid v.$border;
+  border-radius: v.$radius-lg;
+  background: v.$background-container-low;
+  
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    
+    th {
+      background: v.$background-container-high;
+      padding: v.$space-3 v.$space-4;
+      text-align: left;
+      font-weight: 800;
+      color: v.$primary;
+      border-bottom: 1px solid v.$border;
+      white-space: nowrap;
+    }
+    
+    td {
+      padding: v.$space-3 v.$space-4;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+      vertical-align: top;
+      line-height: 1.5;
+    }
+    
+    tr:last-child td { border-bottom: none; }
+
+  }
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: v.$space-2;
+  margin-bottom: v.$space-4;
+  h3 { font-size: 14px; font-weight: 800; color: v.$foreground; text-transform: uppercase; letter-spacing: 0.05em; }
+  .icon { color: v.$primary; opacity: 0.8; }
+}
+
+.attributeList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.attribute {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 8px;
+  margin-left: -8px;
+  border-radius: v.$radius-sm;
+  transition: all 0.2s ease;
+  
+
+
+  .name { font-family: v.$font-mono; font-weight: 700; color: v.$primary; transition: color 0.2s; }
+  .type { font-size: 11px; opacity: 0.6; font-family: v.$font-mono; }
+  .badge { font-size: 9px; padding: 1px 4px; border-radius: 3px; background: v.$primary; color: v.$on-primary; font-weight: 800; }
+}
+
+.relationshipList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: v.$space-3;
+}
+
+
+.techGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: v.$space-4;
+}
+
+.techCard {
+  background: v.$background-container-high;
+  border: 1px solid v.$border;
+  border-radius: v.$radius-lg;
+  padding: v.$space-4;
+  transition: all 0.3s ease;
+
+
+
+  .category { font-size: 10px; font-weight: 800; color: v.$primary; margin-bottom: 4px; }
+  .name { font-size: 15px; font-weight: 800; color: v.$foreground; margin-bottom: 2px; }
+  .version { font-size: 11px; font-family: v.$font-mono; opacity: 0.5; }
+  .rationale { font-size: 12px; color: v.$text-muted; margin-top: v.$space-3; line-height: 1.5; }
+}
+
+.minimalRelRow {
+  display: flex;
+  align-items: center;
+  gap: v.$space-6;
+  padding: v.$space-2 v.$space-4;
+  border-radius: v.$radius-md;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  
+
+  
+  .relNames {
+    display: flex;
+    align-items: center;
+    gap: v.$space-3;
+    min-width: 280px;
+    font-weight: 700;
+    font-size: 14px;
+    color: rgba(v.$foreground, 0.8);
+    transition: color 0.2s;
+  }
+  
+  .relMeta {
+    display: flex;
+    align-items: center;
+    gap: v.$space-4;
+    flex: 1;
+  }
+  
+  .relBadge {
+    font-family: v.$font-mono;
+    font-size: 10px;
+    font-weight: 800;
+    color: v.$primary;
+    background: rgba(v.$primary, 0.1);
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(v.$primary, 0.2);
+    min-width: 40px;
+    text-align: center;
+  }
+  
+  .relDescription {
+    font-size: 13px;
+    color: v.$text-muted;
+    line-height: 1.5;
+  }
+}
+
+.emptyState {
+  padding: v.$space-10;
+  text-align: center;
+  color: v.$text-muted;
+  font-style: italic;
+}
+
+// Helpers for Tailwind classes
+.textPrimary { color: v.$primary; }
+.textSecondary { color: rgba(v.$foreground, 0.6); }
+.fontBold { font-weight: v.$font-weight-bold; }
+.opacity80 { opacity: 0.8; }
+.opacity60 { opacity: 0.6; }
+.opacity40 { opacity: 0.4; }
+.textSm { font-size: v.$text-sm; }
+.textXs { font-size: v.$text-xs; }
+.textLg { font-size: v.$text-lg; }
+.flex { display: flex; }
+.flexCol { flex-direction: column; }
+.flexWrap { flex-wrap: wrap; }
+.itemsCenter { align-items: center; }
+.itemsStart { align-items: flex-start; }
+.justifyBetween { justify-content: space-between; }
+.gap1 { gap: v.$space-1; }
+.gap2 { gap: v.$space-2; }
+.mt2 { margin-top: v.$space-2; }
+.mb2 { margin-bottom: v.$space-2; }
+.px2 { padding-left: v.$space-2; padding-right: v.$space-2; }
+.py0_5 { padding-top: 2px; padding-bottom: 2px; }
+.rounded { border-radius: v.$radius-sm; }
+.roundedLg { border-radius: v.$radius-lg; }
+.border { border: 1px solid v.$border; }
+.borderBorder { border-color: v.$border; }
+.bgSurfaceContainerHigh { background-color: v.$background-container-high; }
+.leadingRelaxed { line-height: 1.6; }
+
+.kvRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 12px;
+  margin-left: -12px;
+  border-radius: v.$radius-md;
+  transition: all 0.2s ease;
+  cursor: default;
+
+
+}
+
+.valueWrapper {
+  display: inline-block;
+  padding: 2px 6px;
+  margin: -2px -4px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  cursor: text;
+
+
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: v.$background-container-high;
+  color: v.$foreground;
+  
+  &--secondary {
+    background: rgba(v.$accent, 0.1);
+    color: v.$accent;
+    border: 1px solid rgba(v.$accent, 0.2);
+  }
+
+  &--primary {
+    background: rgba(v.$primary, 0.1);
+    color: v.$primary;
+    border: 1px solid rgba(v.$primary, 0.2);
+  }
+
+  &--accent {
+    background: rgba(v.$accent, 0.1);
+    color: v.$accent;
+    border: 1px solid rgba(v.$accent, 0.2);
+  }
+}
+
+.reqBadge {
+  display: inline-block;
+  margin-right: v.$space-3_5;
+  font-family: v.$font-mono;
+  font-size: v.$text-xs;
+  color: v.$primary;
+  font-weight: v.$font-weight-bold;
+  vertical-align: middle;
+}
+
+.stepBadge {
+  width: v.$space-5;
+  height: v.$space-5;
+  border-radius: v.$radius-full;
+  background-color: rgba(v.$primary, 0.1);
+  color: v.$primary;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  border: 1px solid rgba(v.$primary, 0.2);
+  margin-right: v.$space-1;
+  flex-shrink: 0;
+}
+
+// Epic & Actor Styles for consistency
+.epicActorContainer {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-8;
+  padding-bottom: v.$space-4;
+  width: 100%;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-4;
+}
+
+.sectionTitle {
+  font-size: v.$text-lg;
+  font-weight: v.$font-weight-bold;
+  color: v.$foreground;
+  border-bottom: 1px solid v.$border;
+  padding-bottom: v.$space-2;
+  display: flex;
+  align-items: center;
+  gap: v.$space-2;
+  
+  .icon {
+    color: v.$primary;
+  }
+}
+
+.epicList {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-6;
+  padding-left: v.$space-2;
+}
+
+.actorList {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-6;
+  padding-left: v.$space-2;
+}
+
+.actorItem {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-2;
+  padding: v.$space-2 v.$space-4;
+  margin-left: -16px;
+  border-radius: v.$radius-lg;
+  transition: all 0.2s ease;
+
+
+
+  .actorName {
+    font-size: 15px;
+    font-weight: 800;
+    color: v.$foreground;
+    display: flex;
+    align-items: center;
+    gap: v.$space-2;
+    transition: color 0.2s;
+    .icon { color: v.$primary; }
+  }
+  
+  .actorDesc {
+    font-size: v.$text-sm;
+    color: v.$text-muted;
+    padding-left: v.$space-6;
+    line-height: 1.6;
+    opacity: 0.8;
+  }
+}
+
+.epicItem {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-4;
+}
+
+.epicHeader {
+  display: flex;
+  align-items: center;
+  gap: v.$space-2;
+  
+  .epicId {
+    font-size: v.$text-xs;
+    font-family: v.$font-mono;
+    color: v.$primary;
+    background: rgba(v.$primary, 0.1);
+    padding: 2px 8px;
+    border-radius: v.$radius-sm;
+    font-weight: 700;
+  }
+  
+  .epicTitle {
+    font-size: v.$text-lg;
+    font-weight: v.$font-weight-bold;
+    color: v.$foreground;
+  }
+}
+
+.epicBody {
+  padding-left: v.$space-4;
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-4;
+}
+
+.epicDesc {
+  font-size: v.$text-sm;
+  color: v.$foreground;
+  line-height: 1.6;
+  border-left: 2px solid v.$border;
+  padding-left: v.$space-4;
+  opacity: 0.8;
+}
+
+.criteriaSection {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-3;
+}
+
+.criteriaTitle {
+  font-size: v.$text-sm;
+  font-weight: v.$font-weight-semibold;
+  color: v.$text-muted;
+  display: flex;
+  align-items: center;
+  gap: v.$space-1_5;
+}
+
+.criteriaList {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-2;
+  font-size: v.$text-sm;
+  color: v.$text-muted;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.criteriaItem {
+  display: flex;
+  align-items: flex-start;
+  gap: v.$space-2_5;
+  line-height: 1.4;
+  transition: color 0.2s;
+  padding: v.$space-1 0;
+  
+
+  
+  .checkIcon {
+    color: rgba(v.$primary, 0.5);
+    flex-shrink: 0;
+    margin-top: 3px;
+    transition: color 0.2s;
+  }
+
+  .elementHeader {
+    display: flex;
+    align-items: center;
+    gap: v.$space-2;
+    margin-bottom: v.$space-1;
+    flex-wrap: wrap;
+  }
+
+  .elementLabel {
+    font-weight: 700;
+    color: v.$foreground;
+    font-size: 14px;
+  }
+
+  .elementDesc {
+    font-size: 13px;
+    color: v.$text-muted;
+    line-height: 1.5;
+    margin: 0;
+  }
+}
+
+.typeBadge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  font-family: v.$font-mono;
+  background: rgba(v.$accent, 0.2);
+  color: v.$foreground;
+  border: 1px solid v.$border-strong;
+  opacity: 0.9;
+
+  &.input { background: rgba(v.$info, 0.15); color: v.$info; border-color: rgba(v.$info, 0.3); }
+  &.button { background: rgba(v.$primary, 0.15); color: v.$primary; border-color: rgba(v.$primary, 0.3); }
+  &.link { background: rgba(v.$warning, 0.15); color: v.$warning; border-color: rgba(v.$warning, 0.3); }
+  &.text { background: rgba(v.$foreground, 0.1); color: v.$foreground; border-color: rgba(v.$foreground, 0.2); }
+}
+
+// API Spec Specific Styles
+.methodBadge {
+  font-family: v.$font-mono;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  min-width: 48px;
+  text-align: center;
+  
+  &--get {
+    background: rgba(v.$info, 0.1);
+    color: v.$info;
+    border: 1px solid rgba(v.$info, 0.2);
+  }
+  
+  &--post {
+    background: rgba(v.$success, 0.1);
+    color: v.$success;
+    border: 1px solid rgba(v.$success, 0.2);
+  }
+  
+  &--put, &--patch {
+    background: rgba(v.$warning, 0.1);
+    color: v.$warning;
+    border: 1px solid rgba(v.$warning, 0.2);
+  }
+  
+  &--delete {
+    background: rgba(v.$error, 0.1);
+    color: v.$error;
+    border: 1px solid rgba(v.$error, 0.2);
+  }
+}
+
+.path {
+  font-family: v.$font-mono;
+  font-size: 14px;
+  font-weight: 600;
+  color: v.$foreground;
+  opacity: 0.9;
+}
+
+.codeBlock {
+  background: v.$background-container-lowest;
+  border: 1px solid v.$border;
+  border-radius: v.$radius-lg;
+  padding: v.$space-4;
+  margin-top: v.$space-2;
+  overflow: auto;
+  max-height: 400px;
+  
+  pre {
+    margin: 0;
+    font-family: v.$font-mono;
+    font-size: 12px;
+    line-height: 1.5;
+    color: v.$primary;
+    opacity: 0.8;
+  }
+}
+
+.responseRow {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-2;
+  padding: v.$space-3;
+  background: transparent;
+  border-radius: v.$radius-md;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  
+
+}
+
+.statusBadge {
+  font-family: v.$font-mono;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  
+  &--success {
+    background: rgba(v.$success, 0.1);
+    color: v.$success;
+  }
+  
+  &--error {
+    background: rgba(v.$error, 0.1);
+    color: v.$error;
+  }
+  
+  &--info {
+    background: rgba(v.$info, 0.1);
+    color: v.$info;
+  }
+}
+
+.iaTreeRow {
+  display: flex;
+  align-items: center;
+  gap: v.$space-4;
+  padding: v.$space-1_5 v.$space-3;
+  border-radius: v.$radius-md;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  
+
+}
+
+.iaTreeRowRoot {
+  background: rgba(v.$primary, 0.03);
+  border-color: rgba(v.$primary, 0.05);
+}
+
+.iaScreenGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: v.$space-4;
+  width: 100%;
+}
+
+.iaElementCard {
+  background: v.$background-container-lowest;
+  border: 1px solid v.$border;
+  border-radius: v.$radius-lg;
+  padding: v.$space-3 v.$space-4;
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-1;
+  transition: all 0.2s ease;
+  cursor: default;
+  
+
+}
+
+.idBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  background: v.$background-container-highest;
+  border: 1px solid v.$border-strong;
+  border-radius: v.$radius-sm;
+  font-size: 10px;
+  font-family: v.$font-mono;
+  font-weight: 700;
+  color: v.$primary;
+  line-height: 1;
+}
+
+.mappingBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  background: rgba(v.$primary, 0.05);
+  border: 1px solid rgba(v.$primary, 0.2);
+  border-radius: v.$radius-sm;
+  font-size: 10px;
+  font-family: v.$font-mono;
+  font-weight: 600;
+  color: v.$primary;
+  line-height: 1;
+  gap: 4px;
+  
+  &::before {
+    content: "🔗";
+    font-size: 8px;
+  }
+}

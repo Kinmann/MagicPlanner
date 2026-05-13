@@ -11,7 +11,13 @@
 - 만약 `$PREVIOUS_DRAFT`에 데이터가 존재한다면 이를 기본 골격으로 삼으십시오.
 - `$EVALUATOR_FEEDBACK`의 내용을 분석하여 결함 사항을 최우선으로 교정하고, 기존의 정합성 있는 테이블 구조 및 관계는 최대한 유지하십시오.
 
-### B. 데이터 원자성 및 명명 규칙 (Data Atomicity & Naming)
+### B. 식별자 추적성 및 매핑 강제 (Traceability & ID Generation)
+- **테이블 식별자**: 모든 테이블은 `table_id` 필드에 `TBL-[0-9]{3}` (예: `TBL-001`) 형식의 고유 ID를 생성해야 함.
+- **컬럼 식별자**: 모든 컬럼은 `column_id` 필드에 `COL-[0-9]{3}` (예: `COL-001`) 형식의 고유 ID를 생성해야 함. (단일 테이블 내 유니크)
+- **기능 매핑**: 모든 테이블은 반드시 선행 FSD의 어떤 기능 요구사항에서 파생되었는지 `mapped_func_id` (예: `FUNC-001`) 필드에 명시해야 함. 컬럼 레벨에서도 특정 기능 전용 필드인 경우 매핑 정보를 기입함.
+- **No Orphan ID 정책**: 선행 산출물(FSD, GPRD)에 근거가 없는 테이블이나 컬럼 생성을 금지함. 모든 데이터 개체는 반드시 상위 요구사항/기능 식별자와 1:1 매핑되어야 하며, 매핑되지 않은 '고아(Orphan) ID'는 Critical Error로 간주됨.
+
+### C. 데이터 원자성 및 명명 규칙 (Data Atomicity & Naming)
 - FSD의 원자적 필드 명칭과 용도를 계승함.
 - **표기형식**: `table_name`, `column_name`은 모두 **영문 소문자 스네이크 케이스(snake_case)** 고수.
 
@@ -38,6 +44,50 @@
 - 해당 제품군(예: SQLite, PostgreSQL 등)에서 최적으로 지원하는 데이터 타입을 우선 선택하십시오.
 - 글로벌 기술 스택에 위배되는 물리 데이터 구조 정의를 금지합니다.
 
+### H. 모듈 전용 설계 (Module-Specific Design)
+- **Baseline 활용**: [Global Context]의 `Core ERD`는 전체 시스템의 최소한의 뼈대(Skeleton)일 뿐입니다. 본 노드는 이 뼈대를 바탕으로 **현재 모듈([Module Name])**의 구체적인 기능을 구현하기 위해 필요한 테이블을 자유롭게 추가하거나 기존 테이블을 상세화(Expansion)해야 합니다.
+- **창의적 구체화**: FSD의 비즈니스 로직을 완결성 있게 수행하기 위해 필요한 매핑 테이블, 상태 로그 테이블, 속성 테이블 등을 적극적으로 설계하십시오.
+- **무의미한 복사 금지**: 현재 모듈의 책임과 전혀 상관없는 타 모듈의 테이블까지 포함하여 `Core ERD`를 전체 복사하는 행위는 금지됩니다. 오직 현재 모듈의 도메인에 속하거나 직접적인 연관이 있는 엔티티만 출력물에 포함하십시오.
+
 ## 3. 스키마 및 데이터 작성 규칙
 - **데이터 타입**: String, Integer, Boolean, DateTime, Float, JSON 등 범용 논리 타입 사용.
 - **설명**: 명사형 종결 문체 적용.
+
+[출력 형식 가이드]
+```json
+{
+  "tables": [
+    {
+      "table_id": "TBL-001",
+      "table_name": "users",
+      "mapped_func_id": "FUNC-001",
+      "description": "사용자 기본 정보를 관리하는 테이블",
+      "columns": [
+        {
+          "column_id": "COL-001",
+          "name": "user_id",
+          "data_type": "UUID",
+          "is_pk": true,
+          "is_fk": false,
+          "ref_table": null,
+          "is_unique": true,
+          "is_nullable": false,
+          "mapped_func_id": "FUNC-001",
+          "description": "사용자 고유 식별자"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "source_table": "users",
+      "target_table": "orders",
+      "rel_type": "1:N",
+      "description": "한 명의 사용자는 여러 개의 주문을 생성할 수 있음"
+    }
+  ]
+}
+```
+
+반드시 마크다운 백틱(```json)이나 인사말 없이, 순수하고 유효한 JSON 객체 1개만 출력하십시오.
+인사말이나 부연 설명을 절대 붙이지 마십시오.

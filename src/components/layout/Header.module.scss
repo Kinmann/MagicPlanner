@@ -1,0 +1,131 @@
+@use '../../styles/variables' as v;
+
+.header {
+  height: v.$header-height;
+  background-color: #18181b;
+  border-bottom: 1px solid v.$border;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  user-select: none;
+  color: #9ca3af;
+  z-index: v.$z-overlay;
+  position: relative; /* Base for absolute center */
+}
+
+.leftSection {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  z-index: 1;
+}
+
+.logoWrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: v.$radius-md;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+
+  .logoImage {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+  }
+}
+
+.logoText {
+  font-size: 12px;
+  font-weight: 500;
+  color: #e5e7eb;
+}
+
+.chevron {
+  opacity: 0.5;
+}
+
+.centerSection {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.titleText {
+  font-size: 13px;
+  font-weight: 500;
+  color: #9ca3af; /* Softer color */
+  white-space: nowrap;
+  pointer-events: auto; /* Enable dragging */
+}
+
+.rightSection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 1;
+}
+
+.panelToggles {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 12px;
+  border-right: 1px solid #27272a;
+  margin-right: 8px;
+}
+
+.toggleBtn {
+  padding: 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #9ca3af;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+
+  &.active {
+    background-color: #27272a;
+    color: #e5e7eb;
+  }
+}
+
+.windowControls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  
+  .controlBtn {
+    padding: 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9ca3af;
+
+    &:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+  }
+
+  .closeBtn:hover {
+    background-color: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+  }
+}

@@ -1,5 +1,6 @@
 {
-  "name": "tmp-app",
+  "name": "magic-planner",
+  "productName": "Magic Planner",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -21,9 +22,11 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-markdown": "^10.1.0",
+    "react-resizable-panels": "^4.10.0",
     "react-simplemde-editor": "^5.2.0",
     "remark-breaks": "^4.0.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

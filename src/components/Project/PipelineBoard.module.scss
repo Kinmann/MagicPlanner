@@ -1,0 +1,68 @@
+@use '../../styles/variables' as v;
+
+.container {
+  position: relative;
+  width: 100%;
+  min-height: 100%;
+  background-color: v.$background;
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 32px 32px;
+  padding: v.$space-12;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-16;
+}
+
+.stageRow {
+  display: flex;
+  gap: v.$space-20;
+  position: relative;
+  z-index: 2;
+}
+
+.stageLabel {
+  position: absolute;
+  top: -v.$space-8;
+  left: 0;
+  font-size: 11px;
+  font-weight: 900;
+  color: v.$primary;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.4;
+}
+
+.connectorLayer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.2;
+  
+  svg {
+    width: 100%;
+    height: 100%;
+    path {
+      stroke: v.$primary;
+      stroke-width: 2;
+      fill: none;
+    }
+  }
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: v.$text-muted;
+  gap: v.$space-4;
+  
+  .icon { opacity: 0.2; }
+  p { font-size: 14px; font-style: italic; opacity: 0.5; }
+}

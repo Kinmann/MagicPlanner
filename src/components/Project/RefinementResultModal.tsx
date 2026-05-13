@@ -1,6 +1,14 @@
 import React from 'react';
-import BaseModal from '../common/BaseModal';
-import "./RefinementResultModal.scss";
+import { 
+  Diff, 
+  MessageSquare, 
+  ArrowDown, Sparkles, XCircle
+} from 'lucide-react';
+import { Dialog } from '../ui/Dialog';
+import { Button } from '../ui/Button';
+import { Badge } from '../ui/Badge';
+import { Alert } from '../ui/Alert';
+import { ScrollArea } from '../ui/ScrollArea';
 
 interface RefinementResultModalProps {
   isOpen: boolean;
@@ -22,7 +30,6 @@ interface RefinementResultModalProps {
 const RefinementResultModal: React.FC<RefinementResultModalProps> = ({ isOpen, onClose, data }) => {
   if (!data) return null;
 
-  // JSON Pointer 헬퍼: 특정 경로의 값을 추출
   const getValueByPath = (obj: any, path: string) => {
     const parts = path.split('/').filter(Boolean);
     let current = obj;
@@ -60,10 +67,7 @@ const RefinementResultModal: React.FC<RefinementResultModalProps> = ({ isOpen, o
           toBe: (action === 'DELETE') ? null : op.value
         };
       });
-    } catch (e) {
-      console.error("Failed to parse patch for hunks:", e);
-      return [];
-    }
+    } catch (e) { return []; }
   };
 
   const hunks = getHunks();
@@ -75,131 +79,145 @@ const RefinementResultModal: React.FC<RefinementResultModalProps> = ({ isOpen, o
   };
 
   return (
-    <BaseModal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={`${data.nodeType} 정제 결과 비교 (상하 대조)`}
-      maxWidth="1000px"
+    <Dialog 
+      isOpen={isOpen} 
+      onClose={onClose} 
+      size="xl"
+      headerClass={data.isPass ? "bg-emerald-500/5" : "bg-amber-500/5"}
+      customHeader={
+        <div className="flex items-center justify-between w-full pr-8">
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${data.isPass ? 'bg-emerald-500/20 text-emerald-500' : 'bg-amber-500/20 text-amber-500'}`}>
+               <Diff size={24} />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold">Refinement Analysis Report</h2>
+              <p className="text-xs opacity-50 mt-0.5">{data.nodeType} Evolution Details</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+             <div className="text-right">
+                <div className="text-[10px] font-black uppercase tracking-widest text-gray-500">Quality Score</div>
+                <div className={`text-2xl font-black font-mono ${data.isPass ? 'text-emerald-500' : 'text-amber-500'}`}>
+                  {data.score}
+                </div>
+             </div>
+             <Badge variant={data.isPass ? 'success' : 'warning'} className="h-8 px-4 text-xs">
+                {data.isPass ? 'THRESHOLD MET' : 'BELOW THRESHOLD'}
+             </Badge>
+          </div>
+        </div>
+      }
+      footer={
+        <Button variant="primary" onClick={onClose} className="w-full">
+           Acknowledge and Continue
+        </Button>
+      }
     >
-      <div className="refinement-result-modal">
-        {/* Score Dashboard */}
-        <div className={`result-header ${data.isPass ? 'is-pass' : 'is-fail'}`}>
-          <div className="score-badge">
-            <span className="score-value">{data.score}</span>
-            <span className="score-label">SCORE</span>
-          </div>
-          <div className="status-info">
-            <h3>{data.isPass ? '정제 승인 권장' : '추가 정제 필요'}</h3>
-            <p>{data.isPass ? '자동 검증 기준을 통과했습니다.' : '일부 지표에서 개선이 필요합니다.'}</p>
-          </div>
-        </div>
+      <ScrollArea className="max-h-[70vh] pr-4">
+        <div className="space-y-8 py-2">
+          {/* Summary Alert */}
+          <Alert 
+            variant={data.isPass ? 'success' : 'warning'}
+            title={data.isPass ? "Generation Successful" : "Validation Warnings Found"}
+            description={data.isPass 
+              ? "The refined architecture meets all validation criteria and is ready for the next pipeline stage."
+              : "Some minor architectural inconsistencies were detected during generation. Please review the patches below."
+            }
+          />
 
-        {/* Auto-Recovered Message */}
-        {data.autoRecovered && (
-          <div className="auto-recovered-banner">
-            <span className="material-symbols-outlined">info</span>
-            <div className="banner-content">
-              <h4>연관성 낮음: 기존 설계 유지</h4>
-              <p>사용자님의 수정 의도가 이 노드의 설계 내용과 직접적인 연관이 없는 것으로 판단되었습니다. 시스템 무결성을 위해 수정을 생략하고 기존 상태를 유지했습니다.</p>
+          {/* Evolution Patches */}
+          <section className="space-y-4">
+            <div className="flex items-center justify-between border-b border-white/5 pb-2">
+              <h4 className="text-[11px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
+                <Sparkles size={14} className="text-emerald-500" />
+                Targeted Evolution ({hunks.length} changes)
+              </h4>
             </div>
-          </div>
-        )}
 
-        {/* Changes Section */}
-        <div className="changes-section">
-          <div className="section-title">
-            <span className="material-symbols-outlined">difference</span>
-            <h4>수정된 부분 집중 대조 ({(hunks || []).length})</h4>
-          </div>
-
-          <div className="hunks-list">
-            {hunks.map((hunk) => (
-              <div key={hunk.id} className={`hunk-card ${hunk.action.toLowerCase()}`}>
-                <div className="hunk-meta">
-                  <span className={`action-badge ${hunk.action.toLowerCase()}`}>{hunk.action}</span>
-                  <span className="path-label">{hunk.label}</span>
-                </div>
-                
-                <div className="hunk-comparison-vertical">
-                  {/* AS-IS Section */}
-                  <div className="hunk-side as-is">
-                    <div className="side-tag">AS-IS</div>
-                    <div className="content-box">
-                      {hunk.asIs !== null && hunk.asIs !== undefined ? (
-                        <pre><code>{formatValue(hunk.asIs)}</code></pre>
-                      ) : (
-                        <div className="empty-placeholder">내용 없음</div>
-                      )}
+            <div className="space-y-4">
+              {hunks.map((hunk) => (
+                <div key={hunk.id} className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+                  <div className="flex items-center gap-2 px-4 py-2 bg-black/20 border-b border-white/5">
+                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-black tracking-widest ${
+                      hunk.action === 'ADD' ? 'bg-emerald-500/20 text-emerald-500' : 
+                      hunk.action === 'DELETE' ? 'bg-rose-500/20 text-rose-500' : 
+                      'bg-sky-500/20 text-sky-500'
+                    }`}>
+                      {hunk.action}
+                    </span>
+                    <span className="text-xs font-mono text-gray-400">{hunk.label}</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-[1fr,auto,1fr] items-center p-4 gap-4">
+                    <div className="space-y-2">
+                      <span className="text-[9px] font-black text-gray-600 block">ORIGINAL</span>
+                      <div className="p-3 bg-black/20 rounded-lg font-mono text-[11px] text-gray-500 line-clamp-6">
+                        {hunk.asIs !== null ? <pre><code>{formatValue(hunk.asIs)}</code></pre> : <span className="italic opacity-30">Null</span>}
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="hunk-arrow">
-                    <span className="material-symbols-outlined">south</span>
-                  </div>
+                    <div className="text-gray-700"><ArrowDown size={14} /></div>
 
-                  {/* TO-BE Section */}
-                  <div className="hunk-side to-be">
-                    <div className="side-tag">TO-BE</div>
-                    <div className="content-box">
-                      {hunk.toBe !== null && hunk.toBe !== undefined ? (
-                        <pre><code>{formatValue(hunk.toBe)}</code></pre>
-                      ) : (
-                        <div className="empty-placeholder">내용 없음</div>
-                      )}
+                    <div className="space-y-2">
+                      <span className="text-[9px] font-black text-emerald-900 block">REFINED</span>
+                      <div className="p-3 bg-emerald-500/5 rounded-lg font-mono text-[11px] text-emerald-100 border border-emerald-500/10 line-clamp-6">
+                        {hunk.toBe !== null ? <pre><code>{formatValue(hunk.toBe)}</code></pre> : <span className="italic text-rose-500 opacity-50">Deleted</span>}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
-            
-            {(hunks || []).length === 0 && (
-              <div className="no-changes-msg">
-                변경 사항이 없거나 분석할 수 없는 형식입니다.
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Feedback Section */}
-        <div className="feedback-section">
-          <div className="section-title">
-            <span className="material-symbols-outlined">chat_bubble</span>
-            <h4>Actionable Feedback</h4>
-          </div>
-          {(data.feedback || []).length > 0 ? (
-            <ul className="feedback-list">
-              {(data.feedback || []).map((item, idx) => (
-                <li key={idx} className="feedback-item">
-                  <span className="badge">{item.code}</span>
-                  <span className="content">{item.description}</span>
-                  <span className="location">({item.location})</span>
-                </li>
               ))}
-            </ul>
-          ) : (
-            <p className="no-feedback">모든 지표를 완벽하게 충족했습니다.</p>
-          )}
-          
-          {(data.errors || []).length > 0 && (
-            <div className="critical-errors">
-              <h4>Critical Errors</h4>
-              <ul className="error-list">
-                {(data.errors || []).map((err: any, idx: number) => (
-                  <li key={idx} className="error-item">
-                    <span className="badge danger">{err.code}</span>
-                    <span className="content">{err.description}</span>
-                  </li>
-                ))}
-              </ul>
+              
+              {hunks.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 text-gray-500 border-2 border-dashed border-white/5 rounded-2xl italic text-sm">
+                  No significant structural changes detected.
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </section>
 
-        <div className="modal-footer">
-          <button className="btn btn-primary" onClick={onClose}>확인</button>
+          {/* Diagnostics Section */}
+          <section className="space-y-4">
+            <div className="flex items-center justify-between border-b border-white/5 pb-2">
+              <h4 className="text-[11px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
+                <MessageSquare size={14} className="text-emerald-500" />
+                System Feedback & Diagnostics
+              </h4>
+            </div>
+
+            <div className="space-y-2">
+              {(data.feedback || []).length > 0 ? (
+                (data.feedback || []).map((item: any, idx: number) => (
+                  <div key={idx} className="flex items-start gap-3 p-3 bg-white/5 rounded-lg border border-white/5 text-xs">
+                    <Badge variant="outline" className="text-[9px] h-5">{item.code}</Badge>
+                    <span className="text-gray-300 leading-relaxed flex-1">{item.description}</span>
+                    <span className="text-[10px] text-gray-600 font-mono italic">{item.location}</span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-emerald-500/60 p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10 italic text-center">
+                  Architectural constraints fully satisfied. No feedback generated.
+                </p>
+              )}
+              
+              {(data.errors || []).length > 0 && (
+                <div className="mt-4 space-y-2">
+                  <h5 className="text-[10px] font-black text-rose-500 uppercase tracking-widest px-1">Critical Violations</h5>
+                  {data.errors.map((err: any, idx: number) => (
+                    <div key={idx} className="flex items-center gap-3 p-3 bg-rose-500/5 rounded-lg border border-rose-500/10 text-xs">
+                      <XCircle size={14} className="text-rose-500" />
+                      <span className="font-black text-rose-500/50 min-w-[40px]">{err.code}</span>
+                      <span className="text-rose-300 flex-1">{err.description}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
         </div>
-      </div>
-    </BaseModal>
+      </ScrollArea>
+    </Dialog>
   );
 };
 

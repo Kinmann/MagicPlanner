@@ -1,0 +1,19 @@
+@use '../../styles/variables' as v;
+
+.workspaceToolbar {
+  width: 100%;
+  background-color: v.$background;
+  border-bottom: 1px solid v.$border;
+  padding: 4px v.$space-4;
+  z-index: 10;
+}
+
+.toolbar {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.stepper {
+  max-width: 800px;
+}

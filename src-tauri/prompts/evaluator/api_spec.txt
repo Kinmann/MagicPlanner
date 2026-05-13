@@ -4,9 +4,13 @@
 
 ### Metric D: RESTful 아키텍처 및 식별자 추적성 (RESTful & Traceability)
 - **기본 점수: 20점**
+- **[Critical Error 할당 조건]**
+    - **No Orphan ID 위반**: 선행 FSD에 존재하지 않는 기능을 근거로 API 엔드포인트를 생성하거나, `mapped_func_id` 매핑이 누락된 경우.
+    - **ID 패턴 불일치**: `api_id`가 `API-001` 형식의 정규식(`API-[0-9]{3}`)을 준수하지 않음.
+    - **매핑 실재성 결여**: `mapped_func_id`가 선행 FSD에 존재하지 않거나 형식이 틀림 (`FUNC-[0-9]{3}`).
 - **[감점 트리거]**
     - **Code D-1 비표준 URI 및 메서드 (-10점):** URI 경로에 동사(예: `/getUsers`)가 포함됨 `OR` HTTP 메서드 사용이 목적에 어긋남(조회에 POST 사용 등).
-    - **Code D-2 기능 추적성 단절 (-10점):** API 엔드포인트에 선행 FSD의 기능 식별자(`FUNC-XXX`)를 매핑하는 `mapped_func_id` 필드가 누락되거나 잘못된 형식을 사용함.
+    - **Code D-2 기능 추적성 누락 (-10점):** API 엔드포인트에 선행 FSD 기능 매핑(`mapped_func_id`)이 전무함.
 
 ### Metric E: 데이터 스키마 및 래퍼 정합성 (Schema & Wrapper Consistency)
 - **기본 점수: 20점**

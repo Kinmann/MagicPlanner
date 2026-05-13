@@ -1,0 +1,133 @@
+@use '../../styles/variables' as v;
+
+/* Select */
+.selectWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.selectContainer {
+  position: relative;
+  width: 100%;
+}
+
+.select {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  padding-right: 32px;
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid v.$border;
+  border-radius: 6px;
+  color: v.$foreground;
+  font-size: 13px;
+  appearance: none;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:focus {
+    outline: none;
+    border-color: v.$primary;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.1);
+  }
+}
+
+.chevron {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+/* Radio Group */
+.radioGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.radioItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.radioCircle {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid v.$border;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+
+  .active & {
+    border-color: v.$primary;
+  }
+}
+
+.radioInner {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: v.$primary;
+  transform: scale(0);
+  transition: transform 0.2s;
+
+  .active & {
+    transform: scale(1);
+  }
+}
+
+/* Slider */
+.sliderWrapper {
+  width: 100%;
+  padding: 10px 0;
+}
+
+.slider {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: v.$border;
+  outline: none;
+  cursor: pointer;
+
+  &::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: v.$primary;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+    transition: transform 0.2s;
+
+    &:hover {
+      transform: scale(1.2);
+    }
+  }
+}
+
+/* Common Form Elements */
+.label {
+  font-size: 11px;
+  font-weight: 700;
+  color: v.$text-muted;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.error {
+  font-size: 11px;
+  color: #f87171;
+  margin-top: 4px;
+}

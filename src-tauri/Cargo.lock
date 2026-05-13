@@ -2298,6 +2298,7 @@ dependencies = [
  "chrono",
  "json-patch 1.4.0",
  "libsqlite3-sys",
+ "regex",
  "reqwest 0.12.28",
  "schemars 0.8.22",
  "serde",
@@ -2309,6 +2310,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
  "tauri-plugin-store",
+ "tokio",
  "uuid",
 ]
 
@@ -4982,7 +4984,9 @@ dependencies = [
  "bytes",
  "libc",
  "mio",
+ "parking_lot",
  "pin-project-lite",
+ "signal-hook-registry",
  "socket2",
  "tokio-macros",
  "windows-sys 0.61.2",

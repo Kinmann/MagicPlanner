@@ -1,0 +1,632 @@
+@use '../../styles/variables' as v;
+
+.bentoGrid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: v.$space-6;
+  width: 100%;
+}
+
+.card {
+  background-color: v.$background-container-low;
+  border: 1px solid v.$border;
+  border-radius: v.$radius-xl;
+  padding: v.$space-6;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  
+  
+  &.col12 { grid-column: span 12; }
+  &.col6 { grid-column: span 6; }
+  &.col4 { grid-column: span 4; }
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: v.$space-3;
+  margin-bottom: v.$space-6;
+  
+  h2 { font-size: 16px; font-weight: 800; color: v.$foreground; display: flex; align-items: center; gap: 8px; }
+  .icon { color: v.$primary; }
+}
+
+.stageBadge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: v.$primary;
+  color: v.$on-primary;
+  font-size: 10px;
+  font-weight: 900;
+  padding: 4px 12px;
+  border-bottom-left-radius: v.$radius-md;
+  letter-spacing: 0.05em;
+}
+
+.intentStrip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  &.primary { background: v.$primary; }
+  &.secondary { background: v.$accent; }
+  &.warning { background: v.$warning; }
+}
+
+.infoGroup {
+  margin-bottom: v.$space-4;
+  padding: v.$space-2 v.$space-3;
+  margin-left: -12px;
+  border-radius: v.$radius-md;
+  transition: all 0.2s ease;
+
+
+
+  h3 { font-size: 11px; font-weight: 800; color: v.$text-muted; text-transform: uppercase; margin-bottom: 4px; }
+  p { font-size: 14px; color: v.$foreground; line-height: 1.5; }
+  .projectName { font-size: 20px; font-weight: 900; color: v.$primary; }
+}
+
+.metricsList {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-2;
+  li {
+    display: flex;
+    align-items: center;
+    gap: v.$space-2;
+    font-size: 13px;
+    color: v.$foreground;
+    background: rgba(255, 255, 255, 0.03);
+    padding: v.$space-2 v.$space-3;
+    border-radius: v.$radius-md;
+  }
+}
+
+.personaGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: v.$space-3;
+}
+
+.personaChip {
+  background: v.$background-container-high;
+  border: 1px solid v.$border;
+  border-radius: v.$radius-lg;
+  padding: v.$space-3;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.3s ease;
+  
+
+
+  .personaHeader { display: flex; align-items: center; gap: 8px; }
+  .name { font-weight: 800; font-size: 14px; }
+  .roleId { font-size: 10px; font-family: v.$font-mono; opacity: 0.5; }
+}
+
+.jsonNode {
+  font-family: v.$font-mono;
+  font-size: 12px;
+  color: #d4d4d4;
+  .prop { color: #c586c0; }
+  .str { color: v.$primary; }
+  .num { color: v.$warning; }
+  .bool { color: #569cd6; }
+  .bracket { color: v.$text-muted; }
+}
+
+.kvRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 2px 8px;
+  margin-left: -8px;
+  border-radius: v.$radius-sm;
+  transition: all 0.2s ease;
+  cursor: default;
+
+
+}
+
+.valueWrapper {
+  display: inline-block;
+  padding: 0 4px;
+  margin: 0 -2px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  cursor: text;
+
+
+}
+
+.epicActorContainer {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-12;
+  padding-bottom: v.$space-8;
+  max-width: 900px;
+  width: 100%;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-4;
+}
+
+.sectionTitle {
+  font-size: v.$text-xl;
+  font-weight: v.$font-weight-bold;
+  color: v.$foreground;
+  border-bottom: 1px solid v.$border;
+  padding-bottom: v.$space-2;
+  display: flex;
+  align-items: center;
+  gap: v.$space-2;
+  
+  .icon {
+    color: v.$primary;
+  }
+}
+
+.actorList {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-5;
+  padding-left: v.$space-2;
+}
+
+.actorItem {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-1_5;
+  padding: v.$space-3;
+  margin-left: -12px;
+  border-radius: v.$radius-lg;
+  transition: all 0.2s ease;
+
+
+
+  .actorName {
+    font-size: v.$text-base;
+    font-weight: v.$font-weight-semibold;
+    color: v.$foreground;
+    display: flex;
+    align-items: center;
+    gap: v.$space-2;
+    transition: color 0.2s;
+    .icon { color: v.$primary; }
+  }
+  
+  .actorDesc {
+    font-size: v.$text-sm;
+    color: v.$text-muted;
+    padding-left: v.$space-6;
+    line-height: 1.6;
+  }
+}
+
+.epicList {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-10;
+  padding-left: v.$space-2;
+}
+
+.epicItem {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-4;
+}
+
+.epicHeader {
+  display: flex;
+  align-items: center;
+  gap: v.$space-2;
+  
+  .epicId {
+    font-size: v.$text-sm;
+    font-family: v.$font-mono;
+    color: v.$text-muted;
+    background: rgba(v.$accent, 0.5);
+    padding: 2px 6px;
+    border-radius: v.$radius-sm;
+  }
+  
+  .epicTitle {
+    font-size: v.$text-lg;
+    font-weight: v.$font-weight-semibold;
+    color: v.$foreground;
+  }
+}
+
+.epicBody {
+  padding-left: v.$space-6;
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-5;
+}
+
+.epicDesc {
+  font-size: v.$text-sm;
+  color: v.$foreground;
+  line-height: 1.6;
+  border-left: 2px solid v.$border;
+  padding-left: v.$space-4;
+  opacity: 0.8;
+}
+
+.epicActors {
+  display: flex;
+  align-items: center;
+  gap: v.$space-2;
+  font-size: v.$text-sm;
+  color: v.$text-muted;
+  
+  .icon { color: v.$text-muted; opacity: 0.6; }
+  .label { font-weight: v.$font-weight-semibold; opacity: 0.8; }
+  
+  .actorChips {
+    display: flex;
+    gap: v.$space-2;
+  }
+  
+  .actorChip {
+    background: rgba(v.$accent, 0.8);
+    border: 1px solid v.$border;
+    padding: 2px 8px;
+    border-radius: v.$radius-sm;
+    font-size: v.$text-xs;
+    color: v.$foreground;
+  }
+}
+
+.epicTags {
+  display: flex;
+  align-items: center;
+  gap: v.$space-4;
+  margin-top: calc(v.$space-2 * -1);
+  margin-bottom: v.$space-2;
+}
+
+.epicTag {
+  color: v.$primary;
+  font-family: v.$font-mono;
+  font-size: v.$text-sm;
+  font-weight: v.$font-weight-normal;
+}
+
+.reqBadge {
+  display: inline-block;
+  margin-right: v.$space-3_5;
+  font-family: v.$font-mono;
+  font-size: v.$text-xs;
+  color: v.$primary;
+  font-weight: v.$font-weight-bold;
+  vertical-align: middle;
+}
+
+.criteriaSection {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-3;
+}
+
+.criteriaTitle {
+  font-size: v.$text-sm;
+  font-weight: v.$font-weight-semibold;
+  color: v.$text-muted;
+  display: flex;
+  align-items: center;
+  gap: v.$space-1_5;
+}
+
+.criteriaList {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-2_5;
+  font-size: v.$text-sm;
+  color: v.$text-muted;
+  padding-left: v.$space-6;
+}
+
+.criteriaItem {
+  display: flex;
+  align-items: flex-start;
+  gap: v.$space-2_5;
+  line-height: 1.4;
+  transition: color 0.2s;
+  
+
+  
+  .checkIcon {
+    color: rgba(v.$primary, 0.5);
+    flex-shrink: 0;
+    margin-top: 2px;
+    transition: color 0.2s;
+  }
+}
+
+// ERD Specific Styles (copied from SadSpecRenderer for independence)
+.attribute {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 8px;
+  margin-left: -8px;
+  border-radius: v.$radius-sm;
+  transition: all 0.2s ease;
+  
+
+
+  .name { font-family: v.$font-mono; font-weight: 700; color: v.$primary; transition: color 0.2s; }
+  .type { font-size: 11px; opacity: 0.6; font-family: v.$font-mono; }
+  .badge { font-size: 9px; padding: 1px 4px; border-radius: 3px; background: v.$primary; color: v.$on-primary; font-weight: 800; }
+}
+
+.minimalRelRow {
+  display: flex;
+  align-items: center;
+  gap: v.$space-6;
+  padding: v.$space-2 v.$space-4;
+  border-radius: v.$radius-md;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  
+
+  
+  .relNames {
+    display: flex;
+    align-items: center;
+    gap: v.$space-3;
+    min-width: 280px;
+    font-weight: 700;
+    font-size: 14px;
+    color: rgba(v.$foreground, 0.8);
+    transition: color 0.2s;
+  }
+  
+  .relMeta {
+    display: flex;
+    align-items: center;
+    gap: v.$space-4;
+    flex: 1;
+  }
+  
+  .relBadge {
+    font-family: v.$font-mono;
+    font-size: 10px;
+    font-weight: 800;
+    color: v.$primary;
+    background: rgba(v.$primary, 0.1);
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(v.$primary, 0.2);
+    min-width: 40px;
+    text-align: center;
+  }
+  
+  .relDescription {
+    font-size: 13px;
+    color: v.$text-muted;
+    line-height: 1.5;
+  }
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: v.$background-container-high;
+  color: v.$foreground;
+  
+  &--secondary {
+    background: rgba(v.$error, 0.1);
+    color: v.$error;
+    border: 1px solid rgba(v.$error, 0.2);
+  }
+
+  &--primary {
+    background: rgba(v.$primary, 0.1);
+    color: v.$primary;
+    border: 1px solid rgba(v.$primary, 0.2);
+  }
+}
+
+.textPrimary { color: v.$primary; }
+.textSecondary { color: rgba(v.$foreground, 0.6); }
+.opacity40 { opacity: 0.4; }
+.textXs { font-size: v.$text-xs; }
+.textSm { font-size: v.$text-sm; }
+.textLg { font-size: v.$text-lg; }
+.fontNormal { font-weight: v.$font-weight-normal; }
+.fontMedium { font-weight: v.$font-weight-medium; }
+.fontBold { font-weight: v.$font-weight-bold; }
+
+// ERD UI Improvements
+.erdEntityTitle {
+  font-size: v.$text-lg;
+  font-weight: 900;
+  color: v.$foreground;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: -4px; // Tighter gap to body
+}
+
+.erdEntityBody {
+  gap: v.$space-2 !important;
+  padding-left: v.$space-7 !important; // Align with title text
+}
+
+.attributeListVertical {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.attributeRow {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  background: rgba(v.$background-container-high, 0.5);
+  border-radius: v.$radius-md;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  transition: all 0.2s ease;
+
+
+}
+
+.attributeHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  
+  .name { font-family: v.$font-mono; font-weight: 700; color: v.$primary; font-size: v.$text-sm; }
+  .type { font-size: v.$text-xs; opacity: 0.5; font-family: v.$font-mono; }
+  .badge { font-size: 9px; padding: 1px 4px; border-radius: 3px; background: v.$primary; color: v.$on-primary; font-weight: 800; }
+}
+
+.attributeDesc {
+  font-size: v.$text-sm;
+  color: v.$text-muted;
+  opacity: 0.7;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.attributeLine {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 0;
+  
+
+
+  .desc {
+    font-size: v.$text-sm;
+    font-family: v.$font-mono;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+  }
+}
+
+// Utility classes to replace Tailwind
+.constraintsGrid {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-10;
+}
+
+.flexColGap6 {
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-6;
+}
+
+.indent {
+  margin-left: v.$space-4;
+}
+
+.opacity50 {
+  opacity: 0.5;
+}
+
+.priorityBadge {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  background-color: rgba(v.$primary, 0.1);
+  color: v.$primary;
+  padding: v.$space-0_5 v.$space-2;
+  border-radius: v.$radius-sm;
+  border: 1px solid rgba(v.$primary, 0.2);
+}
+
+.flexWrapGap2 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: v.$space-2;
+}
+
+.flexWrapGap1 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: v.$space-1;
+}
+
+.marginT1 {
+  margin-top: v.$space-1;
+}
+
+.marginT2 {
+  margin-top: v.$space-2;
+}
+
+.stepBadge {
+  width: v.$space-5;
+  height: v.$space-5;
+  border-radius: v.$radius-full;
+  background-color: rgba(v.$primary, 0.1);
+  color: v.$primary;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  border: 1px solid rgba(v.$primary, 0.2);
+  margin-right: v.$space-1;
+  flex-shrink: 0;
+}
+
+.warningBadge {
+  font-size: 10px;
+  background-color: rgba(v.$warning, 0.1);
+  color: v.$warning;
+  padding: v.$space-0_5 v.$space-2;
+  border-radius: v.$radius-sm;
+  border: 1px solid rgba(v.$warning, 0.2);
+  font-weight: 700;
+}
+
+.idBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  background: v.$background-container-highest;
+  border: 1px solid v.$border-strong;
+  border-radius: v.$radius-sm;
+  font-size: 10px;
+  font-family: v.$font-mono;
+  font-weight: 700;
+  color: v.$primary;
+  line-height: 1;
+}
+
+.mappingBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  background: v.$primary-muted;
+  border: 1px solid rgba(v.$primary, 0.2);
+  border-radius: v.$radius-sm;
+  font-size: 10px;
+  font-family: v.$font-mono;
+  font-weight: 600;
+  color: v.$primary;
+  line-height: 1;
+  gap: 4px;
+  
+  &::before {
+    content: "🔗";
+    font-size: 8px;
+  }
+}

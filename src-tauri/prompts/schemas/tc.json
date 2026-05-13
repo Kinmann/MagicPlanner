@@ -2,8 +2,8 @@
   "test_cases": [
     {
       "tc_id": "string (TC-NNN)",
-      "mapped_req_id": "string",
-      "mapped_func_id": "string",
+      "mapped_req_id": "string (REQ-NNN)",
+      "mapped_func_id": "string (FUNC-NNN)",
       "tc_type": "string (Positive/Negative)",
       "title": "string",
       "pre_conditions": ["string"],

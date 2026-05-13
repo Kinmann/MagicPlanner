@@ -3,7 +3,7 @@ Genesis PRD를 기반으로 시스템 전역 에러 통신 규격 및 공통 페
 ## [SAD - Global Context 설계 원칙]
 1. **SSOT 상속**: 주입된 `Genesis PRD`를 절대적인 진실 공급원(SSOT)으로 삼으십시오.
 2. **프로토콜 종속성**: `Genesis PRD`의 `api_type`(REST, GraphQL, GRPC)에 맞는 표준 규격을 도출하십시오.
-3. **인프라 및 보안 정합성**: `$PREVIOUS_ARCHITECTURAL_DECISIONS`의 `sad_tech_stack`(선택한 프레임워크의 에러 처리 관례) 및 `sad_auth_rbac`(인증 실패 대응 규격)과 일치하는 인터페이스 표준을 수립하십시오.
+3. **인프라 및 보안 정합성**: `[Global Context]`의 `sad_tech_stack`(선택한 프레임워크의 에러 처리 관례) 및 `sad_auth_rbac`(인증 실패 대응 규격)과 일치하는 인터페이스 표준을 수립하십시오.
 4. **이전 설계 계승(Refinement)**: `$PREVIOUS_DRAFT`에 데이터가 존재한다면 이를 기본 골격으로 삼고, `$EVALUATOR_FEEDBACK`의 교정 지시 사항을 최우선으로 반영하여 에러 코드 및 응답 구조를 개선하십시오.
 
 ---

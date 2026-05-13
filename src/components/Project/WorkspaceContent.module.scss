@@ -1,0 +1,205 @@
+@use '../../styles/variables' as v;
+
+.documentView {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  overflow: hidden;
+}
+
+.container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* Revisions Strip (Side vertical bar) */
+.revisionsStrip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 160px;
+  background-color: rgba(0, 0, 0, 0.2);
+  border-right: 1px solid v.$border;
+  display: flex;
+  flex-direction: column;
+  z-index: 5;
+}
+
+.stripHeader {
+  padding: 8px 12px;
+  border-bottom: 1px solid v.$border;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: v.$text-muted;
+}
+
+.headerRight {
+  display: flex;
+  gap: 4px;
+}
+
+.revisionsList {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.revisionBtn {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s;
+  cursor: pointer;
+  color: v.$text-muted;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+
+  &.active {
+    background-color: rgba(16, 185, 129, 0.1);
+    border-color: rgba(16, 185, 129, 0.2);
+    color: v.$primary;
+  }
+
+  &.confirmed {
+    border-color: rgba(16, 185, 129, 0.4);
+  }
+}
+
+.btnContent {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.iterNum {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: v.$font-mono;
+}
+
+/* Document Body */
+.documentBody {
+  flex: 1;
+  margin-left: 160px;
+  overflow-y: auto;
+  padding: v.$space-8;
+  display: flex;
+  flex-direction: column;
+  gap: v.$space-6;
+}
+
+.contentHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.headerTitle {
+  h2 {
+    font-size: 24px;
+    font-weight: 800;
+    margin-bottom: 4px;
+  }
+  p {
+    font-size: 13px;
+    color: v.$text-muted;
+  }
+}
+
+.headerScore {
+  background-color: rgba(0, 0, 0, 0.3);
+  padding: 12px 20px;
+  border-radius: 12px;
+  border: 1px solid v.$border;
+  text-align: center;
+}
+
+.scoreGauge {
+  display: flex;
+  flex-direction: column;
+}
+
+.scoreLabel {
+  font-size: 10px;
+  font-weight: 700;
+  color: v.$text-muted;
+  letter-spacing: 0.1em;
+  margin-bottom: 4px;
+}
+
+.scoreValue {
+  font-size: 28px;
+  font-weight: 900;
+  color: v.$primary;
+  font-family: v.$font-mono;
+}
+
+.mainCard {
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid v.$border;
+}
+
+.viewport {
+  padding: v.$space-6;
+  min-height: 400px;
+
+  &.visual {
+    padding: 0;
+  }
+}
+
+.code {
+  font-family: v.$font-mono;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #d1d5db;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.specRenderer {
+  display: flex;
+  flex-direction: column;
+}
+
+.specHeader {
+  padding: 12px 24px;
+  border-bottom: 1px solid v.$border;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.emptyState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: v.$text-muted;
+  font-style: italic;
+  opacity: 0.5;
+}

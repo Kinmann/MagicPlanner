@@ -1,0 +1,53 @@
+@use '../../styles/variables' as v;
+
+.modalContent {
+  padding: v.$space-6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  
+  .iconWrapper {
+    width: 64px;
+    height: 64px;
+    border-radius: v.$radius-full;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: v.$space-4;
+    
+    &.error {
+      background-color: rgba(v.$error, 0.1);
+      color: v.$error;
+    }
+    
+    &.confirm {
+      background-color: rgba(v.$info, 0.1);
+      color: v.$info;
+    }
+    
+    &.alert {
+      background-color: rgba(v.$primary, 0.1);
+      color: v.$primary;
+    }
+  }
+  
+  .message {
+    font-size: v.$text-sm;
+    color: v.$foreground;
+    opacity: 0.8;
+    margin-bottom: v.$space-8;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+  
+  .actions {
+    display: flex;
+    gap: v.$space-3;
+    width: 100%;
+    
+    button {
+      flex: 1;
+    }
+  }
+}

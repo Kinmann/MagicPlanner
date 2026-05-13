@@ -1,0 +1,29 @@
+@use '../../styles/variables' as v;
+
+.root {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  background-color: v.$background;
+  color: v.$foreground;
+  font-family: v.$font-sans;
+  overflow: hidden;
+  user-select: none;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  width: 100%;
+  overflow: hidden;
+  background-color: v.$background;
+}
+
+.contentArea {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}

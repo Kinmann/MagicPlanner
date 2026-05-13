@@ -1,29 +1,18 @@
-@import './styles/variables';
+@use './styles/variables' as v;
 
+// App.scss - Initialized for Clean Rebuild
 .app-container {
-  height: 100vh;
   width: 100vw;
-  overflow: hidden;
-  background-color: $surface;
-}
-
-.loading-screen {
   height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: $surface;
-  
-  .loading-text {
-    font-size: 1.25rem;
-    font-weight: 500;
-    color: $primary;
-    font-family: $font-mono;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-  }
+  overflow: hidden;
+  background-color: v.$background;
 }
 
 .page-wrapper {
+  width: 100%;
   height: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }

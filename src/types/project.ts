@@ -1,4 +1,4 @@
-export type NodeState = 'PENDING' | 'READY' | 'IN_PROGRESS' | 'COMPLETED' | 'PAUSED_HITL' | 'PAUSED_API_ERROR' | 'PAUSED_STOPPED' | 'STALE' | 'REFINING';
+export type NodeState = 'PENDING' | 'READY' | 'IN_PROGRESS' | 'COMPLETED' | 'PAUSED_HITL' | 'PAUSED_API_ERROR' | 'PAUSED_STOPPED' | 'STALE' | 'REFINING' | 'REVIEW_PENDING' | 'REVIEWED';
 
 // v2: Pipeline Phase
 export type PipelinePhase = 'GENESIS_PRD' | 'SAD' | 'MODULE_GENERATION' | 'COMPLETED';
@@ -23,11 +23,15 @@ export interface DocumentNode {
   max_iterations: number;
   threshold_score: number;
   current_best_score: number;
+  target_count?: number;
   api_error_code?: number;
   api_error_message?: string;
   created_at: string;
   updated_at: string;
   last_action?: string;
+  is_active?: boolean;
+  is_locked?: boolean;
+  iterations?: GenerationIteration[];
 }
 
 export interface GenerationIteration {
@@ -41,6 +45,7 @@ export interface GenerationIteration {
   actionable_feedback_text?: string;
   created_at: string;
   updated_at: string;
+  is_archived?: boolean;
 }
 
 export interface Project {

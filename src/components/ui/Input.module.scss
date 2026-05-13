@@ -1,0 +1,69 @@
+@use '../../styles/variables' as v;
+
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: v.$space-4;
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 600;
+  color: v.$text-muted;
+}
+
+.input {
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid v.$border;
+  border-radius: 6px;
+  padding: 10px 14px;
+  color: v.$foreground;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  outline: none;
+
+  &::placeholder {
+    color: rgba(255, 255, 255, 0.2);
+  }
+
+  &:focus {
+    border-color: v.$primary;
+    background-color: rgba(255, 255, 255, 0.05);
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.1);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.errorInput {
+  border-color: rgba(239, 68, 68, 0.5);
+  &:focus {
+    border-color: #f87171;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.1);
+  }
+}
+.textarea {
+  min-height: 80px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.errorMessage {
+  font-size: 11px;
+  color: #f87171;
+  margin-top: 4px;
+}
+
+.errorText {
+  font-size: 11px;
+  color: #f87171;
+  font-weight: 500;
+}

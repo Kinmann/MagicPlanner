@@ -1,5 +1,8 @@
 mod commands;
 pub mod schemas;
+pub mod models;
+pub mod services;
+pub mod utils;
 use sqlite_vec::sqlite3_vec_init;
 
 use std::collections::HashSet;
@@ -14,7 +17,7 @@ pub struct ActiveTasks(pub Arc<Mutex<HashSet<String>>>);
 // }
 
 use reqwest::Client;
-use tauri::Manager;
+use tauri::{Emitter, State, Manager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -169,6 +172,24 @@ pub fn run() {
                         FOREIGN KEY(node_id) REFERENCES document_node(node_id)
                     );
 
+                    -- 8. 노드 코멘트 (v2: 확정된 iteration에 대한 사용자 코멘트)
+                    CREATE TABLE IF NOT EXISTS node_comment (
+                        comment_id VARCHAR(36) PRIMARY KEY NOT NULL,
+                        project_id VARCHAR(36) NOT NULL,
+                        node_id VARCHAR(36) NOT NULL,
+                        iteration_id VARCHAR(36) NOT NULL,
+                        json_path TEXT NOT NULL,
+                        comment_text TEXT NOT NULL,
+                        author VARCHAR(100) DEFAULT 'User',
+                        is_resolved BOOLEAN NOT NULL DEFAULT 0,
+                        created_at TIMESTAMP NOT NULL,
+                        updated_at TIMESTAMP NOT NULL,
+                        is_deleted BOOLEAN NOT NULL DEFAULT 0,
+                        FOREIGN KEY(project_id) REFERENCES project(project_id),
+                        FOREIGN KEY(node_id) REFERENCES document_node(node_id),
+                        FOREIGN KEY(iteration_id) REFERENCES generation_iteration(iteration_id)
+                    );
+
                     -- 8. 벡터 임베딩 저장 (vec0 가상 테이블)
                     -- Phase 2: 거리 측정 방식을 cosine으로 명시 (Gemini 임베딩 최적화)
                     -- v2.1: Gemini-embedding-001/004의 3072 차원 대응을 위해 차원 상향
@@ -193,6 +214,20 @@ pub fn run() {
                         FOREIGN KEY(node_id) REFERENCES document_node(node_id),
                         FOREIGN KEY(iteration_id) REFERENCES generation_iteration(iteration_id)
                     );
+
+                    -- 10. 아티팩트 매핑 (증분 수정 의존성 추적용)
+                    CREATE TABLE IF NOT EXISTS artifact_mapping (
+                        mapping_id VARCHAR(36) PRIMARY KEY NOT NULL,
+                        project_id VARCHAR(36) NOT NULL,
+                        node_id VARCHAR(36) NOT NULL,
+                        artifact_id VARCHAR(255) NOT NULL,
+                        json_path TEXT NOT NULL,
+                        created_at TIMESTAMP NOT NULL,
+                        FOREIGN KEY(project_id) REFERENCES project(project_id),
+                        FOREIGN KEY(node_id) REFERENCES document_node(node_id)
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_artifact_mapping_id ON artifact_mapping(artifact_id);
+                    CREATE INDEX IF NOT EXISTS idx_artifact_mapping_project ON artifact_mapping(project_id);
                 ").execute(&pool).await.map_err(|e| e.to_string())?;
 
                 // ============================================================
@@ -207,7 +242,15 @@ pub fn run() {
                 // 3. document_node 테이블
                 let _ = sqlx::query("ALTER TABLE document_node ADD COLUMN module_id VARCHAR(36)").execute(&pool).await;
                 let _ = sqlx::query("ALTER TABLE document_node ADD COLUMN node_category VARCHAR(30) NOT NULL DEFAULT 'MODULE'").execute(&pool).await;
+                let _ = sqlx::query("ALTER TABLE document_node ADD COLUMN target_count INTEGER DEFAULT 0").execute(&pool).await;
                 
+                // 4. is_pass 데이터 표준화 (BOOLEAN -> 0/1 INTEGER)
+                let _ = sqlx::query("UPDATE generation_iteration SET is_pass = 1 WHERE is_pass = 'true' OR is_pass = '1' OR is_pass = 1").execute(&pool).await;
+                let _ = sqlx::query("UPDATE generation_iteration SET is_pass = 0 WHERE is_pass = 'false' OR is_pass = '0' OR is_pass = 0 OR is_pass IS NULL").execute(&pool).await;
+
+                // 5. generation_iteration 테이블: is_archived 컬럼 추가
+                let _ = sqlx::query("ALTER TABLE generation_iteration ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0").execute(&pool).await;
+
                 // last_action 컬럼 추가 시도
                 match sqlx::query("ALTER TABLE document_node ADD COLUMN last_action TEXT").execute(&pool).await {
                     Ok(_) => println!(">>> Migration: last_action column added to document_node"),
@@ -220,8 +263,30 @@ pub fn run() {
                     }
                 }
                 
-                // 4. 버려진(Stale) RAG 상태 초기화 (앱 시작 시 오버레이 스턱 방지)
-                let _ = sqlx::query("UPDATE document_node SET last_action = NULL WHERE last_action LIKE '%RAG 임베딩 중%'").execute(&pool).await;
+                // 4. 버려진(Stale) RAG 상태 및 비정상 종료된 작업(IN_PROGRESS) 초기화 (앱 시작 시 오버레이 스턱 방지)
+                let _ = sqlx::query("UPDATE document_node SET last_action = NULL WHERE last_action LIKE '%RAG%'").execute(&pool).await;
+                let _ = sqlx::query("UPDATE document_node SET node_state = 'PAUSED_STOPPED' WHERE node_state IN ('IN_PROGRESS', 'REFINING')").execute(&pool).await;
+                
+                // 5. [NEW] Legacy Comment Path Migration
+                let _ = sqlx::query(
+                    "UPDATE node_comment 
+                     SET json_path = '$' || SUBSTR(json_path, INSTR(json_path, '$') + 1) 
+                     WHERE json_path LIKE '%$%' AND json_path NOT LIKE '$%'"
+                ).execute(&pool).await;
+                
+                // 6. [NEW] Explicit Global Category Migration (GENESIS / SAD)
+                // 모든 GLOBAL 카테고리를 폐기하고 성격에 맞게 분리
+                let _ = sqlx::query(
+                    "UPDATE document_node 
+                     SET node_category = 'GENESIS' 
+                     WHERE target_node_type LIKE 'GPRD_%' OR node_category = 'GLOBAL' AND target_node_type LIKE 'GPRD_%'"
+                ).execute(&pool).await;
+
+                let _ = sqlx::query(
+                    "UPDATE document_node 
+                     SET node_category = 'SAD' 
+                     WHERE target_node_type LIKE 'SAD_%' OR node_category = 'GLOBAL' AND target_node_type LIKE 'SAD_%'"
+                ).execute(&pool).await;
                 
                 Ok::<sqlx::SqlitePool, String>(pool)
             })?;
@@ -231,50 +296,63 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::validate_api_key,
-            commands::save_api_key,
-            commands::list_projects,
-            commands::create_project,
-            commands::run_pipeline,
-            commands::get_project,
-            commands::get_project_nodes,
-            commands::get_node_iterations,
-            commands::get_latest_iteration,
-            commands::handle_hitl_action,
-            commands::update_node_max_iterations,
-            commands::index_project_embeddings,
-            commands::save_file,
-            commands::delete_project,
+            commands::settings::validate_api_key,
+            commands::settings::save_api_key,
+            commands::project::list_projects,
+            commands::project::create_project,
+            commands::pipeline::run_pipeline,
+            commands::project::get_project,
+            commands::node::get_project_nodes,
+            commands::node::get_node_iterations,
+            commands::node::get_iteration_by_id,
+            commands::node::get_latest_iteration,
+            commands::node::get_latest_pass_iteration,
+            commands::pipeline::handle_hitl_action,
+            commands::node::update_node_max_iterations,
+            commands::node::update_node_target_count,
+            commands::project::index_project_embeddings,
+            commands::project::save_file,
+            commands::project::delete_project,
             // v2 新 커맨드
-            commands::get_project_modules,
-            commands::get_module_nodes,
-            commands::get_global_contexts,
-            commands::run_genesis_prd_pipeline,
-            commands::run_sad_global_pipeline,
-            commands::run_sad_module_pipeline,
-            commands::approve_genesis_prd,
-            commands::create_local_modules,
-            commands::run_module_pipeline,
-            commands::confirm_sad_iteration,
-            commands::confirm_genesis_prd_iteration,
-            commands::approve_genesis_prd_node,
-            commands::stop_node_pipeline,
-            commands::resume_node_pipeline,
-            commands::get_all_active_nodes,
-            commands::delete_generation_iteration,
-            commands::approve_sad_node,
-            commands::unconfirm_iteration,
-            commands::search_similar_documents,
-            commands::manually_trigger_next_nodes,
-            commands::parse_intent,
-            commands::route_architecture_target,
-            commands::confirm_architecture_routing,
-            commands::validate_intent_globally,
-            commands::apply_taint_cascade,
-            commands::generate_and_apply_patch,
-            commands::validate_refinement_node,
-            commands::finalize_refinement_update,
-            commands::retry_patch_loop,
+            commands::module::get_project_modules,
+            commands::node::get_module_nodes,
+            commands::module::get_global_contexts,
+            commands::pipeline::run_genesis_prd_pipeline,
+            commands::approval::approve_genesis_prd,
+            commands::module::create_local_modules,
+            commands::pipeline::run_module_pipeline,
+            commands::approval::confirm_sad_iteration,
+            commands::approval::confirm_genesis_prd_iteration,
+            commands::approval::approve_genesis_prd_node,
+            commands::pipeline::stop_node_pipeline,
+            commands::pipeline::resume_node_pipeline,
+            commands::node::get_all_active_nodes,
+            commands::node::delete_generation_iteration,
+            commands::node::archive_generation_iteration,
+            commands::node::restore_generation_iteration,
+            commands::node::get_archived_iterations,
+            commands::approval::approve_sad_node,
+            commands::approval::unconfirm_iteration,
+            commands::project::search_similar_documents,
+            commands::pipeline::manually_trigger_next_nodes,
+            commands::refinement::parse_intent,
+            commands::refinement::route_architecture_target,
+            commands::refinement::apply_taint_cascade,
+            commands::refinement::confirm_taint_cascade,
+            commands::refinement::generate_and_apply_patch,
+            commands::refinement::validate_refinement_node,
+            commands::refinement::confirm_node_review,
+            commands::refinement::finalize_refinement_update,
+            // v2: Comment 커맨드
+            commands::comment::get_node_comments,
+            commands::comment::get_project_comments,
+            commands::comment::create_comment,
+            commands::comment::update_comment,
+            commands::comment::delete_comment,
+            commands::comment::migrate_comment_paths,
+            commands::refinement::migrate_canonical_ids_command,
+            commands::refinement::migrate_artifact_mappings,
+            commands::node::archive_all_non_confirmed_iterations,
         ])
         .plugin(tauri_plugin_dialog::init())
         .run(tauri::generate_context!())

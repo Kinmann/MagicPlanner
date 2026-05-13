@@ -1,0 +1,471 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0;
+}
+
+.draftsSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sectionTitle {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #e5e7eb;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+
+  .countBadge {
+    background: #27272a;
+    color: #a1a1aa;
+    padding: 0.125rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.7rem;
+    font-weight: 800;
+  }
+}
+
+.toggleBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: #a1a1aa;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1;
+
+  &:hover {
+    background: #27272a;
+    color: #e5e7eb;
+  }
+
+  &.active {
+    background: #27272a;
+    color: #f3f4f6;
+  }
+
+  svg {
+    width: 14px;
+    height: 14px;
+    display: block;
+    flex-shrink: 0;
+  }
+}
+
+.draftList {
+  display: flex;
+  align-items: stretch;
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  
+  &::-webkit-scrollbar {
+    height: 4px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 10px;
+  }
+  
+  &:hover {
+    &::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      
+      &:hover {
+        background: rgba(255, 255, 255, 0.4);
+      }
+    }
+  }
+}
+
+.draftCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  min-width: 80px;
+  border-radius: 0.5rem;
+  border: 2px solid #3f3f46;
+  background: #18181b;
+  color: #d1d5db;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    border-color: #9ca3af;
+    background: #27272a;
+  }
+
+  &.selected {
+    background: rgba(16, 185, 129, 0.15);
+    border-color: #10b981;
+    color: #10b981;
+  }
+
+  &.confirmed {
+    background: #10b981;
+    border-color: #10b981;
+    color: #111827;
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.3);
+    
+    .scoreValue {
+      color: #111827;
+    }
+    
+    .unit {
+      color: #111827;
+    }
+  }
+
+  &.passed {
+    background: #121216;
+    border-color: #27272a;
+    color: #52525b;
+    opacity: 0.6;
+    
+    .draftLabel {
+      text-decoration: line-through;
+    }
+  }
+
+  .scoreContainer {
+    display: flex;
+    align-items: flex-start;
+  }
+
+  .scoreValue {
+    font-size: 1.5rem;
+    font-weight: 900;
+    letter-spacing: -0.05em;
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 0.125rem;
+  }
+
+  .unit {
+    font-size: 0.625rem;
+    margin-top: 0.125rem;
+    margin-left: 0.125rem;
+    font-weight: 700;
+    opacity: 0.7;
+  }
+
+  .draftLabel {
+    font-size: 0.625rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .statusIcon {
+    position: absolute;
+    top: -0.375rem;
+    right: -0.375rem;
+    background: #111827;
+    color: #10b981;
+    border-radius: 9999px;
+    padding: 0.125rem;
+    border: 2px solid #10b981;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    svg {
+      width: 10px;
+      height: 10px;
+    }
+  }
+
+  .archiveIndicator {
+    position: absolute;
+    top: -0.375rem;
+    left: -0.375rem;
+    background: #111827;
+    color: #a1a1aa;
+    border-radius: 9999px;
+    padding: 0.125rem;
+    border: 2px solid #3f3f46;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    svg {
+      width: 10px;
+      height: 10px;
+    }
+  }
+}
+
+.actionRow {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.deleteBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 0.5rem;
+  border: none;
+  background: transparent;
+  color: #71717a;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.1);
+    color: #f87171;
+  }
+
+  &:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+}
+
+.archiveBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 0.5rem;
+  border: none;
+  background: transparent;
+  color: #71717a;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover:not(:disabled) {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+  }
+
+  &:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+}
+
+.archiveAllBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.5rem;
+  height: 36px;
+  border-radius: 0.5rem;
+  border: 1px solid #3f3f46;
+  background: transparent;
+  color: #a1a1aa;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  gap: 0.25rem;
+
+  &:hover:not(:disabled) {
+    background: rgba(16, 185, 129, 0.05);
+    border-color: #10b981;
+    color: #10b981;
+  }
+
+  &:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+.btnSubLabel {
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.confirmBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #0c0c0e;
+  background: #10b981;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+
+  &:hover:not(:disabled) {
+    background: #34d399;
+    transform: translateY(-1px);
+  }
+
+  &:disabled {
+    background: #1f1f23;
+    color: #52525b;
+    opacity: 0.6;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+  }
+
+  &.unconfirm {
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    color: #f87171;
+    box-shadow: none;
+
+    &:hover:not(:disabled) {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #ff7e7e;
+      transform: translateY(-1px);
+    }
+  }
+
+  svg {
+    width: 14px;
+    height: 14px;
+    display: block;
+    flex-shrink: 0;
+  }
+}
+
+.headerRightActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.feedbackBtn {
+  position: relative;
+
+  &.hasIssues {
+    color: #f59e0b;
+    border: none !important;
+    
+    &:hover {
+      background: rgba(245, 158, 11, 0.05);
+    }
+  }
+
+  .dot {
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    width: 8px;
+    height: 8px;
+    background: #ef4444;
+    border-radius: 50%;
+    border: 2px solid #18181b;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+  }
+}
+
+.modalContent {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 0.5rem 0;
+}
+
+.errorSection, .feedbackSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sectionTitleError, .sectionTitleFeedback {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.9;
+}
+
+.sectionTitleError { color: #f87171; }
+.sectionTitleFeedback { color: #60a5fa; }
+
+.errorList, .feedbackList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.issueItem {
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 0.625rem;
+  font-size: 0.85rem;
+}
+
+.issueLocation {
+  font-weight: 800;
+  color: #71717a;
+  margin-right: 0.5rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
+
+.issueCode {
+  font-weight: 700;
+  color: #e5e7eb;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  margin-right: 0.5rem;
+  font-size: 0.75rem;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.issueDesc {
+  margin-top: 0.5rem;
+  color: #d1d5db;
+  line-height: 1.5;
+}
+
+.emptyText {
+  color: #52525b;
+  font-size: 0.85rem;
+  font-style: italic;
+  padding-left: 0.5rem;
+}

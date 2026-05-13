@@ -1,0 +1,136 @@
+@use '../../styles/variables' as v;
+
+.sidebarTree {
+  width: 100%;
+  height: 100%;
+  background-color: #18181b;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  user-select: none;
+}
+
+.explorerTitle {
+  height: 40px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.treeContainer {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 16px;
+}
+
+.treeItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #d1d5db;
+  font-size: 13px;
+
+  &:hover {
+    background-color: rgba(63, 63, 70, 0.6);
+  }
+
+  &.active {
+    background-color: #27272a;
+    color: v.$primary;
+    .nodeTitle { font-weight: 500; }
+  }
+}
+
+.itemContent {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+}
+
+.toggleIcon {
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+
+  &:hover {
+    color: #d1d5db;
+    background-color: #3f3f46;
+  }
+
+  svg {
+    display: block;
+  }
+}
+
+.typeIcon {
+  margin-right: 8px;
+  color: #9ca3af;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  svg {
+    display: block;
+  }
+}
+
+.nodeTitle {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1;
+}
+
+.statusIndicator {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding-left: 8px;
+  opacity: 0.8;
+}
+
+.childrenContainer {
+  // Can add nested styling if needed
+}
+.statusBadge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid transparent;
+
+  &.active {
+    background-color: rgba(16, 185, 129, 0.1);
+    color: v.$primary;
+    border-color: rgba(16, 185, 129, 0.2);
+  }
+
+  &.completed {
+    background-color: rgba(59, 130, 246, 0.1);
+    color: #60a5fa;
+    border-color: rgba(59, 130, 246, 0.2);
+  }
+
+  &.pending {
+    background-color: rgba(107, 114, 128, 0.1);
+    color: #9ca3af;
+    border-color: rgba(107, 114, 128, 0.2);
+  }
+}

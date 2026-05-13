@@ -1,0 +1,368 @@
+@use '../../styles/variables' as v;
+
+// ScrollArea
+.scrollArea {
+  overflow-y: auto;
+  overflow-x: hidden;
+  
+  // Custom Scrollbar
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    transition: background 0.2s;
+  }
+
+  &:hover::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: v.$primary;
+  }
+}
+
+// Tabs
+.tabs {
+  display: flex;
+  flex-direction: column;
+}
+
+.tabsList {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid v.$border;
+  padding: 0 4px;
+}
+
+.tabsTrigger {
+  position: relative;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: v.$text-muted;
+  transition: color 0.2s;
+
+  &:hover {
+    color: v.$foreground;
+  }
+
+  &.active {
+    color: v.$primary;
+  }
+}
+
+.activeIndicator {
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: v.$primary;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+}
+
+.tabsContent {
+  padding: 16px 0;
+  flex: 1;
+}
+
+/* Menubar */
+.menubar {
+  display: flex;
+  height: 36px;
+  align-items: center;
+  background-color: transparent;
+  padding: 0 v.$space-2;
+  gap: 4px;
+}
+
+.menubarMenu {
+  position: relative;
+}
+
+.menubarTrigger {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: v.$text-muted;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover, &.active {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: v.$foreground;
+  }
+}
+
+.menubarContent {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 180px;
+  background-color: v.$background;
+  border: 1px solid v.$border;
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  margin-top: 4px;
+  animation: slideDown 0.2s ease-out;
+}
+
+.menubarItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: v.$text-muted;
+  cursor: pointer;
+  transition: all 0.15s;
+
+  &:hover {
+    background-color: v.$primary;
+    color: white;
+    
+    .shortcut {
+      color: rgba(255, 255, 255, 0.6);
+    }
+  }
+}
+
+.itemIcon {
+  display: flex;
+  align-items: center;
+  opacity: 0.7;
+}
+
+.itemLabel {
+  flex: 1;
+}
+
+.shortcut {
+  font-size: 10px;
+  opacity: 0.5;
+  font-family: v.$font-mono;
+}
+
+.menubarSeparator {
+  height: 1px;
+  background-color: v.$border;
+  margin: 4px 0;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Stepper */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0.4;
+  transition: all 0.3s;
+
+  &.active {
+    opacity: 1;
+    .stepCircle {
+      border-color: v.$primary;
+      color: v.$primary;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+    }
+  }
+
+  &.completed {
+    opacity: 0.8;
+    .stepCircle {
+      background-color: v.$primary;
+      border-color: v.$primary;
+      color: white;
+    }
+  }
+}
+
+.stepCircle {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid v.$border;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.stepInfo {
+  display: flex;
+  flex-direction: column;
+}
+
+.stepTitle {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.stepDescription {
+  font-size: 10px;
+  color: v.$text-muted;
+}
+
+.stepConnector {
+  flex: 1;
+  height: 2px;
+  background-color: v.$border;
+  opacity: 0.2;
+  min-width: 20px;
+
+  &.filled {
+    background-color: v.$primary;
+    opacity: 0.5;
+  }
+}
+
+/* Pagination */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.pageList {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pageBtn {
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dots {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: v.$text-muted;
+  opacity: 0.5;
+}
+
+/* Kbd */
+.kbd {
+  display: inline-flex;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  border: 1px solid v.$border;
+  background-color: rgba(255, 255, 255, 0.05);
+  padding: 0 4px;
+  font-family: v.$font-mono;
+  font-size: 10px;
+  font-weight: 500;
+  color: v.$text-muted;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Command */
+.command {
+  background-color: v.$background;
+  border: 1px solid v.$border;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.commandInputWrapper {
+  border-bottom: 1px solid v.$border;
+  padding: v.$space-3;
+}
+
+.commandInput {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: v.$foreground;
+  font-size: 14px;
+}
+
+.commandList {
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.commandItem {
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+}
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid v.$border;
+  border-radius: 6px;
+  min-height: 40px;
+}
+
+.toolbarGroup {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toolbarSeparator {
+  width: 1px;
+  height: 20px;
+  background-color: v.$border;
+  margin: 0 4px;
+  opacity: 0.5;
+}

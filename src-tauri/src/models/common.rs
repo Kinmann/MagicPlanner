@@ -27,18 +27,19 @@ pub struct PipelineStatusPayload {
     pub is_silent: Option<bool>,
 }
 
-impl ToString for NodeState {
-    fn to_string(&self) -> String {
-        match self {
-            NodeState::Pending => "PENDING".to_string(),
-            NodeState::Ready => "READY".to_string(),
-            NodeState::InProgress => "IN_PROGRESS".to_string(),
-            NodeState::Completed => "COMPLETED".to_string(),
-            NodeState::PausedHitl => "PAUSED_HITL".to_string(),
-            NodeState::PausedApiError => "PAUSED_API_ERROR".to_string(),
-            NodeState::PausedStopped => "PAUSED_STOPPED".to_string(),
-            NodeState::Refining => "REFINING".to_string(),
-        }
+impl std::fmt::Display for NodeState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            NodeState::Pending => "PENDING",
+            NodeState::Ready => "READY",
+            NodeState::InProgress => "IN_PROGRESS",
+            NodeState::Completed => "COMPLETED",
+            NodeState::PausedHitl => "PAUSED_HITL",
+            NodeState::PausedApiError => "PAUSED_API_ERROR",
+            NodeState::PausedStopped => "PAUSED_STOPPED",
+            NodeState::Refining => "REFINING",
+        };
+        write!(f, "{}", s)
     }
 }
 

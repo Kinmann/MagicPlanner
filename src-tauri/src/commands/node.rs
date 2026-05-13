@@ -33,7 +33,7 @@ pub async fn get_project_nodes(
     for m in modules {
         if m.module_state != "COMPLETED" {
             // 하위 노드 완료 상태를 체크하여 모듈 상태 업데이트 (emit 시점에 fetch가 늦을 수 있어 여기서 동기화)
-            let _ = sync_module_completion_status(&*pool, None, &m.module_id).await;
+            let _ = sync_module_completion_status(&pool, None, &m.module_id).await;
         }
     }
 
@@ -91,7 +91,7 @@ pub async fn get_project_nodes(
     // 1. is_active 상태 업데이트 (락을 짧게 유지)
     {
         if let Ok(tasks) = active_tasks.0.lock() {
-            let tasks: &std::collections::HashSet<String> = &*tasks;
+            let tasks: &std::collections::HashSet<String> = &tasks;
             for node in &mut nodes {
                 if tasks.contains(&node.node_id) {
                     node.is_active = true;
@@ -102,7 +102,7 @@ pub async fn get_project_nodes(
 
     // 2. 잠금 상태 계산 (await가 포함되므로 락 외부에서 수행)
     for node in &mut nodes {
-        node.is_locked = is_node_locked(&*pool, node).await?;
+        node.is_locked = is_node_locked(&pool, node).await?;
     }
 
     Ok(nodes)
@@ -177,36 +177,6 @@ pub async fn get_latest_pass_iteration(
     Ok(iteration)
 }
 
-#[tauri::command]
-pub async fn get_previous_pass_iteration(
-    pool: tauri::State<'_, SqlitePool>,
-    node_id: String,
-    current_iteration_id: String,
-) -> Result<Option<GenerationIteration>, String> {
-    // Get the current iteration to find its iteration_number
-    let current_iter = sqlx::query_as::<_, GenerationIteration>(
-        "SELECT * FROM generation_iteration WHERE iteration_id = ?"
-    )
-    .bind(&current_iteration_id)
-    .fetch_optional(&*pool)
-    .await
-    .map_err(|e| e.to_string())?;
-
-    if let Some(current) = current_iter {
-        let iteration = sqlx::query_as::<_, GenerationIteration>(
-            "SELECT * FROM generation_iteration WHERE node_id = ? AND is_pass = 1 AND is_deleted = 0 AND iteration_number < ? ORDER BY iteration_number DESC LIMIT 1"
-        )
-        .bind(node_id)
-        .bind(current.iteration_number)
-        .fetch_optional(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-        Ok(iteration)
-    } else {
-        Ok(None)
-    }
-}
 
 
 #[tauri::command]
@@ -265,7 +235,7 @@ pub async fn get_module_nodes(
     .map_err(|e| e.to_string())?;
 
     for node in &mut nodes {
-        node.is_locked = is_node_locked(&*pool, node).await?;
+        node.is_locked = is_node_locked(&pool, node).await?;
     }
 
     Ok(nodes)
@@ -299,7 +269,7 @@ pub async fn get_all_active_nodes(
 
     // ActiveTasks 기반으로 is_active 및 누락된 활성 노드 추가
     let extra_tasks: Vec<String> = if let Ok(tasks) = active_tasks.0.lock() {
-        let tasks: &std::collections::HashSet<String> = &*tasks;
+        let tasks: &std::collections::HashSet<String> = &tasks;
         for node in &mut active_nodes {
             if tasks.contains(&node.node_id) {
                 node.is_active = true;
@@ -372,7 +342,7 @@ pub async fn delete_generation_iteration(
 
     let is_pass: bool = iter_row.get(2);
 
-    if is_pass && is_node_locked(&*pool, &node).await? {
+    if is_pass && is_node_locked(&pool, &node).await? {
         return Err("이 초안은 확정된 상태이며 하위 파이프라인에 이미 결과물이 생성되어 있어 삭제할 수 없습니다.".into());
     }
 
@@ -385,7 +355,7 @@ pub async fn delete_generation_iteration(
         .map_err(|e| e.to_string())?;
 
     // 4. 노드 정보 업데이트
-    update_node_stats_from_active_iterations(&*pool, &node_id).await?;
+    update_node_stats_from_active_iterations(&pool, &node_id).await?;
 
     let _ = handle.emit("nodes-updated", ());
     Ok(())
@@ -454,7 +424,7 @@ pub async fn archive_generation_iteration(
         .await
         .map_err(|e| e.to_string())?;
 
-    if is_pass && is_node_locked(&*pool, &node).await? {
+    if is_pass && is_node_locked(&pool, &node).await? {
         return Err("이 초안은 확정된 상태이며 하위 파이프라인에 이미 결과물이 생성되어 있어 아카이브할 수 없습니다.".into());
     }
 
@@ -477,7 +447,7 @@ pub async fn archive_generation_iteration(
     }
 
     // 5. 노드 정보 업데이트 (아카이브 제외하고 다시 계산)
-    update_node_stats_from_active_iterations(&*pool, &node_id).await?;
+    update_node_stats_from_active_iterations(&pool, &node_id).await?;
 
     let _ = handle.emit("nodes-updated", ());
     Ok(())
@@ -509,7 +479,7 @@ pub async fn restore_generation_iteration(
         .map_err(|e| e.to_string())?;
 
     // 3. 노드 정보 업데이트
-    update_node_stats_from_active_iterations(&*pool, &node_id).await?;
+    update_node_stats_from_active_iterations(&pool, &node_id).await?;
 
     let _ = handle.emit("nodes-updated", ());
     Ok(())
@@ -549,7 +519,7 @@ pub async fn archive_all_non_confirmed_iterations(
         .await
         .map_err(|e| e.to_string())?;
 
-    update_node_stats_from_active_iterations(&*pool, &node_id).await?;
+    update_node_stats_from_active_iterations(&pool, &node_id).await?;
 
     let _ = handle.emit("nodes-updated", ());
     Ok(())

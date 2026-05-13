@@ -46,21 +46,20 @@
 - **보안/안정성**: AI 검증 단계에서 에러 발생 시 'Fail-Open'을 방지하기 위해 전체 파이프라인을 즉시 중단합니다.
 
 ### Phase 3: 양방향 오염 전파 (Bidirectional Taint Cascade)
-- **목적**: 직접 수정 대상(`Seed Nodes`)에서 시작하여 아키텍처 의존성 그래프를 따라 영향권에 있는 모든 잠재적 오염 노드를 식별.
-- **전파 메커니즘 (Bidirectional Graph Traversal)**:
-  1. **하향 전파 (Downward - Usage Tracking)**:
-     - 수정된 노드의 식별자(`Canonical ID`)를 참조(`mapped_`)하고 있는 모든 하위 설계 요소를 추적합니다.
-     - 예: FSD의 기능 정의가 바뀌면 이를 시나리오로 사용하는 User Flow 노드가 오염됩니다.
-  2. **상향 전파 (Upward - Definition Tracking)**:
-     - 수정 사항이 상위 설계의 제약 조건이나 데이터 모델에 영향을 주는지 확인하기 위해 역방향으로 전파합니다.
-     - `artifact_mapping` 테이블을 활용하여 `mapped_` ID의 '정의처(Source of Truth)'를 찾아 올라갑니다.
-  3. **계층 Fallback (Hierarchical Cascade)**:
-     - 구조적 변경(`Add`/`Delete`) 발생 시, 명시적인 ID 참조가 없더라도 계층 구조상 부모 모듈이나 상위 문서를 강제로 영향권에 포함시킵니다.
-- **오염 제어 및 필터링 (Cascade Pruning)**:
-  - **정책 기반 차단**: Phase 2에서 `PASS` 모드로 결정된 경우, 상향 전파는 1단계 부모로 제한되거나 전역 설계(GPRD) 도달 전 차단되어 '오염 폭발'을 방지합니다.
-  - **시맨틱 시뮬레이션 (Semantic Pruning)**: 탐색된 후보 노드와 현재 `Intent` 간의 RAG 유사도를 측정합니다. 유사도가 **0.1 미만**인 경우 전파를 중단합니다.
-  - **유사도 캐싱 (Similarity Caching)**: 전파 단계에서 계산된 유사도 점수는 `TaintImpactItem`에 저장되어 Phase 4(정밀 상태 전이)에서 재계산 없이 즉시 활용됩니다. 이는 API 호출 비용과 지연시간을 50% 이상 절감합니다.
-- **기술 스택**: `Sqlite-vec`를 통한 고속 벡터 검색과 `artifact_mapping`의 인덱싱된 역참조 조회를 결합하여 `O(N)` 복잡도로 전체 전파 경로를 산출합니다.
+- **목적**: 직접 수정 대상(`Seed Nodes`)에서 시작하여 `artifact_mapping` 테이블을 유일한 진실의 원천(Source of Truth)으로 활용, 아키텍처 의존성 관계에 있는 모든 잠재적 오염 노드를 기계적으로 식별.
+- **전파 메커니즘 (Table-Driven Deterministic Propagation)**:
+  1. **식별자 소집 (ID Collection)**:
+     - 직접 타겟 노드가 정의하는 모든 아티팩트 ID와 참조하고 있는 `mapped_xxx_id`를 소집합니다.
+  2. **하향 전파 (Downward - Referrer Tracking)**:
+     - `artifact_mapping` 테이블을 조인하여, 수집된 ID를 참조(`mapped_`)하고 있는 모든 하위/동료 설계 요소를 즉시 추출합니다.
+     - 예: 특정 에픽(EPIC-001)이 수정되면, 이를 참조하는 모든 모듈의 PRD, FSD가 기계적으로 감지됩니다.
+  3. **상향 전파 (Upward - Definition Tracking)**:
+     - 타겟 노드가 참조하는 상위 ID의 '정의처' 노드를 `artifact_mapping` 조인을 통해 역추적합니다.
+     - 기존의 하드코딩된 계층 Fallback 대신, 실제 ID 매핑 관계만을 사용하여 불필요한 과잉 오염을 방지합니다.
+- **오염 제어 및 효율화 (Efficiency & Precision)**:
+  *   **기계적 전파 (API-Free)**: 전파 단계에서 Embedding API 호출을 완전히 배제하고 순수 SQL 조인으로 처리하여, 수백 밀리초 내에 수만 개의 노드 관계를 분석합니다.
+  *   **역할 분리**: `apply_taint_cascade`는 모든 가능성 있는 후보를 기계적으로 수집하는 데 집중하며, 실질적인 유사도 검증은 Phase 4(Confirm) 단계의 안전망으로 이관합니다.
+- **기술 스택**: 인덱싱된 `artifact_mapping` 테이블과 `document_node` 간의 `DISTINCT` 조인 쿼리를 통해 `O(1)` 수준의 조회 성능으로 전체 오염 범위를 산출합니다.
 
 ### Phase 4: 정밀 상태 전이 (Precision Staining)
 - **목적**: Phase 3에서 탐색된 영향권 노드 중 실질적 수정이 필요한 노드를 최종 확정하여 오염 피로도(Analysis Fatigue)를 최소화.

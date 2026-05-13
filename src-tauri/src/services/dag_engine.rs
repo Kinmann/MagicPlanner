@@ -216,7 +216,7 @@ pub async fn trigger_module_next_nodes(
     }
 
     // 모듈 완료 동기화
-    sync_module_completion_status(&*pool, Some(app_handle), module_id).await?;
+    sync_module_completion_status(&pool, Some(app_handle), module_id).await?;
 
     // UI 이벤트 발행 (다음 노드 READY 상태 반영)
     let _ = app_handle.emit("nodes-updated", ());
@@ -444,22 +444,25 @@ pub async fn verify_and_refresh_context(
 
     // 2. 선행 노드 상태 검사
     for pre in prerequisites {
-        let pre_node = if node.node_category == "MODULE" && node.module_id.is_some() {
-            sqlx::query_as::<_, DocumentNode>(
-                "SELECT * FROM document_node WHERE module_id = ? AND target_node_type = ? AND is_deleted = 0"
-            )
-            .bind(node.module_id.as_ref().unwrap())
-            .bind(pre)
-            .fetch_optional(pool)
-            .await
-        } else {
-            sqlx::query_as::<_, DocumentNode>(
-                "SELECT * FROM document_node WHERE project_id = ? AND target_node_type = ? AND is_deleted = 0"
-            )
-            .bind(project_id)
-            .bind(pre)
-            .fetch_optional(pool)
-            .await
+        let pre_node = match (node.node_category.as_str(), &node.module_id) {
+            ("MODULE", Some(mid)) => {
+                sqlx::query_as::<_, DocumentNode>(
+                    "SELECT * FROM document_node WHERE module_id = ? AND target_node_type = ? AND is_deleted = 0"
+                )
+                .bind(mid)
+                .bind(pre)
+                .fetch_optional(pool)
+                .await
+            }
+            _ => {
+                sqlx::query_as::<_, DocumentNode>(
+                    "SELECT * FROM document_node WHERE project_id = ? AND target_node_type = ? AND is_deleted = 0"
+                )
+                .bind(project_id)
+                .bind(pre)
+                .fetch_optional(pool)
+                .await
+            }
         }.map_err(|e| e.to_string())?;
 
         if let Some(n) = pre_node {

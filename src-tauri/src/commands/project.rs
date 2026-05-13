@@ -275,11 +275,8 @@ pub async fn save_file(path: String, contents: String) -> Result<(), String> {
 
 
 /// Gemini Embedding API 호출
-
 /// JSON 데이터를 벡터화하여 검색 가중치와 함께 저장합니다. (노드 및 전역 컨텍스트)
-
 /// 프로젝트 내의 모든 성공 노드들을 순회하며 벡터 데이터를 DB에 동기화
-
 /// 프로젝트 내의 모든 성공 노드 및 변경된 노드들을 찾아 벡터 데이터를 DB에 업데이트 하거나 추가함
 #[tauri::command]
 pub async fn index_project_embeddings(
@@ -361,13 +358,18 @@ pub async fn index_project_embeddings(
         
         if let Some(iter) = best_iter {
             // 벡터화 진행
-            let embedding_res = store_document_embeddings(
-                &*pool, &*client, &api_key,
-                &project_id, node.module_id.as_deref(),
-                &node.node_id, &node.target_node_type,
-                &iter.iteration_id, &iter.generated_draft_json,
-                iter.calculated_score.unwrap_or(0),
-            ).await;
+            let embedding_res = store_document_embeddings(crate::services::embedding::EmbeddingStoreArgs {
+                pool: &pool,
+                client: &client,
+                api_key: &api_key,
+                project_id: &project_id,
+                module_id: node.module_id.as_deref(),
+                node_id: &node.node_id,
+                node_type: &node.target_node_type,
+                iteration_id: &iter.iteration_id,
+                document_json: &iter.generated_draft_json,
+                score: iter.calculated_score.unwrap_or(0),
+            }).await;
             
             match embedding_res {
                 Ok(_) => {
@@ -411,14 +413,12 @@ pub async fn index_project_embeddings(
     }
 
     
-    Ok(indexed_count as i32)
+    Ok(indexed_count)
 }
 
 
 /// RAG 검색 및 검색된 컨텍스트를 프롬프트에 결합하기 위한 보조 함수 (백엔드 내부용)
-
 /// 특정 노드의 기존 데이터와 변경 의도 간의 교집합(유사도)을 판별합니다.
-
 /// RAG 검색을 수행하는 Tauri 명령어
 #[tauri::command]
 pub async fn search_similar_documents(
@@ -429,7 +429,7 @@ pub async fn search_similar_documents(
     query: String,
     limit: i32,
 ) -> Result<Vec<serde_json::Value>, String> {
-    let query_vector: Vec<f32> = call_gemini_embedding(&*client, &api_key, &query, "RETRIEVAL_QUERY").await
+    let query_vector: Vec<f32> = call_gemini_embedding(&client, &api_key, &query, "RETRIEVAL_QUERY").await
         .map_err(|e| format!("Query embedding error: {:?}", e))?;
     let query_json = serde_json::to_string(&query_vector).unwrap_or_default();
 

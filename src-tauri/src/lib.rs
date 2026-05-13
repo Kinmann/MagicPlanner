@@ -17,7 +17,7 @@ pub struct ActiveTasks(pub Arc<Mutex<HashSet<String>>>);
 // }
 
 use reqwest::Client;
-use tauri::{Emitter, State, Manager};
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -39,9 +39,14 @@ pub fn run() {
             
             // sqlite-vec 확장 등록 (Pool 생성 전 전역 등록)
             unsafe {
-                libsqlite3_sys::sqlite3_auto_extension(Some(std::mem::transmute(
-                    sqlite3_vec_init as *const (),
-                )));
+                libsqlite3_sys::sqlite3_auto_extension(Some(std::mem::transmute::<
+                    *const (),
+                    unsafe extern "C" fn(
+                        *mut libsqlite3_sys::sqlite3,
+                        *mut *mut i8,
+                        *const libsqlite3_sys::sqlite3_api_routines,
+                    ) -> i32,
+                >(sqlite3_vec_init as *const ())));
             }
 
             let pool = tauri::async_runtime::block_on(async {

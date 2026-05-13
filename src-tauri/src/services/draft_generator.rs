@@ -7,23 +7,44 @@ use crate::utils::get_prompts_dir;
 
 /// AI 초안을 생성합니다.
 /// 프롬프트 파일을 로드하고, 이전 피드백/초안을 반영하여 Gemini API를 호출합니다.
+pub struct DraftGenerationArgs<'a> {
+    pub app_handle: &'a tauri::AppHandle,
+    pub pool: &'a SqlitePool,
+    pub client: &'a Client,
+    pub api_key: &'a str,
+    pub project_id: &'a str,
+    pub node_category: &'a str,
+    pub node_type: &'a str,
+    pub input_text: &'a str,
+    pub global_context: &'a str,
+    pub module_context: &'a str,
+    pub previous_draft: &'a str,
+    pub previous_feedback: &'a [String],
+    pub iteration: i32,
+    pub target_count: i32,
+    pub _exclude_node_ids: &'a [String],
+}
+
 pub async fn generate_draft(
-    app_handle: &tauri::AppHandle,
-    pool: &SqlitePool,
-    client: &Client,
-    api_key: &str,
-    project_id: &str,
-    node_category: &str,
-    node_type: &str,
-    input_text: &str,
-    global_context: &str,
-    module_context: &str,
-    previous_draft: &str,
-    previous_feedback: &Vec<String>,
-    iteration: i32,
-    target_count: i32,
-    _exclude_node_ids: Vec<String>,
+    args: DraftGenerationArgs<'_>,
 ) -> Result<String, PipelineError> {
+    let DraftGenerationArgs {
+        app_handle,
+        pool,
+        client,
+        api_key,
+        project_id,
+        node_category,
+        node_type,
+        input_text,
+        global_context,
+        module_context,
+        previous_draft,
+        previous_feedback,
+        iteration,
+        target_count,
+        _exclude_node_ids,
+    } = args;
     let node_normalized = node_type.to_lowercase().replace(" ", "_");
     let prompts_dir = get_prompts_dir(app_handle);
 
@@ -120,22 +141,42 @@ pub async fn generate_draft(
 
 /// AI 초안을 평가합니다.
 /// 생성된 초안과 소스 문서를 비교하여 점수와 피드백을 반환합니다.
+pub struct DraftEvaluationArgs<'a> {
+    pub app_handle: &'a tauri::AppHandle,
+    pub pool: &'a SqlitePool,
+    pub client: &'a Client,
+    pub api_key: &'a str,
+    pub project_id: &'a str,
+    pub node_category: &'a str,
+    pub node_type: &'a str,
+    pub draft: &'a str,
+    pub input_text: Option<String>,
+    pub global_context: &'a str,
+    pub module_context: &'a str,
+    pub previous_feedback: &'a [String],
+    pub iteration: i32,
+    pub _exclude_node_ids: &'a [String],
+}
+
 pub async fn evaluate_draft(
-    app_handle: &tauri::AppHandle,
-    pool: &SqlitePool,
-    client: &Client,
-    api_key: &str,
-    project_id: &str,
-    node_category: &str,
-    node_type: &str,
-    draft: &str,
-    input_text: Option<String>,
-    global_context: &str,
-    module_context: &str,
-    previous_feedback: &Vec<String>,
-    iteration: i32,
-    _exclude_node_ids: Vec<String>,
+    args: DraftEvaluationArgs<'_>,
 ) -> Result<crate::schemas::EvaluationResult, PipelineError> {
+    let DraftEvaluationArgs {
+        app_handle,
+        pool,
+        client,
+        api_key,
+        project_id,
+        node_category,
+        node_type,
+        draft,
+        input_text,
+        global_context,
+        module_context,
+        previous_feedback,
+        iteration,
+        _exclude_node_ids,
+    } = args;
     let node_normalized = node_type.to_lowercase().replace(" ", "_");
     let prompts_dir = get_prompts_dir(app_handle);
 

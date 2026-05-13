@@ -3,9 +3,18 @@ pub mod node_query;
 pub mod draft_generator;
 pub mod dag_engine;
 pub mod embedding;
+pub mod intent_service;
+pub mod taint_cascade_service;
+pub mod patch_service;
+pub mod refinement_validation;
+pub mod artifact_mapping;
+pub mod pipeline;
+pub mod approval;
+pub mod module_service;
 
 pub use gemini::*;
 pub use node_query::*;
 pub use draft_generator::*;
 pub use dag_engine::*;
 pub use embedding::*;
+pub use module_service::*;

@@ -314,11 +314,13 @@ export const useRefinementStore = create<RefinementState>((set, get) => ({
 
     try {
       const result = await invoke<TaintCascadeSchema>('apply_taint_cascade', { 
-        apiKey,
-        projectId, 
-        intent, 
-        targets: targetNodes,
-        routerDecision: validationResult?.decision || 'PASS'
+        payload: {
+          apiKey,
+          projectId, 
+          intent, 
+          targets: targetNodes,
+          routerDecision: validationResult?.decision || 'PASS'
+        }
       });
       set({ taintCascadeResult: result, step: 'CASCADE_CONFIRMATION' });
       

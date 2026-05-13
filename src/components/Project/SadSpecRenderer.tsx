@@ -6,7 +6,7 @@ import {
   GitBranch, Eye, 
   RefreshCw, Check,
   Shield, ShieldCheck, Zap, TrendingUp, Briefcase, CheckCircle2,
-  Monitor, Server, Globe, Key, User, ListTodo
+  Monitor, Server, Globe, Key, User, ListTodo, Code2, Cpu, Users
 } from 'lucide-react';
 import WireframeRenderer from './Renderer/modules/WireframeRenderer';
 import TcRenderer from './Renderer/modules/TcRenderer';
@@ -74,21 +74,25 @@ const ErdRenderer: React.FC<{ data: any, baseData?: any, nodeId?: string, curren
       isRefined={isRefined}
     >
       <article className={styles.epicItem} style={{ width: '100%' }}>
-        <h3 className={styles.criteriaTitle} style={{ fontSize: '15px' }}>
-          <Layers size={18} className="text-primary opacity-50" />
-          {ent.table_id && <span className={styles.idBadge} style={{ marginRight: '8px' }}>{ent.table_id}</span>}
-          <span className={styles.valueWrapper}>{ent.entity_name}</span>
+        <h3 className={styles.epicHeader}>
+          {ent.table_id && <span className={styles.idBadge}>{ent.table_id}</span>}
+          <span className={`${styles.epicTitle} ${styles.valueWrapper}`}>{ent.entity_name}</span>
+          {ent.mapped_epic_ids && ent.mapped_epic_ids.length > 0 && (
+            <div className="flex flex-wrap gap-2 ml-auto">
+              {ent.mapped_epic_ids.map((eid: string) => (
+                <span key={eid} className={styles.mappingBadge}>{eid}</span>
+              ))}
+            </div>
+          )}
         </h3>
         <div className={styles.epicBody}>
           <p className={styles.epicDesc}>{ent.description}</p>
           
-          {ent.mapped_func_ids && ent.mapped_func_ids.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-1 mb-2">
-              {ent.mapped_func_ids.map((fid: string) => (
-                <span key={fid} className={styles.mappingBadge}>{fid}</span>
-              ))}
-            </div>
-          )}
+          <div className="flex flex-wrap gap-2 mt-1 mb-2">
+            {ent.mapped_func_ids && ent.mapped_func_ids.length > 0 && ent.mapped_func_ids.map((fid: string) => (
+              <span key={fid} className={styles.mappingBadge}>{fid}</span>
+            ))}
+          </div>
           
           {ent.attributes && ent.attributes.length > 0 && (
             <div className={styles.criteriaSection}>
@@ -96,7 +100,7 @@ const ErdRenderer: React.FC<{ data: any, baseData?: any, nodeId?: string, curren
                 <ListTodo size={14} />
                 {isModuleErd ? 'Columns' : 'Attributes'}
               </h4>
-              <div className="flex flex-wrap gap-2 mt-2">
+              <ul className={styles.criteriaList}>
                 {ent.attributes.map((attr: any, j: number) => (
                   <CommentableRow 
                     key={j} 
@@ -106,13 +110,19 @@ const ErdRenderer: React.FC<{ data: any, baseData?: any, nodeId?: string, curren
                     isStale={isStale}
                     isRefined={isRefined}
                   >
-                    <div className={styles.attributeTag}>
-                      <span className={styles.attrName}>{attr.name}</span>
-                      <span className={styles.attrType}>{attr.data_type}</span>
-                    </div>
+                    <li className={styles.criteriaItem}>
+                      <CheckCircle2 size={16} className={styles.checkIcon} />
+                      <div className={styles.valueWrapper}>
+                        <span style={{ fontWeight: 700 }}>{attr.name}</span>
+                        <span style={{ opacity: 0.9, marginLeft: '8px', fontSize: '11px', fontFamily: 'monospace' }} className="text-primary">{attr.data_type}</span>
+                        {attr.description && (
+                          <span style={{ opacity: 0.85, marginLeft: '12px', fontSize: '13px' }}>- {attr.description}</span>
+                        )}
+                      </div>
+                    </li>
                   </CommentableRow>
                 ))}
-              </div>
+              </ul>
             </div>
           )}
         </div>
@@ -144,15 +154,17 @@ const ErdRenderer: React.FC<{ data: any, baseData?: any, nodeId?: string, curren
   }));
 
   const renderRelation = (rel: any, i: number, isStale = false, isRefined = false) => (
-    <CommentableRow key={`${i}-${isStale ? 'stale' : 'refined'}`} nodeId={nodeId || ''} jsonPath={`$.relationships[${i}]`} currentIteration={currentIteration} isStale={isStale} isRefined={isRefined}>
+    <CommentableRow key={`${rel.rel_id || i}-${isStale ? 'stale' : 'refined'}`} nodeId={nodeId || ''} jsonPath={`$.relationships[${i}]`} currentIteration={currentIteration} isStale={isStale} isRefined={isRefined}>
       <div className={styles.minimalRelRow}>
         <div className={styles.relNames}>
+          {rel.rel_id && <span className={styles.idBadge} style={{ marginRight: '8px' }}>{rel.rel_id}</span>}
           <span className={styles.textPrimary}>{rel.from_entity || rel.source_table}</span>
           <ChevronRight size={14} className={styles.opacity40} />
           <span className={styles.textSecondary}>{rel.to_entity || rel.target_table}</span>
         </div>
         <div className={styles.relMeta}>
           <span className={styles.relBadge}>{rel.relationship_type || rel.rel_type}</span>
+          {rel.mapped_epic_id && <span className={styles.mappingBadge}>{rel.mapped_epic_id}</span>}
           <span className={styles.relDescription}>{rel.description}</span>
         </div>
       </div>
@@ -281,9 +293,11 @@ const RbacRenderer: React.FC<{ data: any, baseData?: any, nodeId?: string, curre
       >
         <article className={styles.epicItem} style={{ width: '100%' }}>
           <h3 className={styles.criteriaTitle} style={{ fontSize: '15px' }}>
-            {isAdmin ? <ShieldCheck size={18} className="text-primary" /> : <User size={18} className="opacity-40" />}
             {r.role_id && <span className={styles.idBadge} style={{ marginRight: '8px' }}>{r.role_id}</span>}
             <span className={styles.valueWrapper}>{r.role_name}</span>
+            {r.mapped_role_id && (
+              <span className={styles.mappingBadge} style={{ marginLeft: '8px' }}>{r.mapped_role_id}</span>
+            )}
           </h3>
           <div className={styles.epicBody}>
             <p className={styles.epicDesc}>{r.description}</p>
@@ -364,6 +378,41 @@ const RbacRenderer: React.FC<{ data: any, baseData?: any, nodeId?: string, curre
           }
         </div>
       </div>
+      {/* 3. Access Policies */}
+      {data.access_policies && data.access_policies.length > 0 && (
+        <div className={styles.section}>
+          <h2 className={styles.sectionTitle}>
+            <ShieldCheck className={styles.icon} size={20} />
+            3. Global Access Policies
+          </h2>
+          <div className={styles.epicList}>
+            {data.access_policies.map((p: any, i: number) => {
+              const baseP = baseData?.access_policies?.find((bp: any) => bp.policy_id === p.policy_id);
+              const hasChanged = baseP && JSON.stringify(baseP) !== JSON.stringify(p);
+              return (
+                <CommentableRow 
+                  key={p.policy_id || i} 
+                  nodeId={nodeId || ''} 
+                  jsonPath={`$.access_policies[?(@.policy_id=='${p.policy_id}')]`} 
+                  currentIteration={currentIteration} 
+                  blockId={p.policy_id}
+                  isRefined={!!baseP && hasChanged}
+                >
+                  <article className={styles.epicItem}>
+                    <h3 className={styles.criteriaTitle} style={{ fontSize: '15px' }}>
+                      <span className={styles.idBadge}>{p.policy_id}</span>
+                      <span className={styles.valueWrapper} style={{ marginLeft: '8px' }}>{p.description}</span>
+                      {p.mapped_epic_id && (
+                        <span className={styles.mappingBadge} style={{ marginLeft: '8px' }}>{p.mapped_epic_id}</span>
+                      )}
+                    </h3>
+                  </article>
+                </CommentableRow>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -372,141 +421,135 @@ const RbacRenderer: React.FC<{ data: any, baseData?: any, nodeId?: string, curre
  * 3. Tech Stack Renderer (sad_tech_stack)
  */
 const TechStackRenderer: React.FC<{ data: any, baseData?: any, nodeId?: string, currentIteration?: any }> = ({ data, baseData, nodeId, currentIteration }) => {
+  const tech = data.tech_stack || {};
+  const baseTech = baseData?.tech_stack || {};
+
   const techItems = [
-    { title: 'Frontend Stack', id: 'frontend', icon: <Monitor size={18} /> },
-    { title: 'Backend Stack', id: 'backend', icon: <Server size={18} /> },
-    { title: 'Data Infrastructure', id: 'database', icon: <Database size={18} /> },
-    { title: 'Cloud & DevOps', id: 'infrastructure', icon: <Globe size={18} /> },
-    { title: 'CI/CD Pipeline', id: 'ci_cd', icon: <RefreshCw size={18} /> },
-    { title: 'Monitoring & Logs', id: 'monitoring', icon: <Eye size={18} /> },
+    { title: 'Frontend Stack', data: tech.frontend, icon: <Monitor size={18} />, key: 'frontend' },
+    { title: 'Backend Stack', data: tech.backend, icon: <Server size={18} />, key: 'backend' },
+    { title: 'Data Infrastructure', data: tech.database, icon: <Database size={18} />, key: 'database' },
+    { title: 'Cloud & DevOps', data: tech.infrastructure, icon: <Globe size={18} />, key: 'infrastructure' },
+    { title: 'AI Model Spec', data: tech.ai_model_spec, icon: <Cpu size={18} />, key: 'ai_model_spec' },
+    { title: 'Interface & Auth', data: tech.interface_protocols, icon: <Key size={18} />, key: 'interface_protocols' },
   ];
 
-  const hasRationaleChanged = baseData && JSON.stringify(baseData.rationale) !== JSON.stringify(data.rationale);
+  const rationale = data.rationale || [];
+  const baseRationale = baseData?.rationale || [];
 
   return (
     <div className={styles.epicActorContainer}>
-      {/* 1. Tech Items */}
       <div className={styles.section}>
         <h2 className={styles.sectionTitle}>
-          <Layers className={styles.icon} size={20} />
-          Core Technology Stack
+          <Code2 size={20} className={styles.icon} />
+          Core Technology Architecture
         </h2>
+        
         <div className={styles.epicList}>
-          <article className={styles.epicItem} style={{ width: '100%' }}>
+          <article className={styles.epicItem}>
             <div className={styles.epicBody}>
-              <div className="flex flex-col gap-6">
-                {techItems.map((item, idx) => {
-                  const val = data[item.id];
-                  const baseVal = baseData ? baseData[item.id] : null;
-                  if (!val) return null;
+              <div className={styles.flexColGap6}>
+                  {techItems.map((item, idx) => {
+                    const itemData = item.data || {};
+                    const baseItemData = baseTech[item.key] || {};
+                    const hasItemChanged = baseData && JSON.stringify(baseItemData) !== JSON.stringify(itemData);
+                    
+                    if (Object.keys(itemData).length === 0 && Object.keys(baseItemData).length === 0) return null;
 
-                  const itemChanged = baseData && JSON.stringify(baseVal) !== JSON.stringify(val);
-
-                  const renderTechBlock = (v: any, isStale = false, isRefined = false) => (
-                    <CommentableRow 
-                      key={`${item.id}-${isStale ? 'stale' : 'refined'}`} 
-                      nodeId={nodeId || ''} 
-                      jsonPath={`$.${item.id}`} 
-                      currentIteration={currentIteration} 
-                      blockId={v.id || item.id}
-                      isStale={isStale}
-                      isRefined={isRefined}
-                    >
-                      <div style={{ width: '100%' }}>
-                        <h4 className={styles.criteriaTitle}>
-                          <span style={{ opacity: 0.5, display: 'flex', alignItems: 'center' }}>{item.icon}</span>
-                          {item.title}
-                        </h4>
-                        <div className={styles.epicDesc} style={{ 
-                          marginTop: '0.4rem', 
-                          display: 'flex', 
-                          flexDirection: 'column', 
-                          gap: '8px',
-                          paddingLeft: '14px'
-                        }}>
-                          {typeof v === 'object' ? (
-                            Object.entries(v).map(([k, vv]: [string, any], kIdx) => (
-                              <div key={kIdx} className={styles.kvRow}>
-                                <Zap size={12} style={{ opacity: 0.3, flexShrink: 0, marginTop: '2px' }} />
-                                <span style={{ fontSize: '13px', opacity: 0.8, minWidth: '160px' }}>
-                                  {k.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}:
-                                </span>
-                                <span className={`${styles.valueWrapper} text-primary`} style={{ fontSize: '13px', fontWeight: '700' }}>
-                                  {String(vv)}
-                                </span>
+                    return (
+                      <React.Fragment key={idx}>
+                        {hasItemChanged && (
+                          <CommentableRow nodeId={nodeId || ''} jsonPath={`$.tech_stack.${item.key}`} currentIteration={currentIteration} blockId={item.key} isStale={true}>
+                            <div style={{ marginBottom: '1.5rem', opacity: 0.6 }}>
+                              <h4 className={styles.criteriaTitle}>
+                                <span style={{ display: 'flex', alignItems: 'center' }}>{item.icon}</span>
+                                {item.title} (Previous)
+                              </h4>
+                              <div className={styles.epicDesc} style={{ marginTop: '0.4rem', paddingLeft: '14px' }}>
+                                {Object.entries(baseItemData).map(([key, val]: [string, any], kIdx) => (
+                                  <div key={kIdx} className={styles.kvRow}>
+                                    <span style={{ fontSize: '12px', opacity: 0.7 }}>{key}: {String(val)}</span>
+                                  </div>
+                                ))}
                               </div>
-                            ))
-                          ) : (
-                            <div className={styles.kvRow}>
-                              <Zap size={12} style={{ opacity: 0.3, flexShrink: 0, marginTop: '2px' }} />
-                              <span className={`${styles.valueWrapper} text-primary`} style={{ fontSize: '14px', fontWeight: '700' }}>
-                                {String(v)}
-                              </span>
                             </div>
-                          )}
-                        </div>
-                      </div>
-                    </CommentableRow>
-                  );
-
-                  return (
-                    <React.Fragment key={idx}>
-                      {itemChanged && baseVal && renderTechBlock(baseVal, true, false)}
-                      {renderTechBlock(val, false, itemChanged)}
-                    </React.Fragment>
-                  );
-                })}
+                          </CommentableRow>
+                        )}
+                        <CommentableRow nodeId={nodeId || ''} jsonPath={`$.tech_stack.${item.key}`} currentIteration={currentIteration} blockId={item.key} isRefined={hasItemChanged}>
+                          <div style={{ marginBottom: '1.5rem' }}>
+                            <h4 className={styles.criteriaTitle}>
+                              <span style={{ opacity: 0.5, display: 'flex', alignItems: 'center' }}>{item.icon}</span>
+                              {item.title}
+                              {itemData.tech_id && <span className={styles.idBadge} style={{ marginLeft: '8px' }}>{itemData.tech_id}</span>}
+                              {itemData.mapped_tech_id && (
+                                <span className={styles.mappingBadge} style={{ marginLeft: '8px' }}>{itemData.mapped_tech_id}</span>
+                              )}
+                            </h4>
+                            <div className={styles.epicDesc} style={{ 
+                              marginTop: '0.4rem', 
+                              display: 'flex', 
+                              flexDirection: 'column', 
+                              gap: '8px',
+                              paddingLeft: '14px'
+                            }}>
+                              {Object.entries(itemData).map(([key, val]: [string, any], kIdx) => {
+                                if (key === 'tech_id' || key === 'mapped_tech_id') return null;
+                                return (
+                                  <CommentableRow key={kIdx} nodeId={nodeId || ''} jsonPath={`$.tech_stack.${item.key}.${key}`} currentIteration={currentIteration} blockId={key}>
+                                    <div className={styles.kvRow}>
+                                      <Zap size={12} style={{ opacity: 0.3, flexShrink: 0, marginTop: '2px' }} />
+                                      <span style={{ fontSize: '13px', opacity: 0.8, minWidth: '160px' }}>
+                                        {key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}:
+                                      </span>
+                                      <span className={`${styles.valueWrapper} text-primary`} style={{ fontSize: '13px', fontWeight: '700' }}>
+                                        {typeof val === 'object' ? JSON.stringify(val) : String(val)}
+                                      </span>
+                                    </div>
+                                  </CommentableRow>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </CommentableRow>
+                      </React.Fragment>
+                    );
+                  })}
               </div>
             </div>
           </article>
         </div>
       </div>
 
-      {/* 2. Rationale */}
-      {(data.rationale || baseData?.rationale) && (
+      {rationale.length > 0 && (
         <div className={styles.section}>
           <h2 className={styles.sectionTitle}>
             <Info className={styles.icon} size={20} />
             Rationale & Design Decisions
           </h2>
           <div className={styles.epicList}>
-             <article className={styles.epicItem}>
-               <div className={styles.epicBody}>
-                 <ul className={styles.criteriaList}>
-                   {(data.rationale || []).map((r: string, i: number) => {
-                     const baseR = baseData?.rationale?.[i];
-                     const hasChanged = baseR && baseR !== r;
-                     return (
-                       <React.Fragment key={i}>
-                         {hasChanged && (
-                           <CommentableRow nodeId={nodeId || ''} jsonPath={`$.rationale[${i}]`} currentIteration={currentIteration} isStale={true}>
-                             <li className={styles.criteriaItem}>
-                               <CheckCircle2 size={16} className={styles.checkIcon} />
-                               <span className={styles.valueWrapper}>{baseR}</span>
-                             </li>
-                           </CommentableRow>
-                         )}
-                         <CommentableRow nodeId={nodeId || ''} jsonPath={`$.rationale[${i}]`} currentIteration={currentIteration} isRefined={!!baseR && hasChanged}>
-                           <li className={styles.criteriaItem}>
-                             <CheckCircle2 size={16} className={styles.checkIcon} />
-                             <span className={styles.valueWrapper}>{r}</span>
-                           </li>
-                         </CommentableRow>
-                       </React.Fragment>
-                     );
-                   })}
-                   {/* Orphaned base rationale */}
-                   {baseData?.rationale?.slice((data.rationale || []).length).map((r: string, i: number) => (
-                     <CommentableRow key={`stale-orphan-${i}`} nodeId={nodeId || ''} jsonPath={`$.rationale[${(data.rationale || []).length + i}]`} currentIteration={currentIteration} isStale={true}>
-                       <li className={styles.criteriaItem}>
-                         <CheckCircle2 size={16} className={styles.checkIcon} />
-                         <span className={styles.valueWrapper}>{r}</span>
-                       </li>
-                     </CommentableRow>
-                   ))}
-                 </ul>
-               </div>
-             </article>
+            {rationale.map((r: any, i: number) => {
+              const baseR = baseRationale.find((br: any) => br.rationale_id === r.rationale_id);
+              const hasChanged = baseR && JSON.stringify(baseR) !== JSON.stringify(r);
+              return (
+                <React.Fragment key={r.rationale_id || i}>
+                  {hasChanged && (
+                    <CommentableRow nodeId={nodeId || ''} jsonPath={`$.rationale[${i}]`} currentIteration={currentIteration} isStale={true}>
+                      <li className={styles.criteriaItem}>
+                        <CheckCircle2 size={16} className={styles.checkIcon} />
+                        <span className={styles.idBadge}>{baseR.rationale_id}</span>
+                        <span className={styles.valueWrapper}>{baseR.description}</span>
+                      </li>
+                    </CommentableRow>
+                  )}
+                  <CommentableRow nodeId={nodeId || ''} jsonPath={`$.rationale[${i}]`} currentIteration={currentIteration} isRefined={!!baseR && hasChanged}>
+                    <li className={styles.criteriaItem}>
+                      <CheckCircle2 size={16} className={styles.checkIcon} />
+                      <span className={styles.idBadge}>{r.rationale_id}</span>
+                      <span className={styles.valueWrapper}>{r.description}</span>
+                    </li>
+                  </CommentableRow>
+                </React.Fragment>
+              );
+            })}
           </div>
         </div>
       )}
@@ -573,10 +616,14 @@ const InterfaceRenderer: React.FC<{ data: any, baseData?: any, nodeId?: string, 
             const hasChanged = baseErr && JSON.stringify(baseErr) !== JSON.stringify(err);
 
             const renderError = (e: any, isStale = false, isRefined = false) => (
-              <CommentableRow nodeId={nodeId || ''} jsonPath={`$.error_codes[?(@.code=="${e.code}")]`} currentIteration={currentIteration} blockId={e.code} isStale={isStale} isRefined={isRefined}>
+              <CommentableRow nodeId={nodeId || ''} jsonPath={`$.error_codes[?(@.code=="${e.code}")]`} currentIteration={currentIteration} blockId={e.error_id || e.code} isStale={isStale} isRefined={isRefined}>
                 <article className={styles.epicItem} style={{ width: '100%' }}>
                   <h3 className={styles.criteriaTitle} style={{ fontSize: '15px' }}>
+                    {e.error_id && <span className={styles.idBadge} style={{ marginRight: '8px' }}>{e.error_id}</span>}
                     <span className={styles.idBadge}>{e.code}</span>
+                    {e.mapped_epic_id && (
+                      <span className={styles.mappingBadge} style={{ marginLeft: '8px' }}>{e.mapped_epic_id}</span>
+                    )}
                     <span className={`${styles.badge} ${styles['badge--primary']} ml-2`}>
                       {e.http_status}
                     </span>
@@ -646,6 +693,13 @@ const ModuleListRenderer: React.FC<{ data: any, baseData?: any, nodeId?: string,
           <span className={`${styles.epicTitle} ${styles.valueWrapper}`}>
             {mod.module_name}
           </span>
+          {mod.mapped_epic_ids && mod.mapped_epic_ids.length > 0 && (
+            <div className="flex flex-wrap gap-2 ml-auto">
+              {mod.mapped_epic_ids.map((eid: string) => (
+                <span key={eid} className={styles.mappingBadge}>{eid}</span>
+              ))}
+            </div>
+          )}
         </h3>
         
         <div className={styles.epicBody}>
@@ -711,11 +765,11 @@ const NonTechRenderer: React.FC<{ data: any, baseData?: any, nodeId?: string, cu
     { label: 'Budget', key: 'budget_constraints', icon: Briefcase, path: '$.budget_constraints' },
   ];
 
-  const renderSectionItems = (items: string[], path: string, isStale = false, isRefined = false) => (
+  const renderSectionItems = (items: any[], path: string, isStale = false, isRefined = false) => (
     <article className={styles.epicItem}>
       <div className={styles.epicBody}>
         <ul className={styles.criteriaList}>
-          {items.map((item: string, j: number) => (
+          {items.map((item: any, j: number) => (
             <CommentableRow 
               key={j} 
               nodeId={nodeId || ''} 
@@ -726,7 +780,11 @@ const NonTechRenderer: React.FC<{ data: any, baseData?: any, nodeId?: string, cu
             >
               <li className={styles.criteriaItem}>
                 <CheckCircle2 size={16} className={styles.checkIcon} />
-                <span className={styles.valueWrapper}>{item}</span>
+                {item.constraint_id && <span className={styles.idBadge} style={{ marginRight: '8px' }}>{item.constraint_id}</span>}
+                <span className={styles.valueWrapper}>{typeof item === 'object' ? item.description : item}</span>
+                {item.mapped_cons_id && (
+                  <span className={styles.mappingBadge} style={{ marginLeft: '8px' }}>{item.mapped_cons_id}</span>
+                )}
               </li>
             </CommentableRow>
           ))}
@@ -752,38 +810,8 @@ const NonTechRenderer: React.FC<{ data: any, baseData?: any, nodeId?: string, cu
               {i + 1}. {s.label}
             </h2>
             <div className={styles.epicList}>
-              {items.map((item: string, j: number) => {
-                const baseItem = baseItems?.[j];
-                const hasItemChanged = baseItem && baseItem !== item;
-
-                return (
-                  <React.Fragment key={j}>
-                    {hasItemChanged && (
-                      <CommentableRow nodeId={nodeId || ''} jsonPath={`${s.path}[${j}]`} currentIteration={currentIteration} isStale={true}>
-                        <li className={styles.criteriaItem}>
-                          <CheckCircle2 size={16} className={styles.checkIcon} />
-                          <span className={styles.valueWrapper}>{baseItem}</span>
-                        </li>
-                      </CommentableRow>
-                    )}
-                    <CommentableRow nodeId={nodeId || ''} jsonPath={`${s.path}[${j}]`} currentIteration={currentIteration} isRefined={!!baseItem && hasItemChanged}>
-                      <li className={styles.criteriaItem}>
-                        <CheckCircle2 size={16} className={styles.checkIcon} />
-                        <span className={styles.valueWrapper}>{item}</span>
-                      </li>
-                    </CommentableRow>
-                  </React.Fragment>
-                );
-              })}
-              {/* Orphaned base items */}
-              {baseItems?.slice(items.length).map((item: string, j: number) => (
-                <CommentableRow key={`stale-orphan-${j}`} nodeId={nodeId || ''} jsonPath={`${s.path}[${items.length + j}]`} currentIteration={currentIteration} isStale={true}>
-                  <li className={styles.criteriaItem}>
-                    <CheckCircle2 size={16} className={styles.checkIcon} />
-                    <span className={styles.valueWrapper}>{item}</span>
-                  </li>
-                </CommentableRow>
-              ))}
+              {hasChanged && renderSectionItems(baseItems, s.path, true, false)}
+              {renderSectionItems(items, s.path, false, hasChanged)}
             </div>
           </div>
         );
@@ -864,8 +892,8 @@ const EpicMappingRenderer: React.FC<{ data: any, baseData?: any, nodeId?: string
  * 8. Module Dependencies Renderer (sad_module_deps)
  */
 const ModuleDepsRenderer: React.FC<{ data: any, baseData?: any, nodeId?: string, currentIteration?: any }> = ({ data, baseData, nodeId, currentIteration }) => {
-  const dependencies = data.dependencies || [];
-  const baseDependencies = baseData ? (baseData.dependencies || []) : [];
+  const dependencies = data.dependency_graph || data.dependencies || [];
+  const baseDependencies = baseData ? (baseData.dependency_graph || baseData.dependencies || []) : [];
   
   const recommendedBuildOrder = data.recommended_build_order || [];
   const baseRecommendedBuildOrder = baseData ? (baseData.recommended_build_order || []) : [];
@@ -874,9 +902,9 @@ const ModuleDepsRenderer: React.FC<{ data: any, baseData?: any, nodeId?: string,
     <CommentableRow 
       key={`${dep.from_module}-${dep.to_module}-${isStale ? 'stale' : 'refined'}-${i}`} 
       nodeId={nodeId || ''} 
-      jsonPath={`$.dependencies[?(@.from_module=="${dep.from_module}" && @.to_module=="${dep.to_module}")]`} 
+      jsonPath={`$.dependency_graph[?(@.from_module=="${dep.from_module}" && @.to_module=="${dep.to_module}")]`} 
       currentIteration={currentIteration} 
-      blockId={dep.id}
+      blockId={dep.dep_id || dep.id}
       isStale={isStale}
       isRefined={isRefined}
     >
@@ -890,15 +918,13 @@ const ModuleDepsRenderer: React.FC<{ data: any, baseData?: any, nodeId?: string,
           width: '100%'
         }}>
           <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '8px' }}>
+            {dep.dep_id && <span className={styles.idBadge}>{dep.dep_id}</span>}
             <span className={styles.idBadge}>{dep.from_module}</span>
             <ChevronRight size={14} className="opacity-40" style={{ flexShrink: 0 }} />
             <span className={styles.valueWrapper} style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>
               {dep.to_module}
             </span>
           </div>
-          <span className={`${styles.badge} ${styles['badge--primary']}`} style={{ flexShrink: 0, marginLeft: '12px' }}>
-            {dep.dependency_type}
-          </span>
         </h3>
         <div className={styles.epicBody}>
           <p className={styles.epicDesc}>{dep.description}</p>

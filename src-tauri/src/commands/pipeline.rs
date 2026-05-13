@@ -89,6 +89,9 @@ pub async fn run_pipeline(
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "Project not found".to_string())?;
 
+    // [Safety] 선행 노드 정합성 검사 및 컨텍스트 동기화 (JIT Refresh)
+    crate::services::dag_engine::verify_and_refresh_context(&*pool, &project_id, &node).await?;
+
     // 2. 노드 상태 업데이트: IN_PROGRESS
     sqlx::query(
         "UPDATE document_node SET node_state = 'IN_PROGRESS', last_action = '작업 준비 중...', api_error_message = NULL, updated_at = ? WHERE node_id = ?"

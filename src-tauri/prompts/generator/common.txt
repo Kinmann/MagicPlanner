@@ -56,8 +56,22 @@
   - **ELM-XXX**: IA 화면 요소 (예: ELM-001)
   - **CMP-XXX**: Wireframe 컴포넌트 (예: CMP-001)
   - **FLOW-XXX**: 사용자 플로우 노드 (예: FLOW-001)
+  - **EDGE-XXX**: 사용자 플로우 엣지 (예: EDGE-001)
+  - **REL-XXX**: ERD/데이터 관계 (예: REL-001)
+  - **ERR-XXX**: 인터페이스 에러 코드 (예: ERR-001)
+  - **DEP-XXX**: 모듈 간 의존성 (예: DEP-001)
+  - **METRIC-XXX**: 비즈니스 성공 지표 (예: METRIC-001)
+  - **CONS-XXX**: 글로벌 제약 사항 (예: CONS-001)
+  - **RATIO-XXX**: 기술 선정 근거/Rationale (예: RATIO-001)
+  - **POL-XXX**: 접근 제어 정책 (예: POL-001)
+  - **TECH-XXX**: 구체적 기술 스택 아이템 (예: TECH-001)
   - **TC-XXX**: 테스트 케이스 (예: TC-001)
   - **REQ-XXX**: 비즈니스 요구사항 (예: REQ-001)
+
+- **계층적 식별자 간소화 원칙 (Simplified Canonical ID)**: 
+  - 상위 블록(예: `EPIC-XXX`, `FUNC-XXX`)이 고유 ID를 가지고 있는 경우, 그 하위에 속한 세부 요소(예: 인수 조건, 로직 단계 등)는 별도의 ID를 부여하지 않고 상위 ID와 JSON Path를 조합하여 식별함.
+  - 단, 루트 레벨에서 관리되는 독립적인 배열 항목(예: 제약 사항 리스트, 에러 코드 리스트 등)은 반드시 고유 ID를 포함한 객체 형태로 작성하여 개별 추적성을 확보해야 함.
+  - 기존의 단순 문자열 배열(`Vec<String>`)은 추적성 강화를 위해 ID와 설명 필드를 갖춘 객체 배열(`Vec<{id, description}>`)로 대체되었으므로 스키마 규격을 엄격히 준수할 것.
 
 - **SSOT 기반 매핑 강제**: 모든 후행 산출물은 반드시 [Source Documents]에 정의된 상위 식별자를 참조(`mapped_xxx_id`)하여 수직적 추적성을 확보해야 함. 
   - 예: API Spec은 FSD의 `FUNC-XXX`를 참조하고, IA는 User Flow의 `FLOW-XXX`를 참조함.

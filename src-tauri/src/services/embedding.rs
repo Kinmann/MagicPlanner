@@ -507,6 +507,8 @@ pub fn extract_artifact_ids_from_value(val: &serde_json::Value) -> HashSet<Strin
                 // 1. 명시적인 ID 필드인 경우 수집
                 if k == "id" || k == "screen_id" || k == "table_id" || k == "module_id" || k == "api_id" || 
                    k == "artifact_id" || k == "func_id" || k == "role_id" || k == "table_name" || k == "entity_name" ||
+                   k == "rel_id" || k == "edge_id" || k == "error_id" || k == "dep_id" || k == "metric_id" ||
+                   k == "constraint_id" || k == "policy_id" || k == "rationale_id" || k == "tech_id" ||
                    k.starts_with("mapped_") {
                     if let Some(s) = v.as_str() {
                         ids.insert(s.to_uppercase());

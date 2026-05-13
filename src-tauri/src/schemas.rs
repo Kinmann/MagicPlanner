@@ -92,6 +92,8 @@ pub struct UserFlowNode {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct UserFlowEdge {
+    #[schemars(regex(pattern = "^EDGE-[0-9]{3}$"))]
+    pub edge_id: String,
     pub from_id: String,
     pub to_id: String,
     pub condition: String,
@@ -171,6 +173,8 @@ pub struct ErdTable {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ErdRelationship {
+    #[schemars(regex(pattern = "^REL-[0-9]{3}$"))]
+    pub rel_id: String,
     pub source_table: String,
     pub target_table: String,
     pub rel_type: String, // mapped from "type"
@@ -438,20 +442,45 @@ pub fn get_schema_for_node(node_type: &str) -> Option<serde_json::Value> {
 // 1-A: Context & Goal Builder
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
+pub struct GprdSuccessMetric {
+    #[schemars(regex(pattern = "^METRIC-[0-9]{3}$"))]
+    pub metric_id: String,
+    pub description: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct GprdGlobalConstraint {
+    #[schemars(regex(pattern = "^CONS-[0-9]{3}$"))]
+    pub constraint_id: String,
+    pub description: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct GlobalConstraint {
+    #[schemars(regex(pattern = "^CONS-[0-9]{3}$"))]
+    pub constraint_id: String,
+    pub description: String,
+    pub mapped_cons_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub struct GprdContextGoalSchema {
     pub metadata: GenesisPrdMetadata,
     pub product_vision: String,
     pub target_market: String,
-    pub success_metrics: Vec<String>,
+    pub success_metrics: Vec<GprdSuccessMetric>,
     pub global_constraints: GprdGlobalConstraints,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct GprdGlobalConstraints {
-    pub compliance: Vec<String>,
-    pub performance: Vec<String>,
-    pub legacy_integrations: Vec<String>,
+    pub compliance: Vec<GprdGlobalConstraint>,
+    pub performance: Vec<GprdGlobalConstraint>,
+    pub legacy_integrations: Vec<GprdGlobalConstraint>,
 }
 
 // 1-B: Capability & Actor Brainstormer
@@ -510,7 +539,7 @@ pub struct GenesisPrdMetadata {
 pub struct GenesisPrdBusinessContext {
     pub product_vision: String,
     pub target_market: String,
-    pub success_metrics: Vec<String>,
+    pub success_metrics: Vec<GprdSuccessMetric>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -538,14 +567,16 @@ pub struct GenesisPrdEpic {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct GenesisPrdGlobalConstraints {
-    pub compliance: Vec<String>,
-    pub performance: Vec<String>,
-    pub legacy_integrations: Option<Vec<String>>,
+    pub compliance: Vec<GprdGlobalConstraint>,
+    pub performance: Vec<GprdGlobalConstraint>,
+    pub legacy_integrations: Option<Vec<GprdGlobalConstraint>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct GenesisPrdFrontend {
+    #[schemars(regex(pattern = "^TECH-[0-9]{3}$"))]
+    pub tech_id: String,
     pub framework: String, // enum: ["REACT", "NEXT_JS", "VUE", "SVELTE"]
     pub state_management: String,
     pub ui_library: Option<String>,
@@ -554,6 +585,8 @@ pub struct GenesisPrdFrontend {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct GenesisPrdBackend {
+    #[schemars(regex(pattern = "^TECH-[0-9]{3}$"))]
+    pub tech_id: String,
     pub runtime: String, // enum: ["NODE_JS", "PYTHON", "GO", "RUST"]
     pub framework: String,
     pub language_version: Option<String>,
@@ -562,6 +595,8 @@ pub struct GenesisPrdBackend {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct GenesisPrdDatabase {
+    #[schemars(regex(pattern = "^TECH-[0-9]{3}$"))]
+    pub tech_id: String,
     pub primary: String,
     pub vector_db: String,
     pub caching: Option<String>, // enum: ["REDIS", "MEMCACHED", "NONE"]
@@ -570,6 +605,8 @@ pub struct GenesisPrdDatabase {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct GenesisPrdInfrastructure {
+    #[schemars(regex(pattern = "^TECH-[0-9]{3}$"))]
+    pub tech_id: String,
     pub platform: String, // enum: ["AWS", "AZURE", "GCP", "ON_PREMISE"]
     pub containerization: String, // enum: ["DOCKER", "KUBERNETES", "NONE"]
     pub ci_cd_tool: Option<String>,
@@ -578,6 +615,8 @@ pub struct GenesisPrdInfrastructure {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct GenesisPrdAiModelSpec {
+    #[schemars(regex(pattern = "^TECH-[0-9]{3}$"))]
+    pub tech_id: String,
     pub model_family: String,
     pub version: String,
     /// Range: 0.0 to 2.0 (Higher values like 1.0+ for more creativity)
@@ -588,6 +627,8 @@ pub struct GenesisPrdAiModelSpec {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct GenesisPrdInterfaceProtocols {
+    #[schemars(regex(pattern = "^TECH-[0-9]{3}$"))]
+    pub tech_id: String,
     pub api_type: String, // enum: ["REST", "GRAPHQL", "GRPC"]
     pub auth_protocol: String, // enum: ["OAUTH2", "JWT", "SAML"]
 }
@@ -627,6 +668,7 @@ pub struct SadEntity {
     pub entity_name: String,
     pub description: String,
     pub attributes: Vec<SadEntityAttribute>,
+    pub mapped_epic_ids: Vec<String>,
 }
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -640,10 +682,13 @@ pub struct SadEntityAttribute {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct SadRelationship {
+    #[schemars(regex(pattern = "^REL-[0-9]{3}$"))]
+    pub rel_id: String,
     pub from_entity: String,
     pub to_entity: String,
     pub relationship_type: String,
     pub description: String,
+    pub mapped_epic_id: Option<String>,
 }
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -656,9 +701,21 @@ pub struct SadCoreErdSchema {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct SadRole {
+    #[schemars(regex(pattern = "^ROLE-[0-9]{3}$"))]
+    pub role_id: String,
     pub role_name: String,
     pub description: String,
     pub permissions: Vec<String>,
+    pub mapped_role_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct SadAccessPolicy {
+    #[schemars(regex(pattern = "^POL-[0-9]{3}$"))]
+    pub policy_id: String,
+    pub description: String,
+    pub mapped_epic_id: Option<String>,
 }
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -666,17 +723,20 @@ pub struct SadAuthRbacSchema {
     pub auth_method: String,
     pub token_strategy: String,
     pub roles: Vec<SadRole>,
-    pub access_policies: Vec<String>,
+    pub access_policies: Vec<SadAccessPolicy>,
 }
 
 // 3. Interface & Error
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct SadErrorCode {
+    #[schemars(regex(pattern = "^ERR-[0-9]{3}$"))]
+    pub error_id: String,
     pub code: String,
     pub http_status: i32,
     pub message: String,
     pub description: String,
+    pub mapped_epic_id: Option<String>,
 }
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -688,28 +748,111 @@ pub struct SadInterfaceErrorSchema {
 }
 
 // 4. Tech Stack
+// (SadTechItem is removed to match GPRD structure)
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct SadTechRationale {
+    #[schemars(regex(pattern = "^RATIO-[0-9]{3}$"))]
+    pub rationale_id: String,
+    pub description: String,
+    pub mapped_tech_id: Option<String>,
+}
+
+// SAD 전용 기술 스택 구조체 (매핑 필드 포함)
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct SadTechFrontend {
+    #[schemars(regex(pattern = "^TECH-[0-9]{3}$"))]
+    pub tech_id: String,
+    pub framework: String,
+    pub state_management: String,
+    pub ui_library: Option<String>,
+    pub mapped_tech_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct SadTechBackend {
+    #[schemars(regex(pattern = "^TECH-[0-9]{3}$"))]
+    pub tech_id: String,
+    pub runtime: String,
+    pub framework: String,
+    pub language_version: Option<String>,
+    pub mapped_tech_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct SadTechDatabase {
+    #[schemars(regex(pattern = "^TECH-[0-9]{3}$"))]
+    pub tech_id: String,
+    pub primary: String,
+    pub vector_db: String,
+    pub caching: Option<String>,
+    pub mapped_tech_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct SadTechInfrastructure {
+    #[schemars(regex(pattern = "^TECH-[0-9]{3}$"))]
+    pub tech_id: String,
+    pub platform: String,
+    pub containerization: String,
+    pub ci_cd_tool: Option<String>,
+    pub mapped_tech_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct SadTechAiModelSpec {
+    #[schemars(regex(pattern = "^TECH-[0-9]{3}$"))]
+    pub tech_id: String,
+    pub model_family: String,
+    pub version: String,
+    #[schemars(range(min = 0.0, max = 2.0))]
+    pub temperature: Option<f64>,
+    pub mapped_tech_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct SadTechInterfaceProtocols {
+    #[schemars(regex(pattern = "^TECH-[0-9]{3}$"))]
+    pub tech_id: String,
+    pub api_type: String,
+    pub auth_protocol: String,
+    pub mapped_tech_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct SadTechStack {
+    pub frontend: SadTechFrontend,
+    pub backend: SadTechBackend,
+    pub database: SadTechDatabase,
+    pub infrastructure: SadTechInfrastructure,
+    pub ai_model_spec: SadTechAiModelSpec,
+    pub interface_protocols: SadTechInterfaceProtocols,
+}
+
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct SadTechStackSchema {
-    pub frontend: String,
-    pub backend: String,
-    pub database: String,
-    pub framework: String,
-    pub infrastructure: String,
-    pub ci_cd: String,
-    pub monitoring: String,
-    pub rationale: Vec<String>,
+    pub tech_stack: SadTechStack,
+    pub rationale: Vec<SadTechRationale>,
 }
 
 // 5. Non-technical
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct SadNonTechSchema {
-    pub legal_constraints: Vec<String>,
-    pub compliance_requirements: Vec<String>,
-    pub performance_targets: Vec<String>,
-    pub scalability_requirements: Vec<String>,
-    pub budget_constraints: Vec<String>,
+    pub legal_constraints: Vec<GlobalConstraint>,
+    pub compliance_requirements: Vec<GlobalConstraint>,
+    pub performance_targets: Vec<GlobalConstraint>,
+    pub scalability_requirements: Vec<GlobalConstraint>,
+    pub budget_constraints: Vec<GlobalConstraint>,
 }
 
 // v2: SAD Batch Wrapper Schemas
@@ -746,6 +889,7 @@ pub struct SadModuleEntry {
     pub description: String,
     pub core_responsibility: String,
     pub priority_order: i32,
+    pub mapped_epic_ids: Vec<String>,
 }
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -772,6 +916,8 @@ pub struct SadEpicMappingSchema {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct SadModuleDependency {
+    #[schemars(regex(pattern = "^DEP-[0-9]{3}$"))]
+    pub dep_id: String,
     #[schemars(regex(pattern = "^MOD-[0-9]{3}$"))]
     pub from_module: String,
     #[schemars(regex(pattern = "^MOD-[0-9]{3}$"))]

@@ -150,19 +150,25 @@ export const BusinessStrategyRenderer = ({ content, baseContent, nodeId, current
             <article className={styles.epicItem}>
               <div className={styles.epicBody}>
                 <ul className={styles.criteriaList}>
-                  {hasMetricsChanged && baseSuccessMetrics.map((metric: string, idx: number) => (
+                  {hasMetricsChanged && baseSuccessMetrics.map((metric: any, idx: number) => (
                     <CommentableRow key={`stale-${idx}`} nodeId={nodeId || ''} jsonPath={`$.success_metrics[${idx}]`} currentIteration={currentIteration} isStale={true}>
                       <li className={styles.criteriaItem}>
                         <CheckCircle2 size={16} className={styles.checkIcon} />
-                        <span className={styles.valueWrapper}>{metric}</span>
+                        <span className={styles.valueWrapper}>
+                          {metric.metric_id && <span className={styles.idBadge} style={{ marginRight: '8px' }}>{metric.metric_id}</span>}
+                          {typeof metric === 'object' ? metric.description : metric}
+                        </span>
                       </li>
                     </CommentableRow>
                   ))}
-                  {successMetrics.map((metric: string, idx: number) => (
+                  {successMetrics.map((metric: any, idx: number) => (
                     <CommentableRow key={`refined-${idx}`} nodeId={nodeId || ''} jsonPath={`$.success_metrics[${idx}]`} currentIteration={currentIteration} isRefined={hasMetricsChanged}>
                       <li className={styles.criteriaItem}>
                         <CheckCircle2 size={16} className={styles.checkIcon} />
-                        <span className={styles.valueWrapper}>{metric}</span>
+                        <span className={styles.valueWrapper}>
+                          {metric.metric_id && <span className={styles.idBadge} style={{ marginRight: '8px' }}>{metric.metric_id}</span>}
+                          {typeof metric === 'object' ? metric.description : metric}
+                        </span>
                       </li>
                     </CommentableRow>
                   ))}
@@ -211,11 +217,14 @@ export const BusinessStrategyRenderer = ({ content, baseContent, nodeId, current
                         <Shield size={16} /> Compliance Standards
                       </h4>
                       <ul className={styles.criteriaList}>
-                        {constraints.compliance.map((c: string, i: number) => (
+                        {constraints.compliance.map((c: any, i: number) => (
                           <CommentableRow key={i} nodeId={nodeId || ''} jsonPath={`$.constraints.compliance[${i}]`} currentIteration={currentIteration} isRefined={hasConstraintsChanged}>
                             <li className={styles.criteriaItem}>
                               <ShieldCheck size={14} className={styles.checkIcon} />
-                              <span className={styles.valueWrapper}>{c}</span>
+                              <span className={styles.valueWrapper}>
+                                {c.constraint_id && <span className={styles.idBadge} style={{ marginRight: '8px' }}>{c.constraint_id}</span>}
+                                {typeof c === 'object' ? c.description : c}
+                              </span>
                             </li>
                           </CommentableRow>
                         ))}
@@ -229,19 +238,25 @@ export const BusinessStrategyRenderer = ({ content, baseContent, nodeId, current
                         <Zap size={16} /> System Constraints
                       </h4>
                       <ul className={styles.criteriaList}>
-                        {constraints.performance?.map((p: string, i: number) => (
+                        {constraints.performance?.map((p: any, i: number) => (
                           <CommentableRow key={`p-${i}`} nodeId={nodeId || ''} jsonPath={`$.constraints.performance[${i}]`} currentIteration={currentIteration} isRefined={hasConstraintsChanged}>
                             <li className={styles.criteriaItem}>
                               <CheckCircle2 size={14} className={styles.checkIcon} />
-                              <span className={styles.valueWrapper}><strong>Performance:</strong> {p}</span>
+                              <span className={styles.valueWrapper}>
+                                {p.constraint_id && <span className={styles.idBadge} style={{ marginRight: '8px' }}>{p.constraint_id}</span>}
+                                <strong>Performance:</strong> {typeof p === 'object' ? p.description : p}
+                              </span>
                             </li>
                           </CommentableRow>
                         ))}
-                        {constraints.legacy_integrations?.map((l: string, i: number) => (
+                        {constraints.legacy_integrations?.map((l: any, i: number) => (
                           <CommentableRow key={`l-${i}`} nodeId={nodeId || ''} jsonPath={`$.constraints.legacy_integrations[${i}]`} currentIteration={currentIteration} isRefined={hasConstraintsChanged}>
                             <li className={styles.criteriaItem}>
                               <Box size={14} className="text-secondary opacity-60" />
-                              <span className={styles.valueWrapper}><strong>Legacy:</strong> {l}</span>
+                              <span className={styles.valueWrapper}>
+                                {l.constraint_id && <span className={styles.idBadge} style={{ marginRight: '8px' }}>{l.constraint_id}</span>}
+                                <strong>Legacy:</strong> {typeof l === 'object' ? l.description : l}
+                              </span>
                             </li>
                           </CommentableRow>
                         ))}
@@ -496,19 +511,22 @@ export const ArchitectureSchemaRenderer = ({ content, baseContent, nodeId, curre
                               gap: '8px',
                               paddingLeft: '14px'
                             }}>
-                              {Object.entries(item.data || {}).map(([key, val]: [string, any], kIdx) => (
-                                <CommentableRow key={kIdx} nodeId={nodeId || ''} jsonPath={`$.tech_stack.${item.key}.${key}`} currentIteration={currentIteration} blockId={key}>
-                                  <div className={styles.kvRow}>
-                                    <Zap size={12} style={{ opacity: 0.3, flexShrink: 0, marginTop: '2px' }} />
-                                    <span style={{ fontSize: '13px', opacity: 0.8, minWidth: '160px' }}>
-                                      {key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}:
-                                    </span>
-                                    <span className={`${styles.valueWrapper} text-primary`} style={{ fontSize: '13px', fontWeight: '700' }}>
-                                      {typeof val === 'object' ? JSON.stringify(val) : String(val)}
-                                    </span>
-                                  </div>
-                                </CommentableRow>
-                              ))}
+                              {Object.entries(item.data || {}).map(([key, val]: [string, any], kIdx) => {
+                                if (key === 'mapped_tech_id') return null;
+                                return (
+                                  <CommentableRow key={kIdx} nodeId={nodeId || ''} jsonPath={`$.tech_stack.${item.key}.${key}`} currentIteration={currentIteration} blockId={key}>
+                                    <div className={styles.kvRow}>
+                                      <Zap size={12} style={{ opacity: 0.3, flexShrink: 0, marginTop: '2px' }} />
+                                      <span style={{ fontSize: '13px', opacity: 0.8, minWidth: '160px' }}>
+                                        {key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}:
+                                      </span>
+                                      <span className={`${styles.valueWrapper} text-primary`} style={{ fontSize: '13px', fontWeight: '700' }}>
+                                        {typeof val === 'object' ? JSON.stringify(val) : String(val)}
+                                      </span>
+                                    </div>
+                                  </CommentableRow>
+                                );
+                              })}
                             </div>
                           </div>
                         </CommentableRow>
@@ -1162,8 +1180,9 @@ export const ModuleUserFlowRenderer = ({ content, baseContent, nodeId, currentIt
                     {outboundEdges.map((edge: any, j: number) => {
                       const targetNode = nodesToRender.find((n: any) => n.id === edge.to_id);
                       return (
-                        <CommentableRow key={j} nodeId={nodeId || ''} jsonPath={`$.edges[?(@.from_id=='${node.id}' && @.to_id=='${edge.to_id}')]`} currentIteration={currentIteration} isStale={isStale} isRefined={isRefined}>
+                        <CommentableRow key={edge.edge_id || j} nodeId={nodeId || ''} jsonPath={`$.edges[?(@.from_id=='${node.id}' && @.to_id=='${edge.to_id}')]`} currentIteration={currentIteration} blockId={edge.edge_id} isStale={isStale} isRefined={isRefined}>
                           <div className="flex items-center gap-1">
+                            {edge.edge_id && <span className={styles.idBadge} style={{ fontSize: '9px', padding: '1px 3px' }}>{edge.edge_id}</span>}
                             {edge.condition && (
                               <span style={{ 
                                 fontSize: '10px', 
@@ -1277,6 +1296,7 @@ export const ModuleErdRenderer = ({ content, baseContent, nodeId, currentIterati
     }));
 
     const relations = (c.relationships || []).map((rel: any) => ({
+      rel_id: rel.rel_id,
       from_entity: rel.from_entity || rel.source_table,
       to_entity: rel.to_entity || rel.target_table,
       relationship_type: rel.relationship_type || rel.rel_type,
@@ -1347,9 +1367,10 @@ export const ModuleErdRenderer = ({ content, baseContent, nodeId, currentIterati
   );
 
   const renderErdRelation = (rel: any, i: number, isStale = false, isRefined = false) => (
-    <CommentableRow key={`${i}-${isStale ? 'stale' : 'refined'}`} nodeId={nodeId || ''} jsonPath={`$.relationships[${i}]`} currentIteration={currentIteration} isStale={isStale} isRefined={isRefined}>
+    <CommentableRow key={`${rel.rel_id || i}-${isStale ? 'stale' : 'refined'}`} nodeId={nodeId || ''} jsonPath={`$.relationships[${i}]`} currentIteration={currentIteration} blockId={rel.rel_id} isStale={isStale} isRefined={isRefined}>
       <div className={styles.minimalRelRow}>
         <div className={styles.relNames}>
+          {rel.rel_id && <span className={styles.idBadge} style={{ marginRight: '8px' }}>{rel.rel_id}</span>}
           <span className={styles.textPrimary}>{rel.from_entity}</span>
           <ChevronRight size={14} className={styles.opacity40} />
           <span className={styles.textSecondary}>{rel.to_entity}</span>

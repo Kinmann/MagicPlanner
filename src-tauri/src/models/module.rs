@@ -13,6 +13,8 @@ pub struct GlobalContext {
     pub version: i32,
     pub created_at: String,
     pub updated_at: String,
+    #[sqlx(default)]
+    pub is_deleted: i32,
 }
 
 /// 프로젝트 내 개별 기능 모듈 (SAD Module Split에서 생성)
@@ -31,4 +33,6 @@ pub struct LocalModule {
     pub display_order: i32,
     pub created_at: String,
     pub updated_at: String,
+    #[sqlx(default)]
+    pub is_deleted: i32,
 }

@@ -24,30 +24,49 @@ Genesis PRD를 기반으로 시스템 전체에서 사용할 기술 스택을 �
 [출력 형식 가이드]
 ```json
 {
-  "frontend": {
-    "language": "...",
-    "framework": "...",
-    "state_management": "...",
-    "styling": "...",
-    "ui_library": "..."
+  "tech_stack": {
+    "frontend": {
+      "tech_id": "TECH-001",
+      "framework": "React (v18.x)",
+      "state_management": "React Query (v5.x)",
+      "ui_library": "S Tailwind CSS"
+    },
+    "backend": {
+      "tech_id": "TECH-002",
+      "runtime": "Rust (v1.75+)",
+      "framework": "Tauri / Axum",
+      "language_version": "Edition 2021"
+    },
+    "database": {
+      "tech_id": "TECH-003",
+      "primary": "SQLite (with sqlite-vec)",
+      "vector_db": "Native Vector Search",
+      "caching": "NONE"
+    },
+    "infrastructure": {
+      "tech_id": "TECH-004",
+      "platform": "Desktop (Windows/macOS)",
+      "containerization": "NONE",
+      "ci_cd_tool": "GitHub Actions"
+    },
+    "ai_model_spec": {
+      "tech_id": "TECH-005",
+      "model_family": "Gemini 1.5 Pro",
+      "version": "latest",
+      "temperature": 0.7
+    },
+    "interface_protocols": {
+      "tech_id": "TECH-006",
+      "api_type": "REST (Local IPC)",
+      "auth_protocol": "NONE"
+    }
   },
-  "backend": {
-    "language": "...",
-    "framework": "...",
-    "database_client": "...",
-    "auth_library": "...",
-    "api_type": "..."
-  },
-  "database": {
-    "rdb": "...",
-    "nosql": "...",
-    "cache": "..."
-  },
-  "infra": {
-    "cloud_provider": "...",
-    "container": "...",
-    "ci_cd": "..."
-  }
+  "rationale": [
+    {
+      "rationale_id": "RATIO-001",
+      "description": "데스크톱 앱의 성능과 보안을 위해 Rust/Tauri 기반의 로컬 런타임을 선정함."
+    }
+  ]
 }
 ```
 

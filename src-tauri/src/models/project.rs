@@ -53,6 +53,9 @@ pub struct DocumentNode {
     #[serde(default)]
     #[sqlx(default)]
     pub is_locked: bool,
+    #[serde(default)]
+    #[sqlx(default)]
+    pub is_deleted: i32,
 }
 
 /// 생성 반복(iteration) 결과 - 초안 + 평가 점수
@@ -71,4 +74,6 @@ pub struct GenerationIteration {
     pub updated_at: String,
     #[sqlx(default)]
     pub is_archived: bool,
+    #[sqlx(default)]
+    pub is_deleted: i32,
 }

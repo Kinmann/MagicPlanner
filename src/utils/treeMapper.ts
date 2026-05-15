@@ -25,13 +25,15 @@ const calculateFolderStatus = (items: TreeItem[]): 'Pending' | 'Active' | 'Compl
     s === 'Active' || 
     s === 'REFINING' || 
     s === 'READY' || 
-    s === 'PAUSED_HITL'
+    s === 'PAUSED_HITL' ||
+    s === 'REVIEW_PENDING' ||
+    s === 'STALE'
   );
   
   if (isActive) return 'Active';
 
   // If all children are completed, the folder is Completed
-  const isAllCompleted = nodeStates.every(s => s === 'COMPLETED' || s === 'Completed');
+  const isAllCompleted = nodeStates.every(s => s === 'COMPLETED' || s === 'Completed' || s === 'REVIEWED');
   if (isAllCompleted) return 'Completed';
 
   return 'Pending';

@@ -357,6 +357,7 @@ pub fn run() {
             commands::comment::migrate_comment_paths,
             commands::refinement::migrate_canonical_ids_command,
             commands::refinement::migrate_artifact_mappings,
+            commands::refinement::cancel_refinement_update,
             commands::node::archive_all_non_confirmed_iterations,
         ])
         .plugin(tauri_plugin_dialog::init())

@@ -107,6 +107,7 @@ interface RefinementState {
   approveValidation: (projectId: string) => Promise<void>;
   confirmTaintCascade: (projectId: string) => Promise<void>;
   finalizeRefinement: (projectId: string) => Promise<void>;
+  cancelRefinement: (projectId: string) => Promise<void>;
   reset: () => void;
   setMode: (mode: 'PROPERTIES' | 'REFINEMENT') => void;
   addMessage: (message: Omit<RefinementMessage, 'id' | 'timestamp'>) => void;
@@ -397,6 +398,30 @@ export const useRefinementStore = create<RefinementState>((set, get) => ({
         content: 'Refinement session finalized. All changes have been acknowledged and synced.'
       });
       // 갱신된 노드 상태 반영
+      useProjectStore.getState().fetchNodes(projectId);
+    } catch (err: any) {
+      set({ error: err.toString() });
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  cancelRefinement: async (projectId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      await invoke('cancel_refinement_update', { projectId });
+      set({ 
+        step: 'IDLE',
+        intent: null,
+        taintCascadeResult: null,
+        targetNodes: [],
+        messages: []
+      });
+      get().addMessage({
+        role: 'assistant',
+        type: 'success',
+        content: 'Refinement session cancelled and rolled back successfully.'
+      });
       useProjectStore.getState().fetchNodes(projectId);
     } catch (err: any) {
       set({ error: err.toString() });

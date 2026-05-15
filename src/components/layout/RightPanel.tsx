@@ -22,7 +22,7 @@ export const RightPanel: React.FC = () => {
   const { nodes, currentProject } = useProjectStore();
   const { 
     messages, mode, setMode, isLoading, step, requestText, setRequestText,
-    startAnalysis, confirmRouting, approveValidation, confirmTaintCascade, finalizeRefinement,
+    startAnalysis, confirmRouting, approveValidation, confirmTaintCascade, finalizeRefinement, cancelRefinement,
     comments, selectedCommentIds, toggleComment, reset, statusMessages,
     isCommentsListVisible, toggleCommentsList, fetchComments, initListeners
   } = useRefinementStore();
@@ -104,6 +104,7 @@ export const RightPanel: React.FC = () => {
             approveValidation={approveValidation}
             confirmTaintCascade={confirmTaintCascade}
             finalizeRefinement={finalizeRefinement}
+            cancelRefinement={cancelRefinement}
             isCommentsListVisible={isCommentsListVisible}
             toggleCommentsList={toggleCommentsList}
             targetNodes={useRefinementStore.getState().targetNodes}
@@ -242,7 +243,7 @@ const PropertiesView = ({ selectedNode }: any) => {
 const RefinementView = ({ 
   messages, scrollRef, isLoading, step, requestText, setRequestText, 
   onSend, onReset, projectId, comments, selectedCommentIds, toggleComment,
-  statusMessages, confirmRouting, approveValidation, confirmTaintCascade, finalizeRefinement,
+  statusMessages, confirmRouting, approveValidation, confirmTaintCascade, finalizeRefinement, cancelRefinement,
   isCommentsListVisible, toggleCommentsList,
   targetNodes, taintCascadeResult
 }: any) => {
@@ -341,8 +342,19 @@ const RefinementView = ({
           <div className={styles.inputActions}>
             <span className={styles.tokens}>~2.4k context</span>
             <div className="flex gap-2">
-              {step !== 'IDLE' && step !== 'INPUT' && (
-                <Button variant="ghost" size="sm" onClick={onReset}><Trash2 size={14} /></Button>
+              {step !== 'IDLE' && step !== 'INPUT' && step !== 'SUCCESS' && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => {
+                    if (confirm('모든 진행 중인 수정을 취소하고 이전 상태로 롤백하시겠습니까?')) {
+                      cancelRefinement(projectId);
+                    }
+                  }}
+                  title="Cancel and Rollback Refinement"
+                >
+                  <RotateCcw size={14} className="text-rose-500" />
+                </Button>
               )}
               <Button 
                 size="sm" 

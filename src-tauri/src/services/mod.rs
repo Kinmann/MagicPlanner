@@ -11,6 +11,7 @@ pub mod artifact_mapping;
 pub mod pipeline;
 pub mod approval;
 pub mod module_service;
+pub mod refinement_rollback;
 
 pub use gemini::*;
 pub use node_query::*;

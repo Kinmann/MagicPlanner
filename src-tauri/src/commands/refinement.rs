@@ -10,8 +10,10 @@ use crate::services::taint_cascade_service::{apply_taint_cascade_logic, confirm_
 use crate::services::patch_service::generate_and_apply_patch_logic;
 use crate::services::refinement_validation::{validate_refinement_node_logic, confirm_node_review_logic, finalize_refinement_update_logic};
 use crate::services::artifact_mapping::{migrate_canonical_ids_command_logic, migrate_artifact_mappings_logic};
+use crate::services::refinement_rollback::cancel_refinement_update_logic;
 
 #[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TaintCascadePayload {
     pub api_key: String,
     pub project_id: String,
@@ -125,4 +127,12 @@ pub async fn migrate_artifact_mappings(
     pool: tauri::State<'_, SqlitePool>,
 ) -> Result<String, String> {
     migrate_artifact_mappings_logic(app_handle, pool).await
+}
+#[tauri::command]
+pub async fn cancel_refinement_update(
+    app_handle: tauri::AppHandle,
+    pool: tauri::State<'_, SqlitePool>,
+    project_id: String,
+) -> Result<(), String> {
+    cancel_refinement_update_logic(&app_handle, &pool, &project_id).await
 }

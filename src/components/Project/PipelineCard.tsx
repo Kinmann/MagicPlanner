@@ -38,7 +38,7 @@ const PipelineCard: React.FC<PipelineCardProps> = ({
   const [isEditingMax, setIsEditingMax] = useState(false);
   const [tempMax, setTempMax] = useState(node.max_iterations);
 
-  const { runNode, stopNode, resumeNode, handleHITLAction, updateMaxIterations } = useProjectStore(useShallow(state => ({
+  const { runNode, stopNode, resumeNode, handleHITLAction, updateMaxIterations, confirmReview } = useProjectStore(useShallow(state => ({
     runNode: state.runNode,
     stopNode: state.stopNode,
     resumeNode: state.resumeNode,

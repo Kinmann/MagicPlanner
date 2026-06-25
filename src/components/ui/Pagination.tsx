@@ -16,7 +16,7 @@ export const Pagination: React.FC<PaginationProps> = ({
   onPageChange,
   className = ''
 }) => {
-  const pages = [];
+  const pages: (number | string)[] = [];
   for (let i = 1; i <= totalPages; i++) {
     if (
       i === 1 || 

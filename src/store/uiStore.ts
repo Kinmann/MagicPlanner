@@ -57,7 +57,7 @@ interface UIState {
 
   // Layout Actions
   toggleSidebar: () => void;
-  toggleRightPanel: () => void;
+  toggleRightPanel: (open?: any) => void;
   setSidebarWidth: (width: number) => void;
   setMetaPanelWidth: (width: number) => void;
   setLogPanelHeight: (height: number) => void;
@@ -187,7 +187,7 @@ export const useUIStore = create<UIState>()(
       }),
 
       toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
-      toggleRightPanel: () => set((state) => ({ isRightPanelOpen: !state.isRightPanelOpen })),
+      toggleRightPanel: (open?: any) => set((state) => ({ isRightPanelOpen: typeof open === 'boolean' ? open : !state.isRightPanelOpen })),
       setSidebarWidth: (width: number) => set({ sidebarWidth: width }),
       setMetaPanelWidth: (width: number) => set({ metaPanelWidth: width }),
       setLogPanelHeight: (height: number) => set({ logPanelHeight: height }),
